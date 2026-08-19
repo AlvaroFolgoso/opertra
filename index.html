@@ -1,0 +1,3478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opertra · Prototipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  /* ============ DESIGN TOKENS ============ */
+  :root {
+    --graphite: #1C2126;
+    --graphite-line: #343B42;
+    --surface: #EEF0EF;
+    --card: #FFFFFF;
+    --border: #DEE1E0;
+    --ink: #1C2126;
+    --steel: #5B6570;
+    --amber: #F0A202;
+    --amber-deep: #C87F00;
+    --amber-bg: #FDF3E3;
+    --blue: #2C5F8A;
+    --success: #2F8F5B;
+    --success-bg: #E6F3EC;
+    --danger: #C0392B;
+    --danger-bg: #FBEAE8;
+    --idle: #8A8F94;
+    --idle-bg: #EEEFEF;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Manrope', sans-serif; background: var(--surface); color: var(--ink); line-height: 1.45; }
+  .f-display { font-family: 'Oswald', sans-serif; letter-spacing: 0.015em; }
+  .f-mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* ============ LAYOUT ============ */
+  #app { display: flex; width: 100%; height: 100vh; }
+  #app.hidden { display: none; }
+
+  #sidebar {
+    width: 220px; flex-shrink: 0; background: var(--graphite);
+    display: flex; flex-direction: column; padding: 16px 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
+  .brand-icon { width: 32px; height: 32px; border-radius: 6px; background: var(--amber); display: flex; align-items: center; justify-content: center; color: var(--graphite); }
+  .brand-name { color: white; font-size: 15px; font-weight: 600; line-height: 1; }
+  .brand-sub { color: #7C838A; font-size: 10px; margin-top: 3px; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 6px;
+    color: #B7BCC1; font-size: 14px; font-weight: 500; cursor: pointer; border: none; background: none;
+    width: 100%; text-align: left; font-family: 'Manrope', sans-serif;
+  }
+  .nav-item i { width: 17px; text-align: center; }
+  .nav-item.active { background: var(--graphite-line); color: var(--amber); }
+  .nav-item:hover:not(.active) { color: white; }
+  .nav-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--graphite-line); display: flex; flex-direction: column; gap: 4px; }
+
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  #topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px; border-bottom: 1px solid var(--border); gap: 12px;
+  }
+  #topbar > div:first-child { min-width: 0; }
+  #topbar h1 { margin: 0; font-size: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #topbar p { margin: 4px 0 0; font-size: 13px; color: var(--steel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .user-block { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); }
+  .user-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--graphite); color: var(--amber); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+  .user-text { text-align: left; line-height: 1.25; }
+  .user-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .user-company { font-size: 10.5px; color: var(--steel); font-weight: 500; letter-spacing: 0.01em; }
+
+  .view { display: none; padding: 32px; overflow: auto; flex: 1; }
+  .view.active { display: block; }
+
+  #trial-banner { display: flex; align-items: center; gap: 8px; justify-content: center; background: var(--amber-bg,#FDF1DC); color: var(--amber-deep); font-size: 13px; font-weight: 600; padding: 8px 16px; text-align: center; }
+
+  /* ============ CARDS / "PLATE" (nameplate motif) ============ */
+  .plate {
+    position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .plate::before, .plate::after,
+  .plate .dot-tl, .plate .dot-tr, .plate .dot-bl, .plate .dot-br { content: ''; }
+  .plate .rivet { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--border); }
+  .rivet.tl { top: 6px; left: 6px; } .rivet.tr { top: 6px; right: 6px; }
+  .rivet.bl { bottom: 6px; left: 6px; } .rivet.br { bottom: 6px; right: 6px; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .chip.status-active, .chip.status-working, .chip.status-vigente { color: var(--success); background: var(--success-bg); }
+  .chip.status-maintenance, .chip.status-caducado { color: var(--danger); background: var(--danger-bg); }
+  .chip.status-idle, .chip.status-off { color: var(--idle); background: var(--idle-bg); }
+  .chip.status-proximo { color: var(--amber-deep); background: var(--amber-bg); }
+  .chip .dot { background: currentColor; }
+
+  /* Documentos / permisos */
+  .doc-section-title { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .doc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .doc-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); }
+  .doc-name { font-size: 13px; font-weight: 500; }
+  .doc-expiry { font-size: 11px; color: var(--steel); margin-top: 2px; }
+  .add-doc-btn { width: 100%; padding: 8px; border-radius: 6px; border: 1px dashed var(--border); background: none; color: var(--steel); font-size: 12px; font-weight: 500; cursor: pointer; margin-top: 8px; }
+  .device-box { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 6px; margin-top: 4px; }
+  .device-box.linked { background: var(--surface); border: 1px solid var(--border); }
+  .device-box.unlinked { background: var(--amber-bg); border: 1px solid #F0D9A6; }
+
+  /* Modal (añadir máquina) */
+  #modal-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: center; justify-content: center; z-index: 60; }
+  #modal-overlay.active { display: flex; }
+  #add-machine-modal { width: 440px; max-height: 88vh; overflow: auto; background: var(--card); border-radius: 10px; padding: 24px; }
+  .modal-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .form-group { margin-top: 16px; }
+  .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--steel); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 6px; }
+  .form-input, .form-select { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); font-family: 'Manrope', sans-serif; font-size: 14px; background: var(--card); color: var(--ink); }
+  .form-hint { font-size: 12px; color: var(--steel); margin-top: 6px; display: flex; gap: 6px; }
+  .form-photo-upload { width: 100%; padding: 20px; border-radius: 6px; border: 1px dashed var(--border); background: var(--surface); text-align: center; color: var(--steel); font-size: 13px; cursor: pointer; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+  .modal-actions .btn { flex: 1; justify-content: center; padding: 11px; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--ink); }
+
+  /* ============ AVISOS / INCIDENCIAS ============ */
+  .avisos-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+  .avisos-tab-btn { flex: 1; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); cursor: pointer; text-align: left; display: flex; align-items: center; gap: 12px; }
+  .avisos-tab-btn.active { border-color: var(--amber); background: var(--amber-bg); }
+  .avisos-tab-icon { width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--surface); color: var(--steel); flex-shrink: 0; }
+  .avisos-tab-btn.active .avisos-tab-icon { background: var(--amber); color: var(--graphite); }
+  .avisos-tab-title { font-size: 14px; font-weight: 700; }
+  .avisos-tab-sub { font-size: 11.5px; color: var(--steel); margin-top: 1px; }
+
+  .incident-card { padding: 16px; margin-bottom: 12px; }
+  .priority-badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .priority-alta { color: var(--danger); background: var(--danger-bg); }
+  .priority-media { color: var(--amber-deep); background: var(--amber-bg); }
+  .priority-baja { color: var(--steel); background: var(--surface); }
+  .photo-upload-box { border: 1px dashed var(--border); border-radius: 6px; padding: 14px; text-align: center; cursor: pointer; background: var(--surface); }
+  .photo-preview { width: 100%; max-height: 160px; border-radius: 6px; object-fit: cover; margin-top: 8px; }
+  .incident-thumb { width: 52px; height: 52px; border-radius: 6px; object-fit: cover; flex-shrink: 0; cursor: pointer; }
+
+  /* ============ INFORMES ============ */
+  .report-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+  .report-label { width: 150px; flex-shrink: 0; font-size: 13px; }
+  .report-bar-track { flex: 1; height: 10px; border-radius: 99px; background: var(--surface); overflow: hidden; }
+  .report-bar-fill { height: 100%; border-radius: 99px; background: var(--blue); }
+  .report-value { width: 90px; flex-shrink: 0; text-align: right; font-size: 12.5px; font-weight: 600; }
+  .incident-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .incident-title { font-size: 15px; font-weight: 700; }
+  .incident-desc { font-size: 13.5px; color: var(--steel); margin-top: 4px; line-height: 1.5; }
+  .incident-meta { display: flex; align-items: center; gap: 14px; margin-top: 12px; font-size: 12px; color: var(--steel); }
+  .incident-meta span { display: flex; align-items: center; gap: 5px; }
+  .resolve-btn { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--success); background: var(--success-bg); color: var(--success); font-size: 12.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--steel); }
+  .empty-state i { font-size: 28px; opacity: 0.4; margin-bottom: 10px; }
+
+  .nav-badge { margin-left: auto; background: var(--amber); color: var(--graphite); font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 99px; }
+  .textarea { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); font-family: 'Manrope', sans-serif; font-size: 14px; resize: vertical; min-height: 90px; }
+  .success-banner { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 8px; background: var(--success-bg); color: var(--success); font-size: 13.5px; font-weight: 600; margin-bottom: 16px; }
+
+  .btn { border: none; border-radius: 6px; font-family: 'Manrope', sans-serif; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-amber { background: var(--amber); color: var(--graphite); padding: 9px 15px; font-size: 14px; }
+  .btn-dark { background: var(--graphite); color: white; padding: 10px 16px; font-size: 14px; }
+  .btn-ghost { background: none; color: var(--steel); text-decoration: underline; font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+
+  .search-box { max-width: 280px; flex: 1; }
+  .search-input { width: 100%; border: none; outline: none; background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="%235B6570" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>') no-repeat 12px center; padding: 9px 12px 9px 34px; font-size: 14px; font-family: 'Manrope', sans-serif; color: var(--ink); border-radius: 6px; background-color: var(--card); border: 1px solid var(--border); }
+  .search-input::placeholder { color: var(--steel); }
+
+  /* ============ DASHBOARD ============ */
+  .stat-row { display: flex; gap: 16px; margin-bottom: 24px; }
+  .stat-card { flex: 1; padding: 16px; }
+  .stat-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--steel); letter-spacing: 0.03em; }
+  .stat-value { font-family: 'Oswald', sans-serif; font-size: 30px; margin-top: 4px; }
+  .stat-sub { font-size: 12px; color: var(--steel); margin-top: 2px; }
+  .stat-icon { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  .dash-cols { display: flex; gap: 24px; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+  .worker-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; }
+  .worker-left { display: flex; align-items: center; gap: 12px; }
+  .worker-initials { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); color: var(--steel); display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: 'IBM Plex Mono', monospace; font-weight: 500; }
+  .worker-name { font-size: 14px; font-weight: 500; }
+  .worker-meta { font-size: 12px; color: var(--steel); font-family: 'IBM Plex Mono', monospace; }
+
+  .alert-box { display: flex; gap: 10px; padding: 12px; border-radius: 6px; margin-bottom: 10px; }
+  .alert-title { font-size: 13px; font-weight: 500; }
+  .alert-sub { font-size: 12px; color: var(--steel); margin-top: 2px; }
+
+  /* ============ FICHAJE ============ */
+  #fichaje-wrap { display: flex; justify-content: center; }
+  .fichaje-card { width: 100%; max-width: 380px; padding: 20px; text-align: center; }
+  .mode-toggle { display: inline-flex; gap: 4px; padding: 4px; border-radius: 6px; background: var(--surface); margin-top: 20px; }
+  .mode-btn { padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 500; border: none; background: none; cursor: pointer; color: var(--steel); display: flex; align-items: center; gap: 6px; }
+  .mode-btn.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+  .scan-ring { width: 160px; height: 160px; border-radius: 50%; border: 2px dashed var(--border); margin: 24px auto 0; display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
+  .scan-ring.scanning { border-color: var(--amber); transform: scale(1.04); }
+  .scan-inner { width: 64px; height: 64px; border-radius: 50%; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--steel); transition: all 0.3s; }
+  .scan-ring.scanning .scan-inner { background: var(--amber-bg); color: var(--amber-deep); }
+
+  .fichaje-check { width: 100%; margin-top: 24px; padding: 12px; border-radius: 6px; background: var(--success-bg); color: var(--success); font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .privacy-note { display: flex; gap: 10px; padding: 16px; margin-top: 16px; font-size: 12px; color: var(--steel); text-align: left; }
+
+  .qr-scan-box { position: relative; width: 100%; max-width: 280px; aspect-ratio: 1/1; margin: 20px auto 0; border-radius: 10px; overflow: hidden; background: #000; }
+  .qr-scan-box video { width: 100%; height: 100%; object-fit: cover; }
+  .qr-scan-frame { position: absolute; inset: 14%; border: 3px solid var(--amber); border-radius: 10px; box-shadow: 0 0 0 2000px rgba(0,0,0,0.25); pointer-events: none; }
+
+  /* ============ MAQUINARIA ============ */
+  .toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
+  .machine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .machine-card { padding: 16px; cursor: pointer; transition: box-shadow 0.15s; }
+  .machine-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .machine-top { display: flex; gap: 12px; }
+  .machine-photo { width: 64px; height: 64px; border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); }
+  .machine-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 22px; }
+  .machine-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 2px; font-size: 9px; }
+  .machine-id { font-size: 12px; color: var(--steel); font-family: 'IBM Plex Mono', monospace; }
+  .machine-type { font-family: 'Oswald', sans-serif; font-size: 18px; margin-top: 2px; }
+  .machine-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--steel); }
+  .plate-badge { font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
+  .machine-loc-row { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; color: var(--steel); }
+  .gps-age { display: flex; align-items: center; gap: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--idle); }
+  .machine-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--steel); }
+
+  /* Drawer */
+  #overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: stretch; justify-content: flex-end; z-index: 50; }
+  #overlay.active { display: flex; }
+  #drawer { width: 380px; max-width: 100%; height: 100%; background: var(--card); padding: 24px; padding-bottom: 48px; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+  .drawer-top { display: flex; justify-content: space-between; align-items: center; }
+  .drawer-top-left { display: flex; align-items: center; gap: 12px; }
+  .drawer-close { background: none; border: none; cursor: pointer; color: var(--steel); font-size: 18px; }
+  .drawer-back { background: none; border: none; cursor: pointer; color: var(--blue); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; font-family: 'Manrope', sans-serif; }
+  .drawer-photo { width: 100%; height: 160px; border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; }
+  .drawer-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 40px; }
+  .drawer-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 6px; font-size: 13px; }
+  .drawer-upload { position: absolute; bottom: 8px; right: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-weight: 500; cursor: pointer; }
+  .drawer-title { font-family: 'Oswald', sans-serif; font-size: 22px; }
+  .drawer-model { font-size: 14px; color: var(--steel); }
+  .drawer-rows { display: flex; flex-direction: column; font-size: 14px; }
+  .drawer-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .drawer-row:last-child { border-bottom: none; }
+  .drawer-row span:first-child { color: var(--steel); }
+
+  /* ============ TRABAJADORES ============ */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; padding: 12px 20px; font-size: 11px; text-transform: uppercase; color: var(--steel); border-bottom: 1px solid var(--border); font-weight: 600; letter-spacing: 0.02em; }
+  td { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .permit-tag { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 12px; background: var(--surface); border: 1px solid var(--border); color: var(--steel); margin: 2px 4px 2px 0; }
+
+  /* ============ FACTURACION ============ */
+  .fact-wrap { display: flex; gap: 24px; }
+  .template-col { width: 220px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+  .template-active { padding: 12px; border: 1.5px solid var(--amber) !important; }
+  .invoice-doc { flex: 1; max-width: 640px; padding: 32px; }
+  .inv-header { display: flex; justify-content: space-between; padding-bottom: 24px; border-bottom: 2px solid var(--ink); }
+  .inv-logo { width: 40px; height: 40px; border-radius: 6px; background: var(--graphite); color: var(--amber); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+  .inv-table { margin-top: 8px; }
+  .inv-table th, .inv-table td { padding: 8px 0; font-size: 14px; }
+  .inv-table th { text-transform: uppercase; font-size: 11px; }
+  .inv-totals { display: flex; justify-content: flex-end; margin-top: 16px; }
+  .inv-totals-box { width: 220px; }
+  .inv-total-row { display: flex; justify-content: space-between; font-size: 14px; padding: 3px 0; }
+  .inv-grand { font-family: 'Oswald', sans-serif; font-size: 18px; padding-top: 8px; margin-top: 4px; border-top: 2px solid var(--ink); }
+
+  /* ============ LANDING ============ */
+  #landing { background: var(--card); }
+  #landing.hidden { display: none; }
+  .land-nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 6vw; background: var(--graphite); position: sticky; top: 0; z-index: 30; }
+  .land-nav-brand { display: flex; align-items: center; gap: 10px; }
+  .land-nav-links { display: flex; gap: 28px; }
+  .land-nav-links a { color: #B7BCC1; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .land-nav-links a:hover { color: white; }
+  @media (max-width: 768px) { .land-nav-links { display: none; } }
+
+  .land-hero { text-align: center; padding: 72px 6vw 56px; background: linear-gradient(180deg, var(--graphite) 0%, var(--graphite) 55%, var(--card) 55%); }
+  .land-eyebrow { display: inline-block; color: var(--amber); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 16px; }
+  .land-h1 { font-family: 'Oswald', sans-serif; font-size: clamp(28px, 4.5vw, 46px); color: white; max-width: 780px; margin: 0 auto; line-height: 1.15; }
+  .land-sub { color: #C7CBD0; font-size: 16px; max-width: 560px; margin: 18px auto 0; line-height: 1.6; }
+  .land-cta-row { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+  .land-hero-stats { display: flex; justify-content: center; gap: 40px; margin-top: 56px; flex-wrap: wrap; }
+  .land-hero-stats > div { display: flex; flex-direction: column; align-items: center; background: var(--card); border-radius: 12px; padding: 18px 28px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+  .land-stat-num { font-family: 'Oswald', sans-serif; font-size: 26px; color: var(--ink); }
+  .land-stat-label { font-size: 12px; color: var(--steel); margin-top: 2px; }
+
+  .land-section { padding: 64px 6vw; max-width: 1160px; margin: 0 auto; }
+  .land-h2 { font-family: 'Oswald', sans-serif; font-size: clamp(22px, 3vw, 30px); text-align: center; color: var(--ink); }
+  .land-h2-sub { text-align: center; color: var(--steel); font-size: 14.5px; margin-top: 8px; max-width: 520px; margin-left: auto; margin-right: auto; }
+
+  .land-problem-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 36px; }
+  .land-problem-card { display: flex; gap: 14px; padding: 20px; border-radius: 10px; border: 1px solid var(--border); flex: 1 1 240px; max-width: 360px; }
+  .land-problem-card i { font-size: 22px; color: var(--danger); flex-shrink: 0; margin-top: 2px; }
+  .land-problem-card b { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .land-problem-card span { font-size: 13px; color: var(--steel); line-height: 1.5; }
+
+  .land-feature-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; margin-top: 36px; }
+  .land-feature-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 8px; flex: 1 1 240px; max-width: 340px; }
+  .land-feature-card i { font-size: 22px; color: var(--amber-deep); }
+  .land-feature-card b { font-family: 'Oswald', sans-serif; font-size: 16px; }
+  .land-feature-card span { font-size: 13.5px; color: var(--steel); line-height: 1.5; }
+
+  .land-steps { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; margin-top: 40px; }
+  .land-step { text-align: center; flex: 1 1 220px; max-width: 280px; }
+  .land-step-num { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: var(--graphite); color: var(--amber); font-family: 'Oswald', sans-serif; font-size: 17px; margin: 0 auto 14px; }
+  .land-step b { display: block; font-size: 15px; margin-bottom: 6px; }
+  .land-step span { font-size: 13px; color: var(--steel); line-height: 1.5; }
+
+  .land-pricing-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 40px; max-width: 980px; margin-left: auto; margin-right: auto; }
+  .land-price-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px 24px; display: flex; flex-direction: column; gap: 6px; position: relative; flex: 1 1 260px; max-width: 320px; }
+  .land-price-featured { border: 2px solid var(--amber); }
+  .land-price-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--amber); color: var(--graphite); font-size: 11px; font-weight: 700; padding: 3px 12px; border-radius: 99px; }
+  .land-price-name { font-family: 'Oswald', sans-serif; font-size: 16px; }
+  .land-price-amount { font-family: 'Oswald', sans-serif; font-size: 32px; margin: 4px 0; }
+  .land-price-amount span { font-size: 14px; color: var(--steel); font-family: 'Manrope', sans-serif; }
+  .land-price-desc { font-size: 12.5px; color: var(--steel); margin-bottom: 10px; }
+  .land-price-list { list-style: none; padding: 0; margin: 0 0 20px; display: flex; flex-direction: column; gap: 9px; }
+  .land-price-list li { font-size: 13.5px; display: flex; gap: 8px; align-items: center; }
+  .land-price-list i { color: var(--success); font-size: 12px; }
+
+  .land-demo-box { max-width: 520px; margin: 0 auto; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 32px; }
+
+  .land-footer { background: var(--graphite); padding: 32px 6vw; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  .land-footer-brand { display: flex; align-items: center; gap: 10px; }
+  .land-footer-links { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .land-footer-links button { background: none; border: none; color: #B7BCC1; font-size: 13px; cursor: pointer; font-family: 'Manrope', sans-serif; }
+  .land-footer-links button:hover { color: white; }
+  .land-footer-copy { color: #7C838A; font-size: 12px; width: 100%; text-align: center; }
+  @media (max-width: 640px) { .land-footer { flex-direction: column; text-align: center; } .land-footer-brand { justify-content: center; } }
+
+  /* ============ LOGIN ============ */
+  #login-screen, #trial-expired-screen { position: fixed; inset: 0; background: var(--graphite); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 40px 16px; box-sizing: border-box; }
+  #login-screen.hidden, #trial-expired-screen.hidden { display: none; }
+  .login-box { width: 420px; max-width: 100%; margin: 0 auto; background: var(--card); border-radius: 12px; padding: 36px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+  .login-brand { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 24px; }
+  .login-brand .brand-icon { width: 36px; height: 36px; }
+  .login-brand-name { font-family: 'Oswald', sans-serif; font-size: 18px; letter-spacing: 0.02em; }
+  .login-title { font-family: 'Oswald', sans-serif; font-size: 20px; text-align: center; }
+  .login-sub { font-size: 13px; color: var(--steel); text-align: center; margin-top: 4px; margin-bottom: 22px; }
+  .login-btn-social { width: 100%; padding: 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
+  .login-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--steel); font-size: 12px; }
+  .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .login-error { display: none; background: var(--danger-bg); color: var(--danger); font-size: 12.5px; padding: 10px 12px; border-radius: 6px; margin-top: 12px; }
+  .login-legal { font-size: 11.5px; color: var(--steel); text-align: center; margin-top: 20px; line-height: 1.5; }
+  .login-legal a { color: var(--steel); text-decoration: underline; cursor: pointer; }
+  .login-link { text-align: center; font-size: 13px; margin-top: 16px; }
+  .login-link a { color: var(--blue); cursor: pointer; text-decoration: none; font-weight: 600; }
+
+  /* ============ USER DROPDOWN ============ */
+  .user-block { position: relative; cursor: pointer; }
+  #user-dropdown { position: absolute; top: calc(100% + 8px); right: 0; width: 260px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); display: none; z-index: 40; overflow: hidden; }
+  #user-dropdown.active { display: block; }
+  .dropdown-header { padding: 16px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--border); }
+  .dropdown-header .user-name { font-size: 14px; }
+  .dropdown-header .user-company { font-size: 11px; }
+  .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 11px 16px; font-size: 13.5px; color: var(--ink); cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: 'Manrope', sans-serif; }
+  .dropdown-item:hover { background: var(--surface); }
+  .dropdown-item i { width: 15px; color: var(--steel); }
+  .dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+  .dropdown-item.danger { color: var(--danger); }
+  .dropdown-item.danger i { color: var(--danger); }
+
+  /* ============ MINIMAPA GPS ============ */
+  .minimap { position: relative; width: 100%; height: 200px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); z-index: 0; }
+  .minimap-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); display: inline-block; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(47,143,91,0.5); } 70% { box-shadow: 0 0 0 6px rgba(47,143,91,0); } 100% { box-shadow: 0 0 0 0 rgba(47,143,91,0); } }
+  .maps-btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .maps-btn { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; text-align: center; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink); text-decoration: none; }
+  .maps-btn:hover { background: var(--surface); }
+
+  /* ============ LEGAL ============ */
+  #legal-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: center; justify-content: center; z-index: 70; }
+  #legal-overlay.active { display: flex; }
+  #legal-modal { width: 560px; max-height: 80vh; overflow: auto; background: var(--card); border-radius: 10px; padding: 28px; }
+  #legal-modal h2 { font-family: 'Oswald', sans-serif; font-size: 20px; margin: 0 0 4px; }
+  #legal-modal .legal-updated { font-size: 12px; color: var(--steel); margin-bottom: 18px; }
+  #legal-modal p { font-size: 13.5px; color: var(--steel); line-height: 1.65; margin: 0 0 12px; }
+  #legal-modal h3 { font-size: 14px; margin: 18px 0 6px; }
+  .sidebar-legal { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px 0; margin-top: 4px; }
+  .sidebar-legal button { background: none; border: none; color: #7C838A; font-size: 10.5px; text-align: left; cursor: pointer; padding: 3px 4px; font-family: 'Manrope', sans-serif; }
+  .sidebar-legal button:hover { color: white; text-decoration: underline; }
+
+  /* ============ VACACIONES ============ */
+  .chip.status-en_curso { color: var(--success); background: var(--success-bg); }
+  .chip.status-proxima { color: var(--blue); background: #EAF1F7; }
+  .chip.status-pasada { color: var(--idle); background: var(--idle-bg); }
+  .vac-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); margin-bottom: 8px; }
+  .vac-dates { font-size: 13px; font-weight: 500; }
+  .vac-days { font-size: 11px; color: var(--steel); margin-top: 2px; }
+  .vac-delete { background: none; border: none; color: var(--steel); cursor: pointer; padding: 4px; }
+  .vac-form { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
+  .vac-form .form-group { margin-top: 0; flex: 1; }
+
+  /* ============ REGISTRO DE HORAS ============ */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .load-more-btn { width: 100%; padding: 10px; text-align: center; font-size: 13px; font-weight: 600; color: var(--blue); background: var(--surface); border: none; border-top: 1px solid var(--border); cursor: pointer; }
+
+  /* ======================================================================
+     RESPONSIVE — tablet y móvil
+     ====================================================================== */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    #sidebar { width: 188px; }
+    .view { padding: 22px; }
+    .brand-sub { display: none; }
+  }
+
+  @media (max-width: 1000px) {
+    .machine-grid { grid-template-columns: 1fr; }
+    .dash-cols { flex-direction: column; }
+    .stat-row { flex-wrap: wrap; }
+    .stat-card { min-width: calc(50% - 8px); }
+    .fact-wrap { flex-direction: column; }
+    .template-col { width: 100%; flex-direction: row; flex-wrap: wrap; }
+    .invoice-doc { max-width: 100%; }
+  }
+
+  @media (max-width: 768px) {
+    #app { flex-direction: column; }
+    #main { padding-bottom: 72px; }
+    #sidebar { display: none; }
+
+    #topbar { padding: 12px 16px; }
+    #topbar h1 { font-size: 19px; }
+    #topbar p { font-size: 11.5px; }
+    .user-company { display: none; }
+    .company-pill { display: none; }
+
+    .view { padding: 16px; }
+    .stat-row { gap: 10px; }
+    .stat-card { min-width: 100%; padding: 14px; }
+    .toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+    .search-box { max-width: 100%; }
+    .avisos-tabs { flex-direction: column; }
+
+    #drawer { width: 100%; }
+    #add-machine-modal, #legal-modal { width: 92vw; padding: 20px; }
+    #login-screen { padding: 20px 12px; }
+    .login-box { width: 100%; padding: 22px; }
+
+    table { font-size: 12.5px; }
+    th, td { padding: 9px 12px; }
+
+    .invoice-doc { padding: 18px; }
+    .inv-totals-box { width: 100%; }
+    .report-label { width: 100px; font-size: 12px; }
+    .report-value { width: 70px; font-size: 11.5px; }
+  }
+
+  /* ============ NAVEGACIÓN MÓVIL PREMIUM ============ */
+  #mobile-nav { display: none; }
+  @media (max-width: 768px) {
+    #mobile-nav {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+      background: var(--graphite); border-top: 1px solid var(--graphite-line);
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    }
+    #mobile-nav-items { display: flex; width: 100%; justify-content: space-around; }
+    #mobile-nav .nav-item {
+      flex: 1; flex-direction: column; gap: 3px; font-size: 10px; padding: 6px 2px;
+      border-radius: 10px; position: relative; max-width: 76px;
+    }
+    #mobile-nav .nav-item i { font-size: 19px; }
+    #mobile-nav .nav-badge { position: absolute; top: 0px; right: 14px; margin-left: 0; }
+  }
+
+  #more-sheet-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: flex-end; justify-content: center; z-index: 95; }
+  #more-sheet-overlay.active { display: flex; }
+  #more-sheet { width: 100%; max-width: 480px; background: var(--card); border-radius: 16px 16px 0 0; padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .more-sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: var(--border); margin: 6px auto 14px; }
+  #more-sheet-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .more-item { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; border-radius: 12px; background: var(--surface); border: none; cursor: pointer; position: relative; }
+  .more-item i { font-size: 20px; color: var(--steel); }
+  .more-item span { font-size: 12px; font-weight: 500; color: var(--ink); }
+  .more-item .nav-badge { position: absolute; top: 8px; right: 10px; }
+
+  @media (max-width: 420px) {
+    .user-avatar { width: 32px; height: 32px; font-size: 11px; }
+    #mobile-nav .nav-item { font-size: 9px; }
+    #mobile-nav .nav-item i { font-size: 17px; }
+  }
+
+  /* ============ DASHBOARD PRO ============ */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .kpi-card { padding: 16px; cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
+  .kpi-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.07); transform: translateY(-1px); }
+  .kpi-trend { font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px; margin-top: 6px; }
+  .kpi-trend.up { color: var(--success); }
+  .kpi-trend.down { color: var(--danger); }
+  .kpi-trend.flat { color: var(--steel); }
+
+  .critical-block { border-left: 3px solid var(--danger); padding: 16px 20px; margin-bottom: 20px; }
+  .critical-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .critical-head i { color: var(--danger); }
+  .critical-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .critical-row:last-child { border-bottom: none; }
+  .crit-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .crit-dot.red { background: var(--danger); }
+  .crit-dot.orange { background: var(--amber-deep); }
+  .crit-dot.yellow { background: var(--amber); }
+  .critical-text { font-size: 13px; flex: 1; }
+  .critical-empty { text-align: center; padding: 12px; color: var(--steel); font-size: 13px; }
+
+  .activity-feed-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; }
+  .activity-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+
+  .obras-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .obra-card { padding: 16px; }
+  .obra-progress-track { width: 100%; height: 6px; border-radius: 99px; background: var(--surface); margin-top: 10px; overflow: hidden; }
+  .obra-progress-fill { height: 100%; background: var(--amber); border-radius: 99px; }
+  .obra-stats-row { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--steel); }
+  .obra-stats-row span { display: flex; align-items: center; gap: 5px; }
+</style>
+</head>
+<body>
+
+<div id="landing">
+  <header class="land-nav">
+    <div class="land-nav-brand">
+      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <span class="login-brand-name" style="color:white;">OPERTRA</span>
+    </div>
+    <div class="land-nav-links">
+      <a onclick="scrollLanding('land-features')">Funciones</a>
+      <a onclick="scrollLanding('land-how')">Cómo funciona</a>
+      <a onclick="scrollLanding('land-pricing')">Precios</a>
+    </div>
+    <button class="btn btn-amber" onclick="showLogin()">Iniciar sesión</button>
+  </header>
+
+  <section class="land-hero">
+    <span class="land-eyebrow">Software para constructoras, excavaciones y flotas de maquinaria</span>
+    <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde un solo sitio</h1>
+    <p class="land-sub">Fichaje por QR/NFC, ubicación de cada máquina, incidencias al momento y facturación por obra. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
+    <div class="land-cta-row">
+      <button class="btn btn-amber" style="padding:14px 24px;font-size:15px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
+      <button class="btn btn-outline" style="padding:14px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
+    </div>
+    <div class="land-hero-stats">
+      <div><span class="land-stat-num">100%</span><span class="land-stat-label">trazabilidad de flota</span></div>
+      <div><span class="land-stat-num">0</span><span class="land-stat-label">partes de fichaje en papel</span></div>
+      <div><span class="land-stat-num">&lt;1min</span><span class="land-stat-label">para reportar una incidencia</span></div>
+    </div>
+  </section>
+
+  <section class="land-section" id="land-problem">
+    <h2 class="land-h2">El problema de siempre en obra</h2>
+    <div class="land-problem-grid">
+      <div class="land-problem-card"><i class="fa-solid fa-file-circle-question"></i><div><b>Fichajes en papel o WhatsApp</b><span>Nadie sabe con certeza quién ha trabajado, cuántas horas, ni en qué obra.</span></div></div>
+      <div class="land-problem-card"><i class="fa-solid fa-truck-fast"></i><div><b>Maquinaria sin localizar</b><span>Llamadas y más llamadas para saber dónde está cada máquina y quién la lleva.</span></div></div>
+      <div class="land-problem-card"><i class="fa-solid fa-triangle-exclamation"></i><div><b>Incidencias que se pierden</b><span>Una avería se comenta de palabra y se olvida hasta que ya es un problema grande.</span></div></div>
+      <div class="land-problem-card"><i class="fa-solid fa-file-invoice"></i><div><b>Facturación desconectada de la obra</b><span>Nadie sabe si lo facturado cuadra con las horas y máquinas realmente usadas.</span></div></div>
+    </div>
+  </section>
+
+  <section class="land-section" id="land-features" style="background:var(--surface);">
+    <h2 class="land-h2">Todo lo que necesitas, conectado de verdad</h2>
+    <p class="land-h2-sub">No son módulos sueltos: cada obra conecta sola con sus máquinas, su gente, sus incidencias y sus facturas.</p>
+    <div class="land-feature-grid">
+      <div class="land-feature-card"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y facturas de cada obra en una ficha.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-truck"></i><b>Maquinaria + GPS</b><span>Ubicación real de cada máquina en un mapa, documentación e ITV con avisos automáticos.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-tower-broadcast"></i><b>Fichaje QR/NFC</b><span>El trabajador ficha tocando la etiqueta de su máquina. Sin geolocalizar a las personas.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-bullhorn"></i><b>Incidencias con foto</b><span>Cualquier trabajador reporta una avería en segundos, con prioridad y foto.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-umbrella-beach"></i><b>Vacaciones</b><span>Vacaciones del equipo de un vistazo, para no solapar bajas en la misma obra.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-file-invoice-dollar"></i><b>Facturación</b><span>Facturas ligadas a la obra y al cliente, con pendientes y vencidas siempre a la vista.</span></div>
+    </div>
+  </section>
+
+  <section class="land-section" id="land-how">
+    <h2 class="land-h2">Cómo funciona</h2>
+    <div class="land-steps">
+      <div class="land-step"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
+      <div class="land-step"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina tiene su etiqueta única para fichar y su dispositivo GPS.</span></div>
+      <div class="land-step"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Sin formación: tocar el código y ya está fichado.</span></div>
+      <div class="land-step"><span class="land-step-num">4</span><b>Tú ves todo desde el panel</b><span>Quién trabaja, dónde está cada máquina, qué incidencias hay abiertas.</span></div>
+    </div>
+  </section>
+
+  <section class="land-section" id="land-pricing" style="background:var(--surface);">
+    <h2 class="land-h2">Precios pensados para pymes de construcción</h2>
+    <p class="land-h2-sub">Sin permanencia. El precio depende del número de máquinas y trabajadores.</p>
+    <div class="land-pricing-grid">
+      <div class="land-price-card">
+        <span class="land-price-name">Starter</span>
+        <div class="land-price-amount">99€<span>/mes</span></div>
+        <span class="land-price-desc">Hasta 5 máquinas y 10 trabajadores</span>
+        <ul class="land-price-list">
+          <li><i class="fa-solid fa-check"></i> Fichaje QR/NFC</li>
+          <li><i class="fa-solid fa-check"></i> Maquinaria + GPS</li>
+          <li><i class="fa-solid fa-check"></i> Incidencias</li>
+          <li><i class="fa-solid fa-check"></i> 1 obra activa</li>
+        </ul>
+        <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
+      </div>
+      <div class="land-price-card land-price-featured">
+        <span class="land-price-badge">Más elegido</span>
+        <span class="land-price-name">Profesional</span>
+        <div class="land-price-amount">249€<span>/mes</span></div>
+        <span class="land-price-desc">Hasta 25 máquinas y 50 trabajadores</span>
+        <ul class="land-price-list">
+          <li><i class="fa-solid fa-check"></i> Todo lo de Starter</li>
+          <li><i class="fa-solid fa-check"></i> Obras ilimitadas</li>
+          <li><i class="fa-solid fa-check"></i> Facturación y clientes</li>
+          <li><i class="fa-solid fa-check"></i> Informes</li>
+        </ul>
+        <button class="btn btn-amber" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
+      </div>
+      <div class="land-price-card">
+        <span class="land-price-name">Empresas</span>
+        <div class="land-price-amount">A medida</div>
+        <span class="land-price-desc">Flotas grandes, varias delegaciones</span>
+        <ul class="land-price-list">
+          <li><i class="fa-solid fa-check"></i> Todo lo de Profesional</li>
+          <li><i class="fa-solid fa-check"></i> Roles y permisos avanzados</li>
+          <li><i class="fa-solid fa-check"></i> Soporte prioritario</li>
+          <li><i class="fa-solid fa-check"></i> Integración a medida</li>
+        </ul>
+        <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Hablar con ventas</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="land-section" id="land-demo">
+    <div class="land-demo-box">
+      <div>
+        <h2 class="land-h2" style="text-align:left;">Pide una demo gratuita</h2>
+        <p style="color:var(--steel);font-size:14px;margin-top:-8px;">Te enseñamos la app funcionando con los datos de tu empresa, sin compromiso.</p>
+        <div id="demo-success" class="success-banner" style="display:none;"><i class="fa-solid fa-circle-check"></i> Gracias, nos pondremos en contacto contigo en menos de 24h.</div>
+        <div class="form-group" style="margin-top:0;"><label class="form-label">Nombre y apellidos</label><input class="form-input" id="demo-name" placeholder="Tu nombre"></div>
+        <div class="form-group"><label class="form-label">Empresa</label><input class="form-input" id="demo-company" placeholder="Nombre de tu empresa"></div>
+        <div class="form-group"><label class="form-label">Correo</label><input class="form-input" id="demo-email" type="email" placeholder="tu@empresa.com"></div>
+        <div class="form-group"><label class="form-label">Teléfono (opcional)</label><input class="form-input" id="demo-phone" placeholder="600 000 000"></div>
+        <div class="form-group"><label class="form-label">¿Cuántas máquinas tenéis aproximadamente?</label>
+          <select class="form-select" id="demo-fleet">
+            <option>1-5</option><option>6-25</option><option>26-100</option><option>Más de 100</option>
+          </select>
+        </div>
+        <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:8px;" onclick="submitDemoRequest()"><i class="fa-solid fa-paper-plane"></i> Solicitar demo</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="land-footer">
+    <div class="land-footer-brand"><div class="brand-icon"><i class="fa-solid fa-truck"></i></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
+    <div class="land-footer-links">
+      <button onclick="openLegal('aviso')">Aviso legal</button>
+      <button onclick="openLegal('privacidad')">Privacidad</button>
+      <button onclick="openLegal('cookies')">Cookies</button>
+      <button onclick="showLogin()">Iniciar sesión</button>
+    </div>
+    <span class="land-footer-copy">© 2026 Opertra. Todos los derechos reservados.</span>
+  </footer>
+</div>
+
+<div id="login-screen" class="hidden">
+  <div class="login-box">
+    <button class="btn-ghost" style="margin-bottom:12px;" onclick="showLanding()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
+    <div class="login-brand">
+      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <span class="login-brand-name">OPERTRA</span>
+    </div>
+
+    <!-- ===== MODO INICIAR SESIÓN ===== -->
+    <div id="auth-panel-login">
+      <div class="login-title">Inicia sesión</div>
+      <div class="login-sub">Accede con la cuenta de tu empresa</div>
+
+      <button class="login-btn-social" disabled style="opacity:.5;cursor:not-allowed;" title="Próximamente">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.4 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 6.4 29.6 4 24 4c-8 0-14.8 4.5-18.3 11.1z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-2.1 14-5.6l-6.5-5.3C29.4 34.9 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.6 5.1C9.2 39.5 16 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.5 5.3C39.7 37 44 31.5 44 24c0-1.4-.1-2.4-.4-3.5z"/></svg>
+        Continuar con Google <span style="margin-left:auto;font-size:11px;color:var(--steel);">Próximamente</span>
+      </button>
+      <button class="login-btn-social" disabled style="opacity:.5;cursor:not-allowed;" title="Próximamente">
+        <i class="fa-brands fa-apple" style="font-size:16px;"></i>
+        Continuar con Apple <span style="margin-left:auto;font-size:11px;color:var(--steel);">Próximamente</span>
+      </button>
+
+      <div class="login-divider">o con tu correo</div>
+
+      <div class="form-group" style="margin-top:0;">
+        <label class="form-label">Correo electrónico</label>
+        <input class="form-input" id="login-email" placeholder="tu@empresa.com" type="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input class="form-input" id="login-password" placeholder="••••••••" type="password">
+      </div>
+      <div id="login-error" class="login-error" style="display:none;"><i class="fa-solid fa-circle-exclamation"></i> <span id="login-error-text">Revisa tu correo y contraseña e inténtalo de nuevo.</span></div>
+
+      <button class="btn btn-amber" id="login-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:16px;" onclick="handleLogin()">
+        Iniciar sesión
+      </button>
+
+      <div class="login-link" style="margin-top:8px;"><a onclick="handleForgotPassword()">¿Has olvidado tu contraseña?</a></div>
+      <div class="login-link">¿No tienes cuenta? <a onclick="showAuthPanel('signup')">Crea la cuenta de tu empresa</a></div>
+    </div>
+
+    <!-- ===== MODO CREAR EMPRESA ===== -->
+    <div id="auth-panel-signup" class="hidden">
+      <div class="login-title">Crea tu empresa en Opertra</div>
+      <div class="login-sub">Serás el administrador de la cuenta</div>
+
+      <div class="form-group" style="margin-top:0;">
+        <label class="form-label">Nombre de la empresa</label>
+        <input class="form-input" id="signup-company" placeholder="Construcciones Ejemplo S.L.">
+      </div>
+      <div class="form-group">
+        <label class="form-label">CIF (opcional)</label>
+        <input class="form-input" id="signup-cif" placeholder="B12345678">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tu nombre y apellidos</label>
+        <input class="form-input" id="signup-name" placeholder="Tu nombre">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Correo electrónico</label>
+        <input class="form-input" id="signup-email" placeholder="tu@empresa.com" type="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input class="form-input" id="signup-password" placeholder="Mínimo 8 caracteres" type="password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Repite la contraseña</label>
+        <input class="form-input" id="signup-password2" placeholder="••••••••" type="password">
+      </div>
+      <div id="signup-error" class="login-error" style="display:none;"><i class="fa-solid fa-circle-exclamation"></i> <span id="signup-error-text"></span></div>
+
+      <button class="btn btn-amber" id="signup-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:16px;" onclick="handleSignup()">
+        Crear empresa y cuenta
+      </button>
+
+      <div class="login-link">¿Ya tienes cuenta? <a onclick="showAuthPanel('login')">Inicia sesión</a></div>
+    </div>
+
+    <div class="login-legal">
+      Al continuar aceptas los <a onclick="openLegal('terminos')">Términos de uso</a>, la <a onclick="openLegal('privacidad')">Política de privacidad</a> y la <a onclick="openLegal('cookies')">Política de cookies</a> de Opertra.
+    </div>
+  </div>
+</div>
+
+<div id="trial-expired-screen" class="hidden">
+  <div class="login-box" style="text-align:center;">
+    <div class="login-brand" style="justify-content:center;">
+      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <span class="login-brand-name">OPERTRA</span>
+    </div>
+    <div style="width:56px;height:56px;border-radius:50%;background:var(--amber-bg,#FDF1DC);color:var(--amber-deep);display:flex;align-items:center;justify-content:center;font-size:22px;margin:8px auto 16px;">
+      <i class="fa-solid fa-hourglass-end"></i>
+    </div>
+    <div class="login-title">Tu periodo de prueba ha terminado</div>
+    <div id="trial-expired-admin-msg" style="display:none;">
+      <p style="font-size:14px;color:var(--steel);margin-top:10px;line-height:1.6;">
+        Tuviste 50 días de prueba gratuita con acceso completo a Opertra. Para seguir usando la app, activa la suscripción de tu empresa.
+      </p>
+      <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:12px;" onclick="alert('La gestión de pagos estará disponible próximamente.')">
+        Activar suscripción
+      </button>
+    </div>
+    <div id="trial-expired-worker-msg" style="display:none;">
+      <p style="font-size:14px;color:var(--steel);margin-top:10px;line-height:1.6;">
+        El periodo de prueba de tu empresa en Opertra ha terminado. Pide al administrador de tu cuenta que active la suscripción para poder seguir accediendo.
+      </p>
+    </div>
+    <button class="btn btn-outline" style="width:100%;justify-content:center;padding:12px;margin-top:10px;" onclick="logout()">
+      Cerrar sesión
+    </button>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <nav id="sidebar">
+    <div class="brand">
+      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <div>
+        <div class="brand-name">OPERTRA</div>
+        <div class="brand-sub">Gestión de flota</div>
+      </div>
+    </div>
+    <div id="nav-items"></div>
+    <div class="nav-bottom">
+      <button class="nav-item" onclick="openUserSettings()"><i class="fa-solid fa-gear"></i>Ajustes</button>
+      <button class="nav-item" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i>Salir</button>
+      <div class="sidebar-legal">
+        <button onclick="openLegal('aviso')">Aviso legal</button>
+        <button onclick="openLegal('privacidad')">Política de privacidad</button>
+        <button onclick="openLegal('cookies')">Política de cookies</button>
+      </div>
+    </div>
+  </nav>
+
+  <nav id="mobile-nav">
+    <div id="mobile-nav-items"></div>
+  </nav>
+  <div id="more-sheet-overlay" onclick="if(event.target===this) closeMoreSheet()">
+    <div id="more-sheet">
+      <div class="more-sheet-handle"></div>
+      <div id="more-sheet-items"></div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="trial-banner" style="display:none;"></div>
+    <div id="topbar">
+      <div>
+        <h1 id="view-title" class="f-display"></h1>
+        <p id="view-subtitle"></p>
+      </div>
+      <div class="topbar-right">
+        <div class="user-block" id="user-block" onclick="toggleUserDropdown(event)">
+          <div class="user-avatar" id="topbar-avatar"></div>
+          <div class="user-text">
+            <div class="user-name" id="topbar-username"></div>
+            <div class="user-company" id="topbar-company"></div>
+          </div>
+          <div id="user-dropdown"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-dashboard" class="view"></div>
+    <div id="view-obras" class="view"></div>
+    <div id="view-fichaje" class="view"></div>
+    <div id="view-maquinaria" class="view"></div>
+    <div id="view-trabajadores" class="view"></div>
+    <div id="view-avisos" class="view"></div>
+    <div id="view-clientes" class="view"></div>
+    <div id="view-facturacion" class="view"></div>
+    <div id="view-informes" class="view"></div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="drawer"></div>
+</div>
+
+<div id="modal-overlay">
+  <div id="add-machine-modal"></div>
+</div>
+
+<div id="legal-overlay">
+  <div id="legal-modal"></div>
+</div>
+
+<script>
+/* ======================================================================
+   DATOS — edita aquí para cambiar máquinas, trabajadores, avisos, etc.
+   ====================================================================== */
+/* Usuario con sesión iniciada — esto vendría del login real */
+/* currentUser se rellena de verdad al iniciar sesión (ver AUTENTICACIÓN REAL, más abajo).
+   Hasta entonces queda vacío — no hay usuario de mentira precargado. */
+let currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
+/* Módulos con información de empresa (facturación, clientes, informes, ficha de compañeros) — solo encargado/admin */
+const RESTRICTED_KEYS = ['facturacion', 'clientes', 'informes', 'trabajadores'];
+function canAccess(key) {
+  return currentUser.accessLevel !== 'trabajador' || !RESTRICTED_KEYS.includes(key);
+}
+
+/* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
+   sesión (ver loadCompanyData). Empiezan vacíos, ya no hay datos de mentira aquí. */
+let machines = [];
+
+/* ======================================================================
+   CONFIGURACIÓN DE PRODUCCIÓN
+   Rellena esto cuando tengas el proyecto de Supabase creado (gratis, ver
+   database-schema.sql y GUIA-PRODUCCION.md). Con SUPABASE_CONFIG.enabled
+   en true, la app deja de usar datos simulados y empieza a leer/escribir
+   en tu base de datos real — no hay que tocar nada más del código.
+   ====================================================================== */
+const SUPABASE_CONFIG = {
+  enabled: true,
+  url: 'https://uqfnijlmnybqznnnlkqj.supabase.co',
+  anonKey: 'sb_publishable_Pj-SZbtWz12uZGQESEGUJg_dH1v11nX',
+};
+
+let supabaseClient = null;
+function getSupabase() {
+  if (!supabaseClient) supabaseClient = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+  return supabaseClient;
+}
+
+/* ======================================================================
+   gpsDataProvider — capa de datos de posición, desacoplada del resto de la app.
+   Con SUPABASE_CONFIG.enabled = false usa datos simulados (mock).
+   Con SUPABASE_CONFIG.enabled = true usa Supabase Realtime de verdad.
+   El resto de la app consume siempre la misma interfaz (getLocations/subscribe),
+   así que nada más tiene que cambiar cuando actives el backend real.
+   ====================================================================== */
+const gpsDataProvider = (() => {
+  const listeners = new Set();
+  let pollHandle = null;
+
+  function getLocations() {
+    return machines.filter(m => m.device.linked).map(m => ({ id: m.id, lat: m.lat, lng: m.lng }));
+  }
+
+  function subscribe(callback) {
+    listeners.add(callback);
+    if (SUPABASE_CONFIG.enabled) {
+      subscribeRealtime();
+    } else if (!pollHandle) {
+      startMockPolling();
+    }
+    return () => { listeners.delete(callback); if (listeners.size === 0) stopMockPolling(); };
+  }
+
+  function startMockPolling() {
+    pollHandle = setInterval(() => {
+      machines.forEach(m => {
+        if (m.status === 'active' && m.device.linked) {
+          m.lat += (Math.random() - 0.5) * 0.0006;
+          m.lng += (Math.random() - 0.5) * 0.0006;
+          m.gpsAge = 'justo ahora';
+        }
+      });
+      listeners.forEach(cb => cb(getLocations()));
+    }, 4000);
+  }
+  function stopMockPolling() { clearInterval(pollHandle); pollHandle = null; }
+
+  /* ---- Implementación real con Supabase (queda lista, solo hace falta
+     activar SUPABASE_CONFIG.enabled y descomentar este bloque) ----
+  function subscribeRealtime() {
+    getSupabase()
+      .channel('machine_locations')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'machines' }, (payload) => {
+        const m = machines.find(x => x.dbId === payload.new.id); // dbId = uuid real, id = código (ej. EX-114)
+        if (m) { m.lat = payload.new.lat; m.lng = payload.new.lng; m.gpsAge = 'justo ahora'; }
+        listeners.forEach(cb => cb(getLocations()));
+      })
+      .subscribe();
+  }
+  ---- fin implementación real ---- */
+  function subscribeRealtime() { startMockPolling(); } // se sustituye por la de arriba al activar Supabase
+
+  return { getLocations, subscribe };
+})();
+
+/* ======================================================================
+   CARGA DE DATOS REALES (Obras y Maquinaria)
+   Se llama justo después de iniciar sesión. Sustituye los antiguos datos
+   de mentira: ahora projects/machines empiezan vacíos y se rellenan aquí
+   con lo que de verdad tiene guardado la empresa del usuario conectado
+   (Supabase filtra solo por su empresa gracias al RLS que configuramos).
+   Trabajadores, fichajes, incidencias y facturas todavía usan datos de
+   ejemplo — es el siguiente paso pendiente.
+   ====================================================================== */
+async function loadCompanyData() {
+  const sb = getSupabase();
+  try {
+    const [projRes, machRes, docRes] = await Promise.all([
+      sb.from('projects').select('*').order('created_at'),
+      sb.from('machines').select('*').order('created_at'),
+      sb.from('documents').select('*').eq('owner_type', 'machine'),
+    ]);
+    if (projRes.error) throw projRes.error;
+    if (machRes.error) throw machRes.error;
+    if (docRes.error) throw docRes.error;
+
+    const codeByProjectDbId = {};
+    projects = (projRes.data || []).map(p => {
+      codeByProjectDbId[p.id] = p.code;
+      return { dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status, start: p.start_date, end: p.end_date };
+    });
+
+    const docsByMachine = {};
+    (docRes.data || []).forEach(d => {
+      if (!docsByMachine[d.owner_id]) docsByMachine[d.owner_id] = [];
+      docsByMachine[d.owner_id].push({ name: d.name, expiry: d.expiry_date ? fmtDate(d.expiry_date) : 'sin caducidad', status: d.status });
+    });
+
+    machines = (machRes.data || []).map(m => ({
+      dbId: m.id, id: m.code, qrCode: m.qr_code,
+      project: m.project_id ? (codeByProjectDbId[m.project_id] || null) : null, projectDbId: m.project_id,
+      type: m.type, model: m.model, plate: m.plate || '—', status: m.status,
+      operator: '—', operatorDbId: m.operator_id, // TODO: se rellenará al conectar Trabajadores
+      location: m.project_id && codeByProjectDbId[m.project_id] ? (projects.find(p => p.dbId === m.project_id)?.name || 'Sin ubicación') : 'Almacén / sin asignar',
+      fuel: m.fuel || 0, since: '—',
+      gpsAge: m.gps_updated_at ? timeAgo(new Date(m.gps_updated_at).getTime()) : 'sin datos',
+      hasPhoto: m.has_photo, photoUrl: m.photo_url, lat: m.lat, lng: m.lng,
+      device: { id: m.device_id, model: m.device_model, linked: m.device_linked },
+      documents: docsByMachine[m.id] || [],
+    }));
+
+    renderObras(); renderMaquinaria(); renderDashboard();
+    if (currentTab === 'obras' || currentTab === 'maquinaria') switchTab(currentTab); // refresca el subtítulo con el conteo real
+  } catch (err) {
+    console.error('Error cargando datos de la empresa:', err);
+  }
+}
+
+const workers = [
+  { id: "W-1042", name: "Marcos Ruiz", role: "Maquinista", machine: "EX-114", project: "OBR-01", status: "working", since: "08:12",
+    documents: [
+      { name: "Carnet de grúa", expiry: "sin caducidad", status: "vigente" },
+      { name: "Excavadora >6t", expiry: "09 oct 2027", status: "vigente" },
+      { name: "PRL 20h", expiry: "15 feb 2027", status: "vigente" },
+    ],
+    vacations: [
+      { id: "V-1", start: "2026-08-17", end: "2026-08-31", days: 15 },
+      { id: "V-2", start: "2026-04-06", end: "2026-04-10", days: 5 },
+    ] },
+  { id: "W-1088", name: "Laura Gómez", role: "Conductora", machine: "CM-045", project: "OBR-02", status: "working", since: "07:45",
+    documents: [
+      { name: "Carnet C+E", expiry: "22 may 2028", status: "vigente" },
+      { name: "ADR", expiry: "19 ago 2026", status: "proximo" },
+    ],
+    vacations: [
+      { id: "V-3", start: "2026-09-01", end: "2026-09-12", days: 10 },
+    ] },
+  { id: "W-1103", name: "Iván Torres", role: "Maquinista", machine: "GR-208", project: "OBR-03", status: "off", since: "—",
+    documents: [
+      { name: "Carnet grúa torre", expiry: "03 mar 2026", status: "caducado" },
+    ],
+    vacations: [] },
+  { id: "W-1121", name: "Nadia Castillo", role: "Operaria", machine: "—", project: "OBR-01", status: "off", since: "—",
+    documents: [
+      { name: "PRL 20h", expiry: "30 nov 2026", status: "vigente" },
+    ],
+    vacations: [
+      { id: "V-4", start: "2026-07-20", end: "2026-07-27", days: 8 },
+    ] },
+];
+
+/* Registro de fichajes — entrada/salida por trabajador y día */
+const timeLogs = [
+  { worker: "Marcos Ruiz", date: "2026-08-08", checkIn: "08:12", checkOut: "—", hours: "—" },
+  { worker: "Laura Gómez", date: "2026-08-08", checkIn: "07:45", checkOut: "—", hours: "—" },
+  { worker: "Marcos Ruiz", date: "2026-08-07", checkIn: "08:05", checkOut: "17:10", hours: "9,1 h" },
+  { worker: "Laura Gómez", date: "2026-08-07", checkIn: "07:50", checkOut: "16:40", hours: "8,8 h" },
+  { worker: "Iván Torres", date: "2026-08-07", checkIn: "08:30", checkOut: "18:05", hours: "9,6 h" },
+  { worker: "Nadia Castillo", date: "2026-08-07", checkIn: "09:00", checkOut: "14:00", hours: "5,0 h" },
+  { worker: "Marcos Ruiz", date: "2026-08-06", checkIn: "08:00", checkOut: "17:00", hours: "9,0 h" },
+  { worker: "Laura Gómez", date: "2026-08-06", checkIn: "07:48", checkOut: "16:55", hours: "9,1 h" },
+  { worker: "Iván Torres", date: "2026-08-06", checkIn: "08:15", checkOut: "17:50", hours: "9,6 h" },
+  { worker: "Marcos Ruiz", date: "2026-08-05", checkIn: "08:10", checkOut: "17:05", hours: "8,9 h" },
+  { worker: "Laura Gómez", date: "2026-08-05", checkIn: "07:52", checkOut: "17:00", hours: "9,1 h" },
+  { worker: "Nadia Castillo", date: "2026-08-05", checkIn: "08:55", checkOut: "13:50", hours: "4,9 h" },
+  { worker: "Marcos Ruiz", date: "2026-08-04", checkIn: "08:07", checkOut: "17:12", hours: "9,1 h" },
+  { worker: "Iván Torres", date: "2026-08-04", checkIn: "08:20", checkOut: "17:45", hours: "9,4 h" },
+];
+
+/* Incidencias/avisos — un incidente resuelto se elimina del array (no se archiva) */
+let incidents = [
+  { id: "INC-101", priority: "alta", photo: null, title: "Rueda pinchada", description: "Rueda delantera derecha del CM-045 pinchada, no se puede mover hasta cambiarla.", worker: "Laura Gómez", machine: "CM-045", project: "OBR-02", time: Date.now() - 1000 * 60 * 8, resolved: false },
+  { id: "INC-100", priority: "media", photo: null, title: "Falta cemento en Obra Este", description: "Quedan menos de 2 sacos, hace falta reponer para mañana a primera hora.", worker: "Laura Gómez", machine: "—", project: "OBR-02", time: Date.now() - 1000 * 60 * 42, resolved: false },
+  { id: "INC-099", priority: "alta", photo: null, title: "Ruido extraño en la grúa", description: "El motor de giro de la GR-208 hace un ruido metálico al girar a la izquierda.", worker: "Iván Torres", machine: "GR-208", project: "OBR-03", time: Date.now() - 1000 * 60 * 60 * 3, resolved: false },
+  { id: "INC-098", priority: "baja", photo: null, title: "Falta de EPIs", description: "No quedan cascos de repuesto en el almacén de obra Norte.", worker: "Nadia Castillo", machine: "—", project: "OBR-01", time: Date.now() - 1000 * 60 * 60 * 5, resolved: false },
+];
+let incidentCounter = 102;
+
+const statusLabel = {
+  active: "En marcha", maintenance: "Mantenimiento", idle: "Parada",
+  working: "Trabajando", off: "Sin fichar",
+};
+
+function timeAgo(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return "justo ahora";
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+  return `hace ${Math.floor(diff / 86400)} d`;
+}
+
+const TODAY = new Date("2026-08-08");
+function vacationStatus(v) {
+  const s = new Date(v.start), e = new Date(v.end);
+  if (e < TODAY) return "pasada";
+  if (s <= TODAY && TODAY <= e) return "en_curso";
+  return "proxima";
+}
+const vacStatusLabel = { en_curso: "En curso", proxima: "Próximas", pasada: "Finalizada" };
+function fmtDate(iso) {
+  const [y,m,d] = iso.split('-');
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${d} ${meses[parseInt(m)-1]} ${y}`;
+}
+
+/* Obras — base mínima para el resumen del dashboard. Módulo completo en fase 4. */
+let projects = [];
+const obraStatusLabel = { active: "En curso", paused: "Pausada", finished: "Finalizada" };
+const obraChipClass = { active: "active", paused: "idle", finished: "proxima" };
+function obraChip(status) {
+  return `<span class="chip status-${obraChipClass[status]}"><span class="dot"></span>${obraStatusLabel[status]}</span>`;
+}
+/* % de plazo transcurrido: se calcula solo a partir de fecha inicio/fin, nadie tiene que tocarlo a mano */
+function obraSchedule(p) {
+  const s = new Date(p.start), e = new Date(p.end);
+  const totalDays = Math.round((e - s) / 86400000);
+  const daysLeft = Math.round((e - TODAY) / 86400000);
+  let pct;
+  if (TODAY < s) pct = 0;
+  else if (TODAY > e) pct = 100;
+  else pct = Math.round((TODAY - s) / (e - s) * 100);
+  return { pct, daysLeft, totalDays };
+}
+
+/* Todo esto sale de las asignaciones reales — nada hardcodeado por obra */
+function projectWorkers(id) { return workers.filter(w => w.project === id); }
+function projectMachines(id) { return machines.filter(m => m.project === id); }
+function projectInvoices(id) { return invoices.filter(i => i.project === id); }
+function projectOpenIncidents(id) { return incidents.filter(i => !i.resolved && i.project === id); }
+function parseHoursStr(str) { return str === '—' ? 0 : parseFloat(str.replace(' h','').replace(',','.')) || 0; }
+function projectHoursThisMonth(id) {
+  const names = projectWorkers(id).map(w => w.name);
+  return timeLogs.filter(l => names.includes(l.worker) && l.date.startsWith('2026-08')).reduce((s,l) => s + parseHoursStr(l.hours), 0);
+}
+
+/* Facturas — base mínima real que alimenta los KPIs y la alerta de vencidas (nada hardcodeado) */
+const invoices = [
+  { id: "2026-0142", client: "Promociones del Sur S.A.", project: "OBR-01", amount: 3344.20, dueDate: "2026-08-20", status: "pending" },
+  { id: "2026-0139", client: "Grupo Edinca", project: "OBR-02", amount: 1980.00, dueDate: "2026-08-04", status: "overdue" },
+  { id: "2026-0135", client: "Interno", project: "OBR-03", amount: 610.00, dueDate: "2026-07-30", status: "paid" },
+  { id: "2026-0128", client: "Promociones del Sur S.A.", project: "OBR-01", amount: 2200.00, dueDate: "2026-08-25", status: "pending" },
+];
+
+/* ======================================================================
+   PERSISTENCIA REAL (localStorage) — los datos sobreviven a cerrar la
+   pestaña o el navegador, en ESTE dispositivo. Esto es real, no simulado.
+   Lo que NO es (y requiere backend real): datos compartidos entre varios
+   trabajadores/dispositivos a la vez — eso ya necesita un servidor.
+   ====================================================================== */
+const STORAGE_KEY = 'opertra_demo_v1';
+
+/* saveState/loadState ya NO gestionan obras ni maquinaria — esas viven en
+   Supabase de verdad (ver loadCompanyData). Lo que queda aquí (trabajadores,
+   incidencias, facturas, fichajes) sigue siendo de ejemplo hasta que se
+   migre también, y por eso de momento se sigue guardando en este navegador. */
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      workers, incidents, invoices, timeLogs, incidentCounter,
+      savedAt: Date.now(),
+    }));
+  } catch (e) {
+    console.warn('No se pudo guardar en localStorage', e);
+  }
+}
+
+function loadState() {
+  let raw;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return false; }
+  if (!raw) return false;
+  try {
+    const data = JSON.parse(raw);
+    if (data.workers) { workers.length = 0; workers.push(...data.workers); }
+    if (data.incidents) { incidents.length = 0; incidents.push(...data.incidents); }
+    if (data.invoices) { invoices.length = 0; invoices.push(...data.invoices); }
+    if (data.timeLogs) { timeLogs.length = 0; timeLogs.push(...data.timeLogs); }
+    if (typeof data.incidentCounter === 'number') incidentCounter = data.incidentCounter;
+    return true;
+  } catch (e) {
+    console.warn('Datos guardados corruptos, se ignoran', e);
+    return false;
+  }
+}
+
+function resetDemoData() {
+  if (!confirm('Esto borra todos los cambios guardados en este navegador (fichajes, incidencias, facturas...) y vuelve a los datos de ejemplo. ¿Continuar?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  location.reload();
+}
+
+const NAV = [
+  { key: "dashboard", label: "Panel general", icon: "fa-gauge-high" },
+  { key: "obras", label: "Obras", icon: "fa-diagram-project" },
+  { key: "fichaje", label: "Fichaje", icon: "fa-tower-broadcast" },
+  { key: "maquinaria", label: "Maquinaria", icon: "fa-truck" },
+  { key: "trabajadores", label: "Trabajadores", icon: "fa-users" },
+  { key: "avisos", label: "Avisos", icon: "fa-bullhorn" },
+  { key: "clientes", label: "Clientes", icon: "fa-address-book" },
+  { key: "facturacion", label: "Facturación", icon: "fa-file-invoice" },
+  { key: "informes", label: "Informes", icon: "fa-chart-simple" },
+];
+
+const VIEW_META = {
+  dashboard: ["Panel general", "Vista de hoy, 5 de agosto"],
+  obras: ["Obras", projects.length + " obras registradas"],
+  fichaje: ["Fichaje", "Verificación por NFC/QR en la máquina"],
+  maquinaria: ["Maquinaria", machines.length + " máquinas registradas"],
+  trabajadores: ["Trabajadores", workers.length + " trabajadores registrados"],
+  avisos: ["Avisos", "Incidencias reportadas por el equipo"],
+  clientes: ["Clientes", "Obras y facturación por cliente"],
+  facturacion: ["Facturación", "Todas las facturas emitidas"],
+  informes: ["Informes", "Datos reales de la actividad de la empresa"],
+};
+
+const rivets = `<span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>`;
+function chip(status) {
+  return `<span class="chip status-${status}"><span class="dot"></span>${statusLabel[status]}</span>`;
+}
+
+const MACHINE_TYPES = ["Excavadora", "Camión", "Grúa torre", "Grúa móvil", "Tractor", "Plataforma elevadora", "Tráiler", "Dumper", "Compactadora", "Barco / embarcación", "Otra"];
+
+const docStatusLabel = { vigente: "Vigente", proximo: "Caduca pronto", caducado: "Caducado" };
+function docChip(status) {
+  return `<span class="chip status-${status}"><span class="dot"></span>${docStatusLabel[status]}</span>`;
+}
+function docList(docs) {
+  return docs.map(d => `
+    <div class="doc-row">
+      <div><div class="doc-name">${d.name}</div><div class="doc-expiry f-mono">Caduca: ${d.expiry}</div></div>
+      ${docChip(d.status)}
+    </div>`).join('');
+}
+
+/* ============ NAV ============ */
+function renderNav() {
+  const el = document.getElementById('nav-items');
+  el.innerHTML = NAV.filter(n => canAccess(n.key)).map(n => {
+    const unresolvedCount = incidents.filter(i => !i.resolved).length;
+    const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
+    return `
+    <button class="nav-item" data-tab="${n.key}">
+      <i class="fa-solid ${n.icon}"></i>${n.label}${badge}
+    </button>`;
+  }).join('');
+  document.querySelectorAll('.nav-item[data-tab]').forEach(b => {
+    if (b.dataset.tab === currentTab) b.classList.add('active');
+  });
+  renderMobileNav();
+}
+
+/* Navegación móvil: solo lo esencial visible, el resto en "Más" — nada de 9 iconos apretados.
+   Para el rol trabajador, los accesos principales son los que usa a diario en obra. */
+const MOBILE_PRIMARY_DEFAULT = [
+  { key: 'dashboard', label: 'Inicio', icon: 'fa-gauge-high' },
+  { key: 'obras', label: 'Obras', icon: 'fa-diagram-project' },
+  { key: 'maquinaria', label: 'Maquinaria', icon: 'fa-truck' },
+  { key: 'trabajadores', label: 'Personal', icon: 'fa-users' },
+];
+const MOBILE_PRIMARY_TRABAJADOR = [
+  { key: 'dashboard', label: 'Inicio', icon: 'fa-gauge-high' },
+  { key: 'fichaje', label: 'Fichar', icon: 'fa-tower-broadcast' },
+  { key: 'maquinaria', label: 'Maquinaria', icon: 'fa-truck' },
+  { key: 'avisos', label: 'Avisos', icon: 'fa-bullhorn' },
+];
+function mobilePrimary() {
+  return currentUser.accessLevel === 'trabajador' ? MOBILE_PRIMARY_TRABAJADOR : MOBILE_PRIMARY_DEFAULT;
+}
+function mobileSecondaryItems() {
+  const primaryKeys = mobilePrimary().map(m => m.key);
+  return NAV.filter(n => canAccess(n.key) && !primaryKeys.includes(n.key));
+}
+
+function renderMobileNav() {
+  const unresolvedCount = incidents.filter(i => !i.resolved).length;
+  const primary = mobilePrimary();
+  const secondaryHasBadge = mobileSecondaryItems().some(n => n.key === 'avisos') && unresolvedCount > 0;
+
+  document.getElementById('mobile-nav-items').innerHTML = primary.map(n => `
+    <button class="nav-item" data-tab="${n.key}">
+      <i class="fa-solid ${n.icon}"></i><span>${n.label}</span>
+    </button>`).join('') + `
+    <button class="nav-item" onclick="toggleMoreSheet()">
+      <i class="fa-solid fa-ellipsis"></i><span>Más</span>
+      ${secondaryHasBadge ? `<span class="nav-badge">${unresolvedCount}</span>` : ''}
+    </button>`;
+  document.querySelectorAll('#mobile-nav .nav-item[data-tab]').forEach(b => {
+    if (b.dataset.tab === currentTab) b.classList.add('active');
+  });
+
+  document.getElementById('more-sheet-items').innerHTML = mobileSecondaryItems().map(n => {
+    const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
+    return `
+    <button class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
+      <i class="fa-solid ${n.icon}"></i><span>${n.label}</span>${badge}
+    </button>`;
+  }).join('');
+}
+
+function toggleMoreSheet() { document.getElementById('more-sheet-overlay').classList.add('active'); }
+function closeMoreSheet() { document.getElementById('more-sheet-overlay').classList.remove('active'); }
+
+let currentTab = 'dashboard';
+function switchTab(tab) {
+  if (!canAccess(tab)) tab = 'dashboard'; // sin permiso para este módulo
+  if (currentTab === 'fichaje' && tab !== 'fichaje' && typeof stopQRScan === 'function') {
+    stopQRScan(); stopNFCScan();
+  }
+  if (currentTab === 'maquinaria' && tab !== 'maquinaria') {
+    if (fleetMapUnsub) { fleetMapUnsub(); fleetMapUnsub = null; }
+    if (fleetMap) { fleetMap.remove(); fleetMap = null; }
+  }
+  currentTab = tab;
+  if (tab === 'clientes') renderClientes();
+  if (tab === 'facturacion') renderFacturacion();
+  if (tab === 'informes') renderInformes();
+  if (tab === 'obras') renderObras();
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + tab).classList.add('active');
+  document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('view-title').textContent = VIEW_META[tab][0];
+  document.getElementById('view-subtitle').textContent =
+    tab === 'obras' ? projects.length + ' obras registradas' :
+    tab === 'maquinaria' ? machines.length + ' máquinas registradas' :
+    tab === 'trabajadores' ? workers.length + ' trabajadores registrados' :
+    VIEW_META[tab][1];
+}
+
+/* ============ DASHBOARD ============ */
+function obraCardHTML(p, detailed) {
+  const { pct, daysLeft } = obraSchedule(p);
+  let plazoText;
+  if (p.status === 'finished') plazoText = 'Obra finalizada';
+  else if (daysLeft < 0) plazoText = `Plazo superado por ${Math.abs(daysLeft)} días`;
+  else if (daysLeft === 0) plazoText = 'Termina hoy';
+  else plazoText = `${daysLeft} días para el fin de plazo`;
+
+  const wCount = projectWorkers(p.id).length;
+  const mCount = projectMachines(p.id).length;
+  const hours = projectHoursThisMonth(p.id);
+  const openInc = projectOpenIncidents(p.id).length;
+
+  return `
+    <div class="plate obra-card" style="cursor:pointer;" onclick="openObraDrawer('${p.id}')">${rivets}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-size:12px;color:var(--steel);" class="f-mono">${p.id}</div>
+          <div class="f-display" style="font-size:${detailed?17:16}px;margin-top:2px;">${p.name}</div>
+          ${detailed ? `<div style="font-size:12px;color:var(--steel);margin-top:2px;">${p.client}</div>` : ''}
+        </div>
+        ${obraChip(p.status)}
+      </div>
+      <div class="obra-progress-track"><div class="obra-progress-fill" style="width:${pct}%;${daysLeft<0?'background:var(--danger);':''}"></div></div>
+      <div style="font-size:11px;color:var(--steel);margin-top:4px;display:flex;justify-content:space-between;">
+        <span>${fmtDate(p.start)} → ${fmtDate(p.end)}</span>
+        <span style="color:${daysLeft<0?'var(--danger)':'var(--steel)'};font-weight:${daysLeft<0?600:400};">${plazoText}</span>
+      </div>
+      <div class="obra-stats-row">
+        <span><i class="fa-solid fa-users"></i> ${wCount} trabajador${wCount!==1?'es':''}</span>
+        <span><i class="fa-solid fa-truck"></i> ${mCount} máquina${mCount!==1?'s':''}</span>
+        <span><i class="fa-solid fa-clock"></i> ${hours.toLocaleString('es-ES',{maximumFractionDigits:1})} h este mes</span>
+      </div>
+      ${openInc > 0 ? `<div style="margin-top:8px;font-size:11.5px;color:var(--danger);font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> ${openInc} incidencia${openInc!==1?'s':''} abierta${openInc!==1?'s':''}</div>` : ''}
+    </div>`;
+}
+
+function buildCriticalAlerts() {
+  const alerts = [];
+  machines.forEach(m => {
+    m.documents.forEach(d => {
+      if (d.status === 'caducado') alerts.push({ sev: 'red', icon: 'fa-file-circle-xmark', text: `${d.name} caducado — ${m.type} ${m.id}`, tab: 'maquinaria' });
+      else if (d.status === 'proximo') alerts.push({ sev: 'orange', icon: 'fa-file-circle-exclamation', text: `${d.name} caduca pronto — ${m.type} ${m.id}`, tab: 'maquinaria' });
+    });
+    if (m.status === 'maintenance') alerts.push({ sev: 'yellow', icon: 'fa-wrench', text: `${m.id} en mantenimiento — ${m.type}`, tab: 'maquinaria' });
+  });
+  workers.forEach(w => {
+    w.documents.forEach(d => {
+      if (d.status === 'caducado') alerts.push({ sev: 'red', icon: 'fa-id-card', text: `${d.name} caducado — ${w.name}`, tab: 'trabajadores' });
+      else if (d.status === 'proximo') alerts.push({ sev: 'orange', icon: 'fa-id-card', text: `${d.name} caduca pronto — ${w.name}`, tab: 'trabajadores' });
+    });
+  });
+  const order = { alta: 0, media: 1, baja: 2 };
+  const urgentIncidents = incidents.filter(i => !i.resolved && i.priority === 'alta').sort((a,b) => a.time - b.time);
+  urgentIncidents.forEach(inc => {
+    alerts.push({ sev: 'red', icon: 'fa-triangle-exclamation', text: `Incidencia de prioridad alta sin resolver: ${inc.title} (${inc.project||'sin obra'})`, tab: 'avisos' });
+  });
+  invoices.filter(i => i.status === 'overdue').forEach(inv => {
+    const daysOverdue = Math.round((TODAY - new Date(inv.dueDate)) / 86400000);
+    alerts.push({ sev: 'red', icon: 'fa-file-invoice-dollar', text: `Factura ${inv.id} vencida hace ${daysOverdue} días — ${inv.client}`, tab: 'facturacion' });
+  });
+
+  const sevOrder = { red: 0, orange: 1, yellow: 2 };
+  return alerts.filter(a => canAccess(a.tab)).sort((a,b) => sevOrder[a.sev] - sevOrder[b.sev]);
+}
+
+function renderDashboard() {
+  const active = machines.filter(m => m.status === 'active').length;
+  const maint = machines.filter(m => m.status === 'maintenance').length;
+  const workingNow = workers.filter(w => w.status === 'working').length;
+  const obrasActivas = projects.filter(p => p.status === 'active').length;
+  const unresolvedCount = incidents.filter(i => !i.resolved).length;
+  const todayLogs = timeLogs.filter(l => l.date === '2026-08-08');
+  const openToday = todayLogs.filter(l => l.checkOut === '—').length;
+  const closedToday = todayLogs.length - openToday;
+  const facturacionMes = invoices.reduce((s,i) => s + i.amount, 0);
+  const pendientes = invoices.filter(i => i.status !== 'paid');
+  const vencidas = invoices.filter(i => i.status === 'overdue').length;
+  const alerts = buildCriticalAlerts();
+
+  document.getElementById('view-dashboard').innerHTML = `
+    <div class="plate critical-block">${rivets}
+      <div class="critical-head">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span class="f-display" style="font-size:15px;">REQUIERE ATENCIÓN</span>
+      </div>
+      ${alerts.length === 0 ? `<div class="critical-empty">Todo en orden, sin alertas pendientes.</div>` :
+        alerts.slice(0,6).map(a => `
+          <div class="critical-row" onclick="switchTab('${a.tab}')">
+            <span class="crit-dot ${a.sev}"></span>
+            <i class="fa-solid ${a.icon}" style="color:var(--steel);width:14px;font-size:12px;"></i>
+            <span class="critical-text">${a.text}</span>
+            <i class="fa-solid fa-chevron-right" style="color:var(--steel);font-size:11px;"></i>
+          </div>`).join('')}
+    </div>
+
+    <div class="kpi-grid">
+      ${canAccess('trabajadores') ? `
+      <div class="plate kpi-card" onclick="switchTab('trabajadores')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Trabajadores activos</div><div class="stat-value">${workingNow}</div><div class="stat-sub">de ${workers.length} registrados</div></div>
+          <div class="stat-icon" style="background:#2F8F5B18;color:var(--success)"><i class="fa-solid fa-users"></i></div>
+        </div>
+      </div>` : ''}
+      <div class="plate kpi-card" onclick="switchTab('maquinaria')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Maquinaria activa</div><div class="stat-value">${active} / ${machines.length}</div><div class="stat-sub">${maint} en mantenimiento</div></div>
+          <div class="stat-icon" style="background:#2C5F8A18;color:var(--blue)"><i class="fa-solid fa-truck"></i></div>
+        </div>
+      </div>
+      <div class="plate kpi-card" onclick="switchTab('obras')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Obras activas</div><div class="stat-value">${obrasActivas}</div><div class="stat-sub">de ${projects.length} en total</div></div>
+          <div class="stat-icon" style="background:#C87F0018;color:var(--amber-deep)"><i class="fa-solid fa-diagram-project"></i></div>
+        </div>
+      </div>
+      <div class="plate kpi-card" onclick="switchTab('fichaje')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Fichajes hoy</div><div class="stat-value">${todayLogs.length}</div><div class="stat-sub">${openToday} en curso · ${closedToday} cerrados</div></div>
+          <div class="stat-icon" style="background:#2C5F8A18;color:var(--blue)"><i class="fa-solid fa-clock"></i></div>
+        </div>
+      </div>
+      <div class="plate kpi-card" onclick="switchTab('avisos')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Incidencias abiertas</div><div class="stat-value">${unresolvedCount}</div><div class="stat-sub">${unresolvedCount>0?'requieren revisión':'ninguna pendiente'}</div></div>
+          <div class="stat-icon" style="background:#C0392B18;color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        </div>
+      </div>
+      ${canAccess('facturacion') ? `
+      <div class="plate kpi-card" onclick="switchTab('facturacion')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Facturación (facturas emitidas)</div><div class="stat-value">${facturacionMes.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div><div class="stat-sub">${invoices.length} facturas emitidas</div></div>
+          <div class="stat-icon" style="background:#5B657018;color:var(--steel)"><i class="fa-solid fa-sack-dollar"></i></div>
+        </div>
+      </div>
+      <div class="plate kpi-card" onclick="switchTab('facturacion')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Facturas pendientes</div><div class="stat-value">${pendientes.length}</div><div class="stat-sub">${vencidas>0?vencidas+' vencida'+(vencidas>1?'s':''):'ninguna vencida'}</div></div>
+          <div class="stat-icon" style="background:#C87F0018;color:var(--amber-deep)"><i class="fa-solid fa-file-invoice"></i></div>
+        </div>
+      </div>` : ''}
+    </div>
+
+    <div class="dash-cols">
+      <div class="plate" style="flex:1;padding:0;overflow:hidden;">${rivets}
+        <div class="panel-header"><span class="f-display">ACTIVIDAD EN TIEMPO REAL</span><span class="f-mono" style="font-size:12px;color:var(--steel)">hoy · 09:34</span></div>
+        <div style="padding:4px 20px 16px;">
+          ${workers.map(w => `
+            <div class="worker-row">
+              <div class="worker-left">
+                <div class="worker-initials">${w.name.split(' ').map(n=>n[0]).join('')}</div>
+                <div><div class="worker-name">${w.name}</div><div class="worker-meta">${w.role} · ${w.machine !== '—' ? w.machine : 'sin asignar'}</div></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;">
+                ${w.since !== '—' ? `<span class="f-mono" style="font-size:12px;color:var(--steel)">desde ${w.since}</span>` : ''}
+                ${chip(w.status)}
+              </div>
+            </div>`).join('')}
+          <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
+            ${machines.filter(m => m.device.linked).sort((a,b) => a.gpsAge.localeCompare(b.gpsAge)).slice(0,1).map(m => `
+              <div class="activity-feed-row">
+                <div class="activity-icon" style="background:var(--success-bg);color:var(--success);"><i class="fa-solid fa-satellite"></i></div>
+                <div><div style="font-size:13px;">${m.id} actualizó su posición · ${m.location}</div><div style="font-size:11px;color:var(--steel);">${m.gpsAge}</div></div>
+              </div>`).join('')}
+            ${machines.filter(m => m.status === 'maintenance').map(m => `
+              <div class="activity-feed-row">
+                <div class="activity-icon" style="background:var(--danger-bg);color:var(--danger);"><i class="fa-solid fa-wrench"></i></div>
+                <div><div style="font-size:13px;">${m.id} está en mantenimiento · ${m.location}</div><div style="font-size:11px;color:var(--steel);">última señal ${m.gpsAge}</div></div>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="plate" style="width:280px;flex-shrink:0;padding:20px;">${rivets}
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="f-display" style="font-size:15px;">AVISOS</span>
+          <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('avisos')">ver todos <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
+        </div>
+        <div style="margin-top:14px;">
+          ${incidents.length === 0 ? `
+            <div style="text-align:center;padding:24px 8px;color:var(--steel);font-size:13px;">
+              <i class="fa-solid fa-champagne-glasses" style="font-size:20px;opacity:0.4;display:block;margin-bottom:8px;"></i>
+              Sin incidencias abiertas
+            </div>` :
+            incidents.slice().sort((a,b)=>b.time-a.time).slice(0,5).map(inc => `
+              <div class="alert-box" style="background:var(--amber-bg);cursor:pointer;" onclick="switchTab('avisos'); showAvisosTab('incidencias');">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--amber-deep);margin-top:2px;"></i>
+                <div>
+                  <div class="alert-title">${inc.title}${inc.machine !== '—' ? ' · ' + inc.machine : ''}</div>
+                  <div class="alert-sub">${inc.worker} · ${timeAgo(inc.time)}</div>
+                </div>
+              </div>`).join('')
+          }
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span class="f-display" style="font-size:16px;">RESUMEN DE OBRAS</span>
+        <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('obras')">ver todas <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
+      </div>
+      <div class="obras-grid">
+        ${projects.map(p => obraCardHTML(p, false)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ============ OBRAS ============ */
+function renderObras() {
+  document.getElementById('view-obras').innerHTML = `
+    <div class="toolbar">
+      <div class="search-box">
+        <input class="search-input" id="obras-search" placeholder="Buscar obra, cliente..." oninput="filterObras(this.value)">
+      </div>
+      <button class="btn btn-amber" onclick="openAddObraModal()"><i class="fa-solid fa-plus"></i> Añadir obra</button>
+    </div>
+    <div class="obras-grid" id="obras-results">
+      ${projects.map(p => obraCardHTML(p, true)).join('')}
+    </div>
+  `;
+}
+function filterObras(q) {
+  q = q.trim().toLowerCase();
+  const results = projects.filter(p => !q || p.name.toLowerCase().includes(q) || p.client.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  document.getElementById('obras-results').innerHTML = results.length
+    ? results.map(p => obraCardHTML(p, true)).join('')
+    : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
+}
+
+/* ============ FICHA DE OBRA (real: trabajadores, máquinas, incidencias, facturas) ============ */
+function openObraDrawer(id) {
+  const p = projects.find(x => x.id === id);
+  const { pct, daysLeft } = obraSchedule(p);
+  const pWorkers = projectWorkers(id);
+  const pMachines = projectMachines(id);
+  const pInvoices = projectInvoices(id);
+  const pIncidents = incidents.filter(i => i.project === id).sort((a,b) => b.time - a.time);
+  const hours = projectHoursThisMonth(id);
+
+  const freeWorkers = workers.filter(w => w.project !== id);
+  const freeMachines = machines.filter(m => m.project !== id);
+
+  document.getElementById('drawer').innerHTML = `
+    <div class="drawer-top">
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${p.id}</span></div>
+      <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div><div class="drawer-title">${p.name}</div><div class="drawer-model">${p.client}</div></div>
+    <div style="display:flex;align-items:center;gap:8px;">${obraChip(p.status)}</div>
+
+    <div class="drawer-rows">
+      <div class="drawer-row"><span>Plazo</span><span>${fmtDate(p.start)} → ${fmtDate(p.end)}</span></div>
+      <div class="drawer-row"><span>Transcurrido</span><span class="f-mono" style="color:${daysLeft<0?'var(--danger)':'var(--ink)'};">${pct}% ${daysLeft<0?`(superado ${Math.abs(daysLeft)}d)`:`(quedan ${daysLeft}d)`}</span></div>
+      <div class="drawer-row"><span>Horas trabajadas este mes</span><span class="f-mono">${hours.toLocaleString('es-ES',{maximumFractionDigits:1})} h</span></div>
+    </div>
+
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">TRABAJADORES (${pWorkers.length})</span></div>
+    <div class="doc-list">
+      ${pWorkers.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:6px 0;">Sin trabajadores asignados.</div>` :
+        pWorkers.map(w => `
+        <div class="doc-row" style="cursor:pointer;" onclick="drawerBack=()=>openObraDrawer('${id}');openWorkerDrawer('${w.id}');">
+          <div><div class="doc-name">${w.name}</div><div class="doc-expiry f-mono">${w.role}</div></div>
+          ${chip(w.status)}
+        </div>`).join('')}
+    </div>
+    <div class="vac-form">
+      <select class="form-select" id="assign-worker-select" style="padding:8px 10px;font-size:13px;">
+        <option value="">Asignar trabajador…</option>
+        ${freeWorkers.map(w => `<option value="${w.id}">${w.name}${w.project ? ' (en ' + w.project + ')' : ''}</option>`).join('')}
+      </select>
+      <button class="btn btn-amber" style="padding:8px 12px;" onclick="assignWorkerToObra('${id}')"><i class="fa-solid fa-plus"></i></button>
+    </div>
+
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">MAQUINARIA (${pMachines.length})</span></div>
+    <div class="doc-list">
+      ${pMachines.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:6px 0;">Sin máquinas asignadas.</div>` :
+        pMachines.map(m => `
+        <div class="doc-row" style="cursor:pointer;" onclick="drawerBack=()=>openObraDrawer('${id}');openDrawer('${m.id}');">
+          <div><div class="doc-name">${m.id} · ${m.type}</div><div class="doc-expiry f-mono">${m.model}</div></div>
+          ${chip(m.status)}
+        </div>`).join('')}
+    </div>
+    <div class="vac-form">
+      <select class="form-select" id="assign-machine-select" style="padding:8px 10px;font-size:13px;">
+        <option value="">Asignar máquina…</option>
+        ${freeMachines.map(m => `<option value="${m.id}">${m.id} · ${m.type}${m.project ? ' (en ' + m.project + ')' : ''}</option>`).join('')}
+      </select>
+      <button class="btn btn-amber" style="padding:8px 12px;" onclick="assignMachineToObra('${id}')"><i class="fa-solid fa-plus"></i></button>
+    </div>
+
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">INCIDENCIAS (${pIncidents.filter(i=>!i.resolved).length} abiertas)</span></div>
+    <div class="doc-list">
+      ${pIncidents.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:6px 0;">Sin incidencias registradas.</div>` :
+        pIncidents.slice(0,5).map(i => `
+        <div class="doc-row">
+          <div><div class="doc-name">${i.title}</div><div class="doc-expiry f-mono">${i.worker} · ${timeAgo(i.time)}</div></div>
+          ${i.resolved ? `<span class="chip status-vigente"><span class="dot"></span>Resuelta</span>` : `<span class="chip status-caducado"><span class="dot"></span>Abierta</span>`}
+        </div>`).join('')}
+    </div>
+
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">FACTURAS (${pInvoices.length})</span></div>
+    <div class="doc-list">
+      ${pInvoices.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:6px 0;">Sin facturas asociadas.</div>` :
+        pInvoices.map(i => `
+        <div class="doc-row">
+          <div><div class="doc-name">Factura ${i.id}</div><div class="doc-expiry f-mono">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} €</div></div>
+          <span class="chip status-${i.status==='paid'?'vigente':i.status==='overdue'?'caducado':'proximo'}"><span class="dot"></span>${i.status==='paid'?'Pagada':i.status==='overdue'?'Vencida':'Pendiente'}</span>
+        </div>`).join('')}
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('active');
+}
+
+function assignWorkerToObra(projId) {
+  const id = document.getElementById('assign-worker-select').value;
+  if (!id) return;
+  const w = workers.find(x => x.id === id);
+  w.project = projId;
+  saveState();
+  openObraDrawer(projId);
+  renderDashboard();
+}
+async function assignMachineToObra(projId) {
+  const code = document.getElementById('assign-machine-select').value;
+  if (!code) return;
+  const m = machines.find(x => x.id === code);
+  const proj = projects.find(p => p.id === projId);
+  if (!m || !proj) return;
+  try {
+    const { error } = await getSupabase().from('machines').update({ project_id: proj.dbId }).eq('id', m.dbId);
+    if (error) throw error;
+    m.project = projId;
+    m.location = proj.name;
+    openObraDrawer(projId);
+    renderDashboard();
+    renderMaquinaria();
+  } catch (err) {
+    alert('No se pudo asignar la máquina: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+/* ============ AÑADIR OBRA (modal) ============ */
+function openAddObraModal() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Añadir obra</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group" style="margin-top:16px;">
+      <label class="form-label">Nombre de la obra</label>
+      <input class="form-input" id="no-name" placeholder="Ej. Obra Sur · Sector 1">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cliente</label>
+      <input class="form-input" id="no-client" placeholder="Nombre del cliente">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fecha de inicio</label>
+      <input class="form-input" type="date" id="no-start">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fecha de fin prevista</label>
+      <input class="form-input" type="date" id="no-end">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="submitAddObra()">Guardar obra</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+async function submitAddObra() {
+  const name = document.getElementById('no-name').value.trim();
+  const client = document.getElementById('no-client').value.trim() || 'Sin especificar';
+  const start = document.getElementById('no-start').value;
+  const end = document.getElementById('no-end').value;
+  if (!name || !start || !end) return;
+  const newCode = 'OBR-' + String(projects.length + 1).padStart(2,'0');
+
+  const btn = event ? event.target.closest('button') : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
+  try {
+    const { data, error } = await getSupabase().from('projects').insert({
+      company_id: currentUser.companyId, code: newCode, name, client, status: 'active',
+      start_date: start, end_date: end,
+    }).select().single();
+    if (error) throw error;
+    projects.push({ dbId: data.id, id: data.code, name: data.name, client: data.client, status: data.status, start: data.start_date, end: data.end_date });
+    closeAddMachineModal();
+    renderObras();
+    renderDashboard();
+  } catch (err) {
+    alert('No se pudo guardar la obra: ' + (err.message || 'inténtalo de nuevo.'));
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar obra'; }
+  }
+}
+
+/* ============ FICHAJE ============ */
+let fichajeMode = 'qr';
+let fichajeScanning = false;
+let fichajeError = '';
+let fichajeSubTab = 'fichar'; // 'fichar' | 'registro'
+let fichajeWantsCheckout = false;
+let qrActive = false;
+let timeLogVisible = 8;
+let qrStream = null;
+let qrAnimFrame = null;
+let nfcAbortController = null;
+
+function showFichajeTab(tab) {
+  stopQRScan(); stopNFCScan();
+  fichajeSubTab = tab; fichajeError = ''; fichajeWantsCheckout = false; qrActive = false;
+  renderFichaje();
+}
+
+function myAssignedMachine() {
+  const w = workers.find(x => x.id === currentUser.id);
+  if (!w || w.machine === '—') return null;
+  return machines.find(m => m.id === w.machine) || null;
+}
+
+/* Registro real: busca si ya tengo un fichaje abierto hoy */
+function myOpenLogToday() {
+  const today = '2026-08-08'; // fecha simulada de "hoy" del prototipo
+  return timeLogs.find(l => l.worker === currentUser.name && l.date === today && l.checkOut === '—');
+}
+
+function nowHHMM() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function renderFichaje() {
+  document.getElementById('view-fichaje').innerHTML = `
+    <div class="avisos-tabs">
+      <button class="avisos-tab-btn ${fichajeSubTab==='fichar'?'active':''}" onclick="showFichajeTab('fichar')">
+        <div class="avisos-tab-icon"><i class="fa-solid fa-tower-broadcast"></i></div>
+        <div><div class="avisos-tab-title">Fichar</div><div class="avisos-tab-sub">Iniciar o cerrar jornada</div></div>
+      </button>
+      <button class="avisos-tab-btn ${fichajeSubTab==='registro'?'active':''}" onclick="showFichajeTab('registro')">
+        <div class="avisos-tab-icon"><i class="fa-solid fa-table-list"></i></div>
+        <div><div class="avisos-tab-title">Registro de horas</div><div class="avisos-tab-sub">Historial real de entradas y salidas</div></div>
+      </button>
+    </div>
+    ${fichajeSubTab === 'fichar' ? renderFicharCard() : renderRegistroHoras()}
+  `;
+}
+
+function renderFicharCard() {
+  const machine = myAssignedMachine();
+  const openLog = myOpenLogToday();
+  const nfcSupported = 'NDEFReader' in window;
+
+  if (!machine) {
+    return `<div class="plate empty-state" style="max-width:380px;">${rivets}<i class="fa-solid fa-truck"></i><div style="font-size:14px;font-weight:600;color:var(--ink);">Sin máquina asignada</div><div style="font-size:13px;">Pide a tu responsable que te asigne una máquina para poder fichar.</div></div>`;
+  }
+
+  return `
+    <div id="fichaje-wrap">
+      <div>
+        <div class="plate fichaje-card">${rivets}
+          <div class="f-mono" style="font-size:12px;color:var(--steel);">${currentUser.id} · ${currentUser.name.toUpperCase()}</div>
+          <div class="f-display" style="font-size:18px;margin-top:4px;">Máquina asignada</div>
+          <div class="f-mono" style="font-size:26px;font-weight:500;color:var(--blue);margin-top:4px;">${machine.id}</div>
+          <div style="font-size:12px;color:var(--steel);margin-top:2px;">${machine.type} ${machine.model} · ${machine.location}</div>
+
+          ${(!openLog || fichajeWantsCheckout) ? `
+            <div class="mode-toggle">
+              <button class="mode-btn ${fichajeMode==='qr'?'active':''}" onclick="setFichajeMode('qr')"><i class="fa-solid fa-qrcode"></i> Cámara QR</button>
+              <button class="mode-btn ${fichajeMode==='nfc'?'active':''}" onclick="setFichajeMode('nfc')"><i class="fa-solid fa-wifi"></i> NFC</button>
+            </div>
+
+            ${fichajeMode === 'qr' ? `
+              ${qrActive ? `
+                <div class="qr-scan-box">
+                  <video id="qr-video" autoplay playsinline muted></video>
+                  <div class="qr-scan-frame"></div>
+                </div>
+                <div style="font-size:12px;color:var(--steel);margin-top:10px;">Apunta con la cámara al código QR pegado en ${machine.id}</div>
+                <button class="btn-ghost" style="margin-top:8px;" onclick="qrActive=false; stopQRScan(); renderFichaje();">cancelar</button>
+              ` : `
+                <div class="scan-ring">
+                  <div class="scan-inner"><i class="fa-solid fa-qrcode"></i></div>
+                </div>
+                <div style="font-size:12px;color:var(--steel);margin-top:14px;">El navegador te pedirá permiso para usar la cámara la primera vez</div>
+                <button class="btn btn-amber" style="width:100%;justify-content:center;margin-top:16px;padding:12px;font-size:14px;" onclick="qrActive=true; renderFichaje(); startQRScan();">
+                  <i class="fa-solid fa-camera"></i> Activar cámara
+                </button>
+              `}
+            ` : `
+              <div class="scan-ring ${fichajeScanning ? 'scanning' : ''}">
+                <div class="scan-inner"><i class="fa-solid fa-wifi"></i></div>
+              </div>
+              <div style="font-size:14px;margin-top:20px;">
+                ${nfcSupported ? 'Toca el botón y acerca el móvil a la etiqueta NFC' : 'Tu navegador no soporta NFC'}
+              </div>
+              <div style="font-size:12px;color:var(--steel);margin-top:4px;">
+                ${nfcSupported ? (fichajeScanning ? 'Esperando etiqueta…' : 'Disponible en Chrome para Android, con NFC activado') : 'Web NFC solo funciona en Chrome para Android. Usa la cámara QR.'}
+              </div>
+              <button class="btn btn-amber" style="width:100%;justify-content:center;margin-top:20px;padding:12px;font-size:14px;" onclick="startNFCScan()" ${!nfcSupported || fichajeScanning ? 'disabled' : ''}>
+                <i class="fa-solid fa-wifi"></i> ${fichajeScanning ? 'Leyendo…' : 'Leer etiqueta NFC'}
+              </button>
+            `}
+
+            ${fichajeError ? `<div class="login-error" style="display:flex;margin-top:14px;"><i class="fa-solid fa-circle-exclamation"></i> ${fichajeError}</div>` : ''}
+          ` : `
+            <div class="fichaje-check"><i class="fa-solid fa-circle-check"></i> Jornada iniciada · ${openLog.checkIn}</div>
+            <button class="btn btn-dark" style="width:100%;justify-content:center;margin-top:14px;padding:12px;" onclick="fichajeWantsCheckout=true; setFichajeMode('qr');">
+              <i class="fa-solid fa-qrcode"></i> Fichar salida (escanear QR de nuevo)
+            </button>
+          `}
+        </div>
+
+        <div class="plate privacy-note" style="margin-top:16px;max-width:380px;">${rivets}
+          <i class="fa-solid fa-shield" style="color:var(--blue);margin-top:1px;"></i>
+          <div>No se recoge la ubicación del trabajador en ningún momento. La cámara solo se usa para leer el código, la imagen no se guarda ni se envía a ningún servidor.</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ============ ESCANEO REAL POR CÁMARA (jsQR) ============ */
+function setFichajeMode(mode) {
+  stopQRScan(); stopNFCScan();
+  fichajeMode = mode; fichajeError = ''; qrActive = false;
+  renderFichaje();
+}
+
+function stopQRScan() {
+  if (qrAnimFrame) cancelAnimationFrame(qrAnimFrame);
+  qrAnimFrame = null;
+  if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+}
+
+async function startQRScan() {
+  const video = document.getElementById('qr-video');
+  if (!video) return;
+
+  const isSecure = window.isSecureContext;
+  if (!isSecure) {
+    qrActive = false;
+    fichajeError = 'La cámara está bloqueada porque esta página se abrió como archivo local (file://) o sin HTTPS. Súbela a un servidor con HTTPS (o localhost) para poder usarla — es una norma de seguridad del propio navegador, no de la app.';
+    renderFichaje();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    qrActive = false;
+    fichajeError = 'Este navegador no permite acceder a la cámara desde la web.';
+    renderFichaje();
+    return;
+  }
+
+  try {
+    qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = qrStream;
+    await video.play();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const tick = () => {
+      if (!qrStream) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
+        if (code && code.data) { handleScanResult(code.data); return; }
+      }
+      qrAnimFrame = requestAnimationFrame(tick);
+    };
+    qrAnimFrame = requestAnimationFrame(tick);
+  } catch (err) {
+    qrActive = false;
+    fichajeError = err.name === 'NotAllowedError'
+      ? 'Has denegado el permiso de cámara. Actívalo en los ajustes del navegador para este sitio.'
+      : 'No se pudo acceder a la cámara: ' + err.message;
+    renderFichaje();
+  }
+}
+
+/* ============ NFC REAL (Web NFC API) ============ */
+async function startNFCScan() {
+  if (!('NDEFReader' in window)) return;
+  try {
+    fichajeScanning = true; fichajeError = '';
+    renderFichaje();
+    const ndef = new NDEFReader();
+    nfcAbortController = new AbortController();
+    await ndef.scan({ signal: nfcAbortController.signal });
+    ndef.onreading = (event) => {
+      const record = event.message.records[0];
+      let text = '';
+      try { text = new TextDecoder(record.encoding || 'utf-8').decode(record.data); } catch(e) { text = ''; }
+      handleScanResult(text);
+    };
+  } catch (err) {
+    fichajeScanning = false;
+    fichajeError = 'No se pudo iniciar la lectura NFC (permiso denegado o no disponible).';
+    renderFichaje();
+  }
+}
+function stopNFCScan() {
+  if (nfcAbortController) { nfcAbortController.abort(); nfcAbortController = null; }
+  fichajeScanning = false;
+}
+
+/* ============ RESULTADO COMÚN: valida contra la máquina asignada y ficha de verdad ============ */
+function handleScanResult(codeText) {
+  stopQRScan(); stopNFCScan();
+  const machine = myAssignedMachine();
+  if (!machine || codeText.trim() !== machine.qrCode) {
+    fichajeError = `Ese código no corresponde a tu máquina asignada (${machine ? machine.id : '—'}).`;
+    renderFichaje();
+    return;
+  }
+  fichajeError = '';
+  registrarFichaje();
+}
+
+function registrarFichaje() {
+  const today = '2026-08-08';
+  const open = myOpenLogToday();
+  if (!open) {
+    timeLogs.push({ worker: currentUser.name, date: today, checkIn: nowHHMM(), checkOut: '—', hours: '—' });
+  } else {
+    const [h1,m1] = open.checkIn.split(':').map(Number);
+    const now = new Date(); const h2 = now.getHours(), m2 = now.getMinutes();
+    let mins = (h2*60+m2) - (h1*60+m1); if (mins < 0) mins += 1440;
+    open.checkOut = nowHHMM();
+    open.hours = (mins/60).toLocaleString('es-ES', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' h';
+  }
+  fichajeWantsCheckout = false;
+  qrActive = false;
+  saveState();
+  renderFichaje();
+  renderDashboard();
+}
+
+function renderRegistroHoras() {
+  const sorted = timeLogs.slice().sort((a,b) => (b.date + b.checkIn).localeCompare(a.date + a.checkIn));
+  const visible = sorted.slice(0, timeLogVisible);
+  const hasMore = sorted.length > timeLogVisible;
+
+  return `
+    <div class="plate" style="padding:0;overflow:hidden;">${rivets}
+      <div class="panel-header" style="font-size:14px;">
+        <span class="f-display" style="font-size:15px;">REGISTRO DE FICHAJES</span>
+        <span class="f-mono" style="font-size:11px;color:var(--steel);">${visible.length} de ${sorted.length}</span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Trabajador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Horas</th>
+          </tr></thead>
+          <tbody>
+            ${visible.map(l => `
+              <tr>
+                <td style="font-weight:500;">${l.worker}</td>
+                <td class="f-mono" style="font-size:12.5px;color:var(--steel);">${fmtDate(l.date)}</td>
+                <td class="f-mono" style="font-size:12.5px;color:var(--success);">${l.checkIn}</td>
+                <td class="f-mono" style="font-size:12.5px;color:${l.checkOut === '—' ? 'var(--idle)' : 'var(--ink)'};">${l.checkOut}</td>
+                <td class="f-mono" style="font-size:12.5px;font-weight:600;">${l.hours}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${hasMore ? `<button class="load-more-btn" onclick="loadMoreTimeLogs()">Cargar más registros</button>` : ''}
+    </div>
+  `;
+}
+
+function loadMoreTimeLogs() { timeLogVisible += 8; renderFichaje(); }
+
+/* ============ MAQUINARIA ============ */
+let maquinariaView = 'lista'; // 'lista' | 'mapa'
+let fleetMap = null;
+let fleetMapUnsub = null;
+
+function setMaquinariaView(v) { maquinariaView = v; renderMaquinaria(); }
+
+function machineCardHTML(m) {
+  return `
+    <div class="plate machine-card" onclick="openDrawer('${m.id}')">${rivets}
+      <div class="machine-top">
+        <div class="machine-photo ${m.hasPhoto ? 'has-photo' : 'no-photo'}">
+          ${m.hasPhoto ? '<i class="fa-solid fa-truck"></i>' : '<i class="fa-solid fa-camera"></i><span>añadir foto</span>'}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div><div class="machine-id">${m.id}</div><div class="machine-type">${m.type}</div></div>
+            ${chip(m.status)}
+          </div>
+          <div class="machine-meta">
+            <span>${m.model}</span>
+            ${m.plate !== '—' ? `<span class="plate-badge">${m.plate}</span>` : ''}
+            ${m.project ? `<span class="plate-badge" style="color:var(--amber-deep);">${m.project}</span>` : `<span class="plate-badge" style="color:var(--steel);">Sin obra</span>`}
+          </div>
+        </div>
+      </div>
+      <div class="machine-loc-row">
+        <span><i class="fa-solid fa-location-dot"></i> ${m.location}</span>
+        <span class="gps-age"><i class="fa-solid fa-satellite"></i> GPS ${m.gpsAge}</span>
+      </div>
+      <div class="machine-footer">
+        <span><i class="fa-solid fa-gas-pump"></i> ${m.fuel}%</span>
+        <span>${m.operator !== '—' ? 'Operado por ' + m.operator : 'Sin operario'}</span>
+        <i class="fa-solid fa-chevron-right"></i>
+      </div>
+    </div>`;
+}
+function filterMachines(q) {
+  q = q.trim().toLowerCase();
+  const results = machines.filter(m => !q || m.id.toLowerCase().includes(q) || m.type.toLowerCase().includes(q) || m.model.toLowerCase().includes(q) || m.plate.toLowerCase().includes(q));
+  const el = document.getElementById('machine-results');
+  if (!el) return;
+  el.innerHTML = results.length ? results.map(machineCardHTML).join('') : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
+}
+
+function renderMaquinaria() {
+  if (fleetMapUnsub) { fleetMapUnsub(); fleetMapUnsub = null; }
+  if (fleetMap) { fleetMap.remove(); fleetMap = null; }
+
+  document.getElementById('view-maquinaria').innerHTML = `
+    <div class="toolbar">
+      <div class="search-box">
+        <input class="search-input" id="maquinaria-search" placeholder="Buscar máquina, matrícula..." oninput="filterMachines(this.value)">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div class="mode-toggle" style="margin-top:0;">
+          <button class="mode-btn ${maquinariaView==='lista'?'active':''}" onclick="setMaquinariaView('lista')"><i class="fa-solid fa-list"></i> Lista</button>
+          <button class="mode-btn ${maquinariaView==='mapa'?'active':''}" onclick="setMaquinariaView('mapa')"><i class="fa-solid fa-map"></i> Mapa</button>
+        </div>
+        <button class="btn btn-amber" onclick="openAddMachineModal()"><i class="fa-solid fa-plus"></i> Añadir máquina</button>
+      </div>
+    </div>
+    ${maquinariaView === 'lista' ? `
+    <div class="machine-grid" id="machine-results">
+      ${machines.map(machineCardHTML).join('')}
+    </div>
+    ` : `
+    <div class="plate" style="padding:0;overflow:hidden;">${rivets}
+      <div id="fleet-map" style="width:100%;height:420px;"></div>
+    </div>
+    <div style="display:flex;gap:14px;margin-top:10px;font-size:12px;color:var(--steel);">
+      <span><span class="minimap-dot" style="background:var(--success);"></span> En marcha</span>
+      <span><span class="minimap-dot" style="background:var(--danger);"></span> Mantenimiento</span>
+      <span><span class="minimap-dot" style="background:var(--idle);"></span> Parada</span>
+    </div>
+    `}
+  `;
+  if (maquinariaView === 'mapa') setTimeout(initFleetMap, 0);
+}
+
+function initFleetMap() {
+  const el = document.getElementById('fleet-map');
+  if (!el || !window.L) return;
+  const linked = machines.filter(m => m.device.linked);
+  if (linked.length === 0) return;
+
+  fleetMap = L.map(el, { attributionControl: false }).setView([linked[0].lat, linked[0].lng], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(fleetMap);
+
+  const markers = {};
+  linked.forEach(m => {
+    const icon = L.divIcon({
+      className: '', html: `<div style="width:16px;height:16px;border-radius:50%;background:${statusChipColor(m.status)};border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>`,
+      iconSize: [16,16], iconAnchor: [8,8],
+    });
+    markers[m.id] = L.marker([m.lat, m.lng], { icon }).addTo(fleetMap)
+      .bindPopup(`<b>${m.id}</b><br>${m.type} · ${m.model}<br><a href="#" onclick="closeDrawer();openDrawer('${m.id}');return false;">Ver ficha →</a>`);
+  });
+
+  const group = L.featureGroup(Object.values(markers));
+  fleetMap.fitBounds(group.getBounds().pad(0.3));
+
+  fleetMapUnsub = gpsDataProvider.subscribe((locations) => {
+    locations.forEach(loc => { if (markers[loc.id]) markers[loc.id].setLatLng([loc.lat, loc.lng]); });
+  });
+}
+
+function openDrawer(id) {
+  const m = machines.find(x => x.id === id);
+  document.getElementById('drawer').innerHTML = `
+    <div class="drawer-top">
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${m.id}</span></div>
+      <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="drawer-photo ${m.hasPhoto ? 'has-photo' : 'no-photo'}">
+      ${m.hasPhoto ? '<i class="fa-solid fa-truck"></i>' : '<i class="fa-solid fa-camera"></i><span>Añadir foto de la máquina</span>'}
+      <button class="drawer-upload"><i class="fa-solid fa-camera"></i> ${m.hasPhoto ? 'Cambiar' : 'Subir'}</button>
+    </div>
+    <div><div class="drawer-title">${m.type}</div><div class="drawer-model">${m.model}</div></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      ${chip(m.status)}
+      ${m.plate !== '—' ? `<span class="plate-badge" style="font-size:12px;">${m.plate}</span>` : ''}
+    </div>
+    <div class="drawer-rows">
+      <div class="drawer-row"><span>Ubicación</span><span>${m.location}</span></div>
+      <div class="drawer-row"><span>Última señal GPS</span><span class="f-mono"><i class="fa-solid fa-satellite" style="color:var(--success);margin-right:4px;"></i>${m.gpsAge}</span></div>
+      <div class="drawer-row"><span>Operario actual</span><span>${m.operator}</span></div>
+      <div class="drawer-row"><span>Combustible</span><span class="f-mono">${m.fuel}%</span></div>
+    </div>
+
+    <div class="device-box ${m.device.linked ? 'linked' : 'unlinked'}">
+      <i class="fa-solid ${m.device.linked ? 'fa-microchip' : 'fa-triangle-exclamation'}" style="color:${m.device.linked ? 'var(--steel)' : 'var(--amber-deep)'};"></i>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:500;">${m.device.linked ? 'Dispositivo de localización vinculado' : 'Sin dispositivo vinculado'}</div>
+        <div class="f-mono" style="font-size:11px;color:var(--steel);margin-top:2px;">${m.device.linked ? m.device.id + ' · ' + m.device.model : 'Esta máquina aún no envía ubicación'}</div>
+      </div>
+      <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="openLinkDeviceModal('${m.id}')">${m.device.linked ? 'Cambiar' : 'Vincular'}</button>
+    </div>
+
+    ${m.device.linked ? `
+    <div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span class="minimap-dot" style="animation:pulse 2s infinite;"></span>
+        <span style="font-size:11px;font-weight:700;color:var(--success);">EN VIVO · ${m.gpsAge}</span>
+      </div>
+      <div id="drawer-map" class="minimap"></div>
+      <div class="maps-btn-row">
+        <a class="maps-btn" href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}" target="_blank" rel="noopener">
+          <i class="fa-brands fa-google" style="font-size:12px;"></i> Google Maps
+        </a>
+        <a class="maps-btn" href="https://maps.apple.com/?daddr=${m.lat},${m.lng}" target="_blank" rel="noopener">
+          <i class="fa-brands fa-apple" style="font-size:13px;"></i> Apple Maps
+        </a>
+      </div>
+    </div>` : `
+    <div class="empty-state" style="padding:20px;">
+      <i class="fa-solid fa-map-location-dot"></i>
+      <div style="font-size:13px;">Vincula un dispositivo GPS para ver la ubicación en tiempo real</div>
+    </div>`}
+
+    <div class="doc-section-title">
+      <span class="f-display" style="font-size:15px;">CÓDIGO QR DE FICHAJE</span>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center;padding:14px;border-radius:8px;background:var(--surface);border:1px solid var(--border);">
+      <div id="qr-render-${m.id}" style="background:white;padding:6px;border-radius:4px;flex-shrink:0;"></div>
+      <div style="font-size:12.5px;color:var(--steel);">
+        Pégalo en la máquina. Los trabajadores lo escanean con la cámara para fichar entrada/salida — el código solo es válido para <span class="f-mono">${m.id}</span>.
+      </div>
+    </div>
+
+    <div class="doc-section-title">
+      <span class="f-display" style="font-size:15px;">DOCUMENTOS Y PERMISOS</span>
+    </div>
+    <div class="doc-list">${docList(m.documents)}</div>
+    <button class="add-doc-btn"><i class="fa-solid fa-plus"></i> Añadir documento (ITV, seguro, revisión...)</button>
+
+    <button class="btn btn-dark" style="margin-top:10px;justify-content:center;">Reasignar operario</button>
+  `;
+  document.getElementById('overlay').classList.add('active');
+  const qrHolder = document.getElementById('qr-render-' + m.id);
+  if (qrHolder && window.QRCode) {
+    new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M });
+  }
+  if (m.device.linked) initDrawerMap(m);
+}
+
+let drawerMap = null;
+let drawerMapMarker = null;
+let drawerMapUnsub = null;
+
+function initDrawerMap(m) {
+  const el = document.getElementById('drawer-map');
+  if (!el || !window.L) return;
+  drawerMap = L.map(el, { attributionControl: false, zoomControl: true }).setView([m.lat, m.lng], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(drawerMap);
+  const icon = L.divIcon({
+    className: '', html: `<div style="width:16px;height:16px;border-radius:50%;background:${statusChipColor(m.status)};border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>`,
+    iconSize: [16,16], iconAnchor: [8,8],
+  });
+  drawerMapMarker = L.marker([m.lat, m.lng], { icon }).addTo(drawerMap).bindPopup(`<b>${m.id}</b><br>${m.type}`);
+
+  // se suscribe al proveedor de GPS: si la máquina se mueve (mock ahora, backend real después), el marcador se actualiza solo
+  drawerMapUnsub = gpsDataProvider.subscribe((locations) => {
+    const loc = locations.find(l => l.id === m.id);
+    if (loc && drawerMapMarker) {
+      drawerMapMarker.setLatLng([loc.lat, loc.lng]);
+      drawerMap.panTo([loc.lat, loc.lng], { animate: true });
+    }
+  });
+}
+
+function statusChipColor(status) {
+  if (status === 'active') return '#2F8F5B';
+  if (status === 'maintenance') return '#C0392B';
+  return '#8A8F94';
+}
+
+/* Navegación "volver atrás" entre fichas relacionadas (ej. obra → máquina → volver a la obra) */
+let drawerBack = null;
+function goBackDrawer() {
+  const fn = drawerBack;
+  drawerBack = null;
+  if (fn) fn(); else closeDrawer();
+}
+function backButtonHTML() {
+  return drawerBack ? `<button class="drawer-back" onclick="goBackDrawer()"><i class="fa-solid fa-arrow-left"></i> Volver</button>` : '';
+}
+
+function closeDrawer() {
+  document.getElementById('overlay').classList.remove('active');
+  drawerBack = null;
+  if (drawerMapUnsub) { drawerMapUnsub(); drawerMapUnsub = null; }
+  if (drawerMap) { drawerMap.remove(); drawerMap = null; drawerMapMarker = null; }
+}
+
+/* ============ AÑADIR MÁQUINA (modal) ============ */
+function openAddMachineModal() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Añadir máquina</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);">Registra cualquier tipo de maquinaria: camión, excavadora, grúa, tractor, tráiler, barco...</div>
+
+    <div class="form-group">
+      <label class="form-label">Tipo de máquina</label>
+      <select class="form-select" id="nm-type">
+        ${MACHINE_TYPES.map(t => `<option>${t}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Modelo</label>
+      <input class="form-input" id="nm-model" placeholder="Ej. CAT 320, Volvo FMX...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Matrícula / nº de serie</label>
+      <input class="form-input" id="nm-plate" placeholder="Ej. 4392-KBL">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Foto de la máquina</label>
+      <div class="form-photo-upload"><i class="fa-solid fa-camera" style="margin-right:6px;"></i>Subir foto (opcional)</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dispositivo de localización GPS</label>
+      <input class="form-input" id="nm-device" placeholder="Código del dispositivo (ej. TRK-2301)">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Cada máquina necesita su propio dispositivo GPS físico para poder localizarse. Si aún no lo tienes instalado, puedes guardar la máquina y vincularlo más adelante.</span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="submitAddMachine()">Guardar máquina</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function closeAddMachineModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+
+async function submitAddMachine() {
+  const type = document.getElementById('nm-type').value;
+  const model = document.getElementById('nm-model').value || 'Modelo sin especificar';
+  const plate = document.getElementById('nm-plate').value || '—';
+  const deviceId = document.getElementById('nm-device').value;
+  const newCode = type.slice(0,2).toUpperCase() + '-' + Math.floor(100 + Math.random()*900);
+  const qrCode = 'OPERTRA-' + currentUser.companyId.slice(0,8) + '-' + newCode;
+
+  const btn = event ? event.target.closest('button') : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
+  try {
+    const { data, error } = await getSupabase().from('machines').insert({
+      company_id: currentUser.companyId, code: newCode, qr_code: qrCode, type, model, plate,
+      status: 'idle', fuel: 0,
+      lat: 37.175 + (Math.random()-0.5)*0.02, lng: -3.59 + (Math.random()-0.5)*0.02,
+      device_id: deviceId || null, device_model: deviceId ? 'Pendiente de confirmar' : null, device_linked: !!deviceId,
+    }).select().single();
+    if (error) throw error;
+    machines.push({
+      dbId: data.id, id: data.code, qrCode: data.qr_code, type: data.type, model: data.model, plate: data.plate,
+      status: data.status, operator: '—', project: null, location: 'Sin ubicación aún', fuel: data.fuel, since: '—',
+      lat: data.lat, lng: data.lng, gpsAge: deviceId ? 'esperando señal' : 'sin dispositivo', hasPhoto: false,
+      device: { id: data.device_id, model: data.device_model, linked: data.device_linked }, documents: [],
+    });
+    closeAddMachineModal();
+    renderMaquinaria();
+    document.getElementById('view-title').textContent = 'Maquinaria';
+  } catch (err) {
+    alert('No se pudo guardar la máquina: ' + (err.message || 'inténtalo de nuevo.'));
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar máquina'; }
+  }
+}
+
+/* ============ TRABAJADORES ============ */
+let workerQuery = '';
+let workerFilter = 'all'; // all | working | off | docpending | onvacation
+
+function workerRowHTML(w) {
+  return `
+    <tr style="cursor:pointer;" onclick="openWorkerDrawer('${w.id}')">
+      <td class="f-mono" style="font-size:12px;color:var(--steel);">${w.id}</td>
+      <td style="font-weight:500;">${w.name}</td>
+      <td style="color:var(--steel);">${w.role}</td>
+      <td class="f-mono" style="font-size:12px;color:${w.project ? 'var(--amber-deep)' : 'var(--steel)'};">${w.project || 'Sin asignar'}</td>
+      <td class="f-mono" style="font-size:12px;color:${w.machine !== '—' ? 'var(--blue)' : 'var(--steel)'};">${w.machine}</td>
+      <td>${w.documents.map(d => `<span class="permit-tag">${d.name}</span>`).join('')}</td>
+      <td>${chip(w.status)}</td>
+      <td><i class="fa-solid fa-chevron-right" style="color:var(--steel);font-size:12px;"></i></td>
+    </tr>`;
+}
+
+function workerMatchesFilter(w) {
+  if (workerFilter === 'working') return w.status === 'working';
+  if (workerFilter === 'off') return w.status === 'off';
+  if (workerFilter === 'docpending') return w.documents.some(d => d.status === 'proximo' || d.status === 'caducado');
+  if (workerFilter === 'onvacation') return w.vacations.some(v => vacationStatus(v) === 'en_curso');
+  return true;
+}
+
+function applyWorkerFilters() {
+  const q = workerQuery.trim().toLowerCase();
+  const results = workers.filter(w => workerMatchesFilter(w) && (!q || w.name.toLowerCase().includes(q) || w.role.toLowerCase().includes(q) || w.id.toLowerCase().includes(q)));
+  const tbody = document.getElementById('workers-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = results.length ? results.map(workerRowHTML).join('') :
+    `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Sin resultados.</td></tr>`;
+}
+function setWorkerFilter(f) { workerFilter = f; renderTrabajadores(); }
+function searchWorkers(q) { workerQuery = q; applyWorkerFilters(); }
+
+function renderTrabajadores() {
+  const upcoming = [];
+  workers.forEach(w => w.vacations.forEach(v => {
+    const st = vacationStatus(v);
+    if (st === 'proxima' || st === 'en_curso') upcoming.push({ ...v, worker: w.name, status: st });
+  }));
+  upcoming.sort((a,b) => new Date(a.start) - new Date(b.start));
+
+  const filters = [
+    { key: 'all', label: 'Todos' },
+    { key: 'working', label: 'Trabajando ahora' },
+    { key: 'off', label: 'Sin fichar' },
+    { key: 'docpending', label: 'Documentación pendiente' },
+    { key: 'onvacation', label: 'De vacaciones' },
+  ];
+
+  document.getElementById('view-trabajadores').innerHTML = `
+    <div class="toolbar">
+      <div class="search-box">
+        <input class="search-input" id="trabajadores-search" placeholder="Buscar trabajador..." value="${workerQuery}" oninput="searchWorkers(this.value)">
+      </div>
+      <button class="btn btn-amber"><i class="fa-solid fa-plus"></i> Añadir trabajador</button>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+      ${filters.map(f => `
+        <button class="mode-btn ${workerFilter===f.key?'active':''}" style="background:${workerFilter===f.key?'var(--card)':'var(--surface)'};border:1px solid var(--border);border-radius:99px;" onclick="setWorkerFilter('${f.key}')">${f.label}</button>
+      `).join('')}
+    </div>
+
+    ${upcoming.length > 0 ? `
+    <div class="plate" style="padding:16px;margin-bottom:16px;">${rivets}
+      <span class="f-display" style="font-size:14px;">PRÓXIMAS VACACIONES DEL EQUIPO</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+        ${upcoming.slice(0,6).map(v => `
+          <div class="vac-row" style="margin-bottom:0;min-width:220px;flex:1;">
+            <div><div class="vac-dates">${v.worker}</div><div class="vac-days">${fmtDate(v.start)} → ${fmtDate(v.end)} · ${v.days}d</div></div>
+            <span class="chip status-${v.status}"><span class="dot"></span>${vacStatusLabel[v.status]}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <div class="plate" style="padding:0;overflow:hidden;">${rivets}
+      <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Nombre</th><th>Rol</th><th>Obra</th><th>Máquina</th><th>Permisos</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody id="workers-tbody">
+          ${workers.filter(workerMatchesFilter).map(workerRowHTML).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  `;
+}
+
+function openWorkerDrawer(id) {
+  const w = workers.find(x => x.id === id);
+  document.getElementById('drawer').innerHTML = `
+    <div class="drawer-top">
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${w.id}</span></div>
+      <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="drawer-photo no-photo" style="height:120px;">
+      <i class="fa-solid fa-user" style="font-size:28px;"></i>
+      <span>Añadir foto del trabajador</span>
+      <button class="drawer-upload"><i class="fa-solid fa-camera"></i> Subir</button>
+    </div>
+    <div><div class="drawer-title">${w.name}</div><div class="drawer-model">${w.role}</div></div>
+    <div style="display:flex;gap:8px;align-items:center;">${chip(w.status)}</div>
+
+    <div class="drawer-rows">
+      <div class="drawer-row"><span>Máquina asignada</span><span class="f-mono" style="color:${w.machine!=='—'?'var(--blue)':'var(--ink)'}">${w.machine}</span></div>
+      <div class="drawer-row"><span>Última jornada iniciada</span><span>${w.since}</span></div>
+    </div>
+
+    <div class="doc-section-title">
+      <span class="f-display" style="font-size:15px;">DOCUMENTOS Y PERMISOS</span>
+    </div>
+    <div class="doc-list">${docList(w.documents)}</div>
+    <button class="add-doc-btn"><i class="fa-solid fa-plus"></i> Añadir carnet, permiso o certificado</button>
+
+    <div class="doc-section-title">
+      <span class="f-display" style="font-size:15px;">VACACIONES</span>
+    </div>
+    <div id="vac-list">${renderVacList(w)}</div>
+    <div class="vac-form">
+      <div class="form-group">
+        <label class="form-label">Desde</label>
+        <input class="form-input" type="date" id="vac-start" style="padding:8px 10px;font-size:13px;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hasta</label>
+        <input class="form-input" type="date" id="vac-end" style="padding:8px 10px;font-size:13px;">
+      </div>
+      <button class="btn btn-amber" style="padding:8px 12px;" onclick="addVacation('${w.id}')"><i class="fa-solid fa-plus"></i></button>
+    </div>
+
+    <button class="btn btn-dark" style="margin-top:10px;justify-content:center;">Reasignar máquina</button>
+  `;
+  document.getElementById('overlay').classList.add('active');
+}
+
+function renderVacList(w) {
+  if (w.vacations.length === 0) {
+    return `<div style="font-size:13px;color:var(--steel);padding:8px 0;">Sin vacaciones registradas.</div>`;
+  }
+  return w.vacations.slice().sort((a,b) => new Date(a.start) - new Date(b.start)).map(v => {
+    const st = vacationStatus(v);
+    return `
+    <div class="vac-row">
+      <div>
+        <div class="vac-dates">${fmtDate(v.start)} → ${fmtDate(v.end)}</div>
+        <div class="vac-days">${v.days} días</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="chip status-${st}"><span class="dot"></span>${vacStatusLabel[st]}</span>
+        <button class="vac-delete" onclick="deleteVacation('${w.id}','${v.id}')"><i class="fa-solid fa-trash-can"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addVacation(workerId) {
+  const w = workers.find(x => x.id === workerId);
+  const start = document.getElementById('vac-start').value;
+  const end = document.getElementById('vac-end').value;
+  if (!start || !end || end < start) return;
+  const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+  w.vacations.push({ id: 'V-' + Date.now(), start, end, days });
+  saveState();
+  document.getElementById('vac-list').innerHTML = renderVacList(w);
+  document.getElementById('vac-start').value = '';
+  document.getElementById('vac-end').value = '';
+}
+
+function deleteVacation(workerId, vacId) {
+  const w = workers.find(x => x.id === workerId);
+  w.vacations = w.vacations.filter(v => v.id !== vacId);
+  saveState();
+  document.getElementById('vac-list').innerHTML = renderVacList(w);
+}
+
+/* ============ AVISOS / INCIDENCIAS ============ */
+let avisosSubTab = 'incidencias'; // 'reportar' | 'incidencias'
+let avisosJustSubmitted = false;
+
+function showAvisosTab(tab) { avisosSubTab = tab; avisosJustSubmitted = false; renderAvisos(); }
+
+function renderAvisos() {
+  const unresolved = incidents.filter(i => !i.resolved).sort((a,b) => b.time - a.time);
+
+  document.getElementById('view-avisos').innerHTML = `
+    <div class="avisos-tabs">
+      <button class="avisos-tab-btn ${avisosSubTab==='reportar'?'active':''}" onclick="showAvisosTab('reportar')">
+        <div class="avisos-tab-icon"><i class="fa-solid fa-circle-plus"></i></div>
+        <div><div class="avisos-tab-title">Reportar incidencia</div><div class="avisos-tab-sub">Rueda pinchada, falta de material, avería...</div></div>
+      </button>
+      <button class="avisos-tab-btn ${avisosSubTab==='incidencias'?'active':''}" onclick="showAvisosTab('incidencias')">
+        <div class="avisos-tab-icon"><i class="fa-solid fa-list-check"></i></div>
+        <div><div class="avisos-tab-title">Incidencias no resueltas</div><div class="avisos-tab-sub">${unresolved.length} pendiente${unresolved.length!==1?'s':''}</div></div>
+      </button>
+    </div>
+
+    ${avisosSubTab === 'reportar' ? renderReportarForm() : renderIncidenciasList(unresolved)}
+  `;
+}
+
+let incPhotoData = null;
+
+function renderReportarForm() {
+  return `
+    <div class="plate" style="max-width:520px;padding:24px;">${rivets}
+      ${avisosJustSubmitted ? `<div class="success-banner"><i class="fa-solid fa-circle-check"></i> Incidencia enviada, ya la ven todos los compañeros.</div>` : ''}
+      <div class="form-group" style="margin-top:0;">
+        <label class="form-label">Título</label>
+        <input class="form-input" id="inc-title" placeholder="Ej. Rueda pinchada, falta de cemento...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <textarea class="textarea" id="inc-desc" placeholder="Cuenta el detalle: qué pasa, dónde, y desde cuándo"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Prioridad</label>
+        <select class="form-select" id="inc-priority">
+          <option value="baja">Baja — puede esperar</option>
+          <option value="media" selected>Media — hay que atenderla pronto</option>
+          <option value="alta">Alta — bloquea el trabajo, urgente</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Máquina relacionada (opcional)</label>
+        <select class="form-select" id="inc-machine">
+          <option value="—">Ninguna / no aplica</option>
+          ${machines.map(m => `<option value="${m.id}">${m.id} · ${m.type}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Foto (opcional)</label>
+        <input type="file" accept="image/*" capture="environment" id="inc-photo-input" style="display:none;" onchange="handleIncPhoto(event)">
+        <div class="photo-upload-box" onclick="document.getElementById('inc-photo-input').click()" id="inc-photo-box">
+          <i class="fa-solid fa-camera" style="color:var(--steel);"></i>
+          <div style="font-size:12.5px;color:var(--steel);margin-top:4px;">Toca para hacer o subir una foto</div>
+        </div>
+      </div>
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Se enviará como ${currentUser.name} (${currentUser.role}). Todo el equipo lo verá al momento en el panel general.</span>
+      </div>
+      <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:20px;" onclick="submitIncident()">
+        <i class="fa-solid fa-paper-plane"></i> Enviar incidencia
+      </button>
+    </div>
+  `;
+}
+
+function handleIncPhoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    incPhotoData = e.target.result;
+    document.getElementById('inc-photo-box').innerHTML = `<img src="${incPhotoData}" class="photo-preview">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+let incidentPhotoViewing = null;
+function viewIncidentPhoto(src) {
+  incidentPhotoViewing = src;
+  document.getElementById('legal-modal').innerHTML = `
+    <div class="modal-top"><h2 style="font-size:15px;">Foto de la incidencia</h2><button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <img src="${src}" style="width:100%;border-radius:8px;margin-top:10px;">
+  `;
+  document.getElementById('legal-overlay').classList.add('active');
+}
+
+function renderIncidenciasList(unresolved) {
+  if (unresolved.length === 0) {
+    return `
+      <div class="plate empty-state">${rivets}
+        <i class="fa-solid fa-champagne-glasses"></i>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);">No hay incidencias pendientes</div>
+        <div style="font-size:13px;margin-top:2px;">Todo resuelto por ahora.</div>
+      </div>`;
+  }
+  const order = { alta: 0, media: 1, baja: 2 };
+  const sorted = unresolved.slice().sort((a,b) => (order[a.priority]??1) - (order[b.priority]??1) || b.time - a.time);
+  return sorted.map(inc => `
+    <div class="plate incident-card">${rivets}
+      <div class="incident-top">
+        ${inc.photo ? `<img src="${inc.photo}" class="incident-thumb" onclick="viewIncidentPhoto('${inc.photo}')">` : ''}
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="priority-badge priority-${inc.priority||'media'}">${inc.priority||'media'}</span>
+            <div class="incident-title" style="margin:0;">${inc.title}</div>
+          </div>
+          <div class="incident-desc">${inc.description}</div>
+        </div>
+        <button class="resolve-btn" onclick="resolveIncident('${inc.id}')"><i class="fa-solid fa-check"></i> Marcar resuelta</button>
+      </div>
+      <div class="incident-meta">
+        <span><i class="fa-solid fa-user"></i> ${inc.worker}</span>
+        ${inc.machine !== '—' ? `<span class="f-mono"><i class="fa-solid fa-truck"></i> ${inc.machine}</span>` : ''}
+        ${inc.project ? `<span class="f-mono"><i class="fa-solid fa-diagram-project"></i> ${inc.project}</span>` : ''}
+        <span><i class="fa-solid fa-clock"></i> ${timeAgo(inc.time)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function submitIncident() {
+  const title = document.getElementById('inc-title').value.trim();
+  const desc = document.getElementById('inc-desc').value.trim();
+  const priority = document.getElementById('inc-priority').value;
+  const machine = document.getElementById('inc-machine').value;
+  if (!title) { document.getElementById('inc-title').focus(); return; }
+
+  const relatedMachine = machines.find(m => m.id === machine);
+  const reporter = workers.find(w => w.id === currentUser.id);
+  const project = (relatedMachine && relatedMachine.project) || (reporter && reporter.project) || null;
+
+  incidents.unshift({
+    id: 'INC-' + (incidentCounter++),
+    title, description: desc || 'Sin descripción adicional.', priority,
+    photo: incPhotoData,
+    worker: currentUser.name, machine, project, time: Date.now(), resolved: false,
+  });
+
+  incPhotoData = null;
+  avisosJustSubmitted = true;
+  avisosSubTab = 'incidencias';
+  saveState();
+  renderAvisos();
+  renderNav();
+  renderDashboard();
+}
+
+function resolveIncident(id) {
+  incidents = incidents.filter(i => i.id !== id);
+  saveState();
+  renderAvisos();
+  renderNav();
+  renderDashboard();
+}
+
+/* ============ CLIENTES ============ */
+/* Se calcula solo: la lista de clientes sale de las obras que ya existen, no hay que darlos de alta a mano */
+function clientList() {
+  const names = [...new Set(projects.map(p => p.client))];
+  return names.map(name => {
+    const clientProjects = projects.filter(p => p.client === name);
+    const projectIds = clientProjects.map(p => p.id);
+    const clientInvoices = invoices.filter(i => projectIds.includes(i.project));
+    const total = clientInvoices.reduce((s,i) => s + i.amount, 0);
+    const pending = clientInvoices.filter(i => i.status !== 'paid').reduce((s,i) => s + i.amount, 0);
+    const overdue = clientInvoices.filter(i => i.status === 'overdue').length;
+    return { name, projects: clientProjects, invoices: clientInvoices, total, pending, overdue };
+  });
+}
+
+function clientCardHTML(c) {
+  return `
+    <div class="plate obra-card" style="cursor:pointer;" onclick="openClientDrawer(decodeURIComponent('${encodeURIComponent(c.name)}'))">${rivets}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div><div class="f-display" style="font-size:17px;">${c.name}</div><div style="font-size:12px;color:var(--steel);margin-top:2px;">${c.projects.length} obra${c.projects.length!==1?'s':''}</div></div>
+        ${c.overdue > 0 ? `<span class="chip status-caducado"><span class="dot"></span>${c.overdue} vencida${c.overdue!==1?'s':''}</span>` : `<span class="chip status-vigente"><span class="dot"></span>Al día</span>`}
+      </div>
+      <div class="obra-stats-row" style="margin-top:14px;">
+        <span><i class="fa-solid fa-sack-dollar"></i> ${c.total.toLocaleString('es-ES',{minimumFractionDigits:2})} € facturados</span>
+      </div>
+      <div class="obra-stats-row">
+        <span><i class="fa-solid fa-file-invoice"></i> ${c.pending.toLocaleString('es-ES',{minimumFractionDigits:2})} € pendiente</span>
+      </div>
+    </div>`;
+}
+function filterClientes(q) {
+  q = q.trim().toLowerCase();
+  const results = clientList().filter(c => !q || c.name.toLowerCase().includes(q));
+  document.getElementById('clientes-results').innerHTML = results.length
+    ? results.map(clientCardHTML).join('')
+    : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
+}
+
+function renderClientes() {
+  const clients = clientList();
+  document.getElementById('view-clientes').innerHTML = `
+    <div class="toolbar">
+      <div class="search-box">
+        <input class="search-input" id="clientes-search" placeholder="Buscar cliente..." oninput="filterClientes(this.value)">
+      </div>
+    </div>
+    <div class="obras-grid" id="clientes-results">
+      ${clients.map(clientCardHTML).join('')}
+    </div>
+  `;
+}
+
+function openClientDrawer(name) {
+  const c = clientList().find(x => x.name === name);
+  document.getElementById('drawer').innerHTML = `
+    <div class="drawer-top">
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">CLIENTE</span></div>
+      <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="drawer-title">${c.name}</div>
+
+    <div class="drawer-rows">
+      <div class="drawer-row"><span>Total facturado</span><span class="f-mono">${c.total.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
+      <div class="drawer-row"><span>Pendiente de cobro</span><span class="f-mono" style="color:${c.pending>0?'var(--amber-deep)':'var(--ink)'};">${c.pending.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
+    </div>
+
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">OBRAS (${c.projects.length})</span></div>
+    <div class="doc-list">
+      ${c.projects.map(p => `
+        <div class="doc-row" style="cursor:pointer;" onclick="drawerBack=()=>{switchTab('clientes');openClientDrawer(decodeURIComponent('${encodeURIComponent(c.name)}'));};switchTab('obras');openObraDrawer('${p.id}');">
+          <div><div class="doc-name">${p.name}</div><div class="doc-expiry f-mono">${p.id}</div></div>
+          ${obraChip(p.status)}
+        </div>`).join('')}
+    </div>
+
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">FACTURAS (${c.invoices.length})</span></div>
+    <div class="doc-list">
+      ${c.invoices.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:6px 0;">Sin facturas.</div>` :
+        c.invoices.map(i => `
+        <div class="doc-row">
+          <div><div class="doc-name">Factura ${i.id}</div><div class="doc-expiry f-mono">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} € · vence ${fmtDate(i.dueDate)}</div></div>
+          <span class="chip status-${i.status==='paid'?'vigente':i.status==='overdue'?'caducado':'proximo'}"><span class="dot"></span>${i.status==='paid'?'Pagada':i.status==='overdue'?'Vencida':'Pendiente'}</span>
+        </div>`).join('')}
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('active');
+}
+
+/* ============ FACTURACION ============ */
+let facturaSeleccionada = null;
+
+function invStatusChip(status) {
+  const map = { paid: ['vigente','Pagada'], overdue: ['caducado','Vencida'], pending: ['proximo','Pendiente'] };
+  const [cls,label] = map[status];
+  return `<span class="chip status-${cls}"><span class="dot"></span>${label}</span>`;
+}
+
+function renderFacturacion() {
+  if (!facturaSeleccionada && invoices.length > 0) facturaSeleccionada = invoices[0].id;
+  const sorted = invoices.slice().sort((a,b) => b.dueDate.localeCompare(a.dueDate));
+
+  document.getElementById('view-facturacion').innerHTML = `
+    <div class="fact-wrap">
+      <div class="template-col" style="width:260px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="f-display" style="font-size:13px;color:var(--steel);">FACTURAS (${invoices.length})</span>
+          <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="openAddInvoiceModal()"><i class="fa-solid fa-plus"></i></button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+          ${sorted.map(i => `
+            <div class="plate ${i.id===facturaSeleccionada?'template-active':''}" style="padding:10px 12px;cursor:pointer;" onclick="facturaSeleccionada='${i.id}';renderFacturacion();">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="f-mono" style="font-size:12.5px;font-weight:600;">${i.id}</span>
+                ${invStatusChip(i.status)}
+              </div>
+              <div style="font-size:12px;color:var(--steel);margin-top:3px;">${i.client}</div>
+              <div style="font-size:12px;font-weight:600;margin-top:2px;">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} €</div>
+            </div>`).join('')}
+        </div>
+      </div>
+
+      ${renderInvoicePreview(invoices.find(i => i.id === facturaSeleccionada))}
+    </div>
+  `;
+}
+
+function renderInvoicePreview(inv) {
+  if (!inv) return `<div class="plate empty-state invoice-doc">${rivets}<i class="fa-solid fa-file-invoice"></i><div style="font-size:13px;">No hay facturas todavía. Crea la primera con el botón +.</div></div>`;
+  const iva = inv.amount * 0.21 / 1.21;
+  const base = inv.amount - iva;
+
+  return `
+    <div class="plate invoice-doc">${rivets}
+      <div class="inv-header">
+        <div>
+          <div class="inv-logo"><i class="fa-solid fa-truck"></i></div>
+          <div class="f-display" style="font-size:15px;">CONSTRUCCIONES IBARRA S.L.</div>
+          <div style="font-size:12px;color:var(--steel);margin-top:4px;">CIF B-12345678 · Pol. Ind. Las Cañadas, Nave 4</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="f-mono" style="font-size:12px;color:var(--steel);">FACTURA</div>
+          <div class="f-mono" style="font-size:18px;font-weight:500;">${inv.id}</div>
+          <div style="font-size:12px;color:var(--steel);margin-top:4px;">Vence: ${fmtDate(inv.dueDate)}</div>
+          <div style="margin-top:6px;">${invStatusChip(inv.status)}</div>
+        </div>
+      </div>
+
+      <div style="padding:20px 0;display:flex;justify-content:space-between;">
+        <div>
+          <div style="font-size:11px;text-transform:uppercase;color:var(--steel);">Cliente</div>
+          <div style="font-size:14px;margin-top:4px;">${inv.client}</div>
+        </div>
+        ${inv.project ? `<div><div style="font-size:11px;text-transform:uppercase;color:var(--steel);">Obra</div><div style="font-size:14px;margin-top:4px;" class="f-mono">${inv.project}</div></div>` : ''}
+      </div>
+
+      <table class="inv-table">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;color:var(--steel);">Concepto</th>
+          <th style="text-align:right;color:var(--steel);">Importe</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td>${inv.concept || 'Servicios prestados'}</td>
+            <td class="f-mono" style="text-align:right;">${base.toLocaleString('es-ES',{minimumFractionDigits:2})} €</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="inv-totals">
+        <div class="inv-totals-box">
+          <div class="inv-total-row"><span style="color:var(--steel);">Base imponible</span><span class="f-mono">${base.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
+          <div class="inv-total-row"><span style="color:var(--steel);">IVA (21%)</span><span class="f-mono">${iva.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
+          <div class="inv-total-row inv-grand"><span>TOTAL</span><span class="f-mono">${inv.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
+        </div>
+      </div>
+
+      ${inv.status !== 'paid' ? `<button class="btn btn-dark" style="margin-top:16px;justify-content:center;" onclick="markInvoicePaid('${inv.id}')"><i class="fa-solid fa-check"></i> Marcar como pagada</button>` : ''}
+    </div>
+  `;
+}
+
+function markInvoicePaid(id) {
+  const inv = invoices.find(i => i.id === id);
+  inv.status = 'paid';
+  saveState();
+  renderFacturacion();
+  renderDashboard();
+}
+
+/* ============ NUEVA FACTURA (modal) ============ */
+/* ============ VINCULAR DISPOSITIVO GPS (modal) ============ */
+function openLinkDeviceModal(machineId) {
+  const m = machines.find(x => x.id === machineId);
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">${m.device.linked ? 'Cambiar' : 'Vincular'} dispositivo GPS</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">Para ${m.id} · ${m.type} ${m.model}</div>
+
+    <div class="form-group">
+      <label class="form-label">Código del dispositivo</label>
+      <input class="form-input" id="ld-id" placeholder="Ej. TRK-2301" value="${m.device.id || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Modelo del dispositivo</label>
+      <select class="form-select" id="ld-model">
+        <option ${m.device.model==='Queclink GV75'?'selected':''}>Queclink GV75</option>
+        <option ${m.device.model==='Ruptela ECO4'?'selected':''}>Ruptela ECO4</option>
+        <option ${m.device.model==='Teltonika FMB920'?'selected':''}>Teltonika FMB920</option>
+        <option>Otro</option>
+      </select>
+    </div>
+    <div class="form-hint">
+      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+      <span>Vincula el código de serie del dispositivo GPS instalado en la máquina. Empezará a enviar su ubicación en cuanto esté conectado.</span>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="submitLinkDevice('${m.id}')">${m.device.linked ? 'Guardar cambios' : 'Vincular'}</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function submitLinkDevice(machineId) {
+  const id = document.getElementById('ld-id').value.trim();
+  const model = document.getElementById('ld-model').value;
+  if (!id) { document.getElementById('ld-id').focus(); return; }
+  const m = machines.find(x => x.id === machineId);
+  try {
+    const { error } = await getSupabase().from('machines').update({
+      device_id: id, device_model: model, device_linked: true,
+    }).eq('id', m.dbId);
+    if (error) throw error;
+    m.device = { id, model, linked: true };
+    m.gpsAge = 'esperando señal';
+    closeAddMachineModal();
+    openDrawer(machineId);
+    renderMaquinaria();
+  } catch (err) {
+    alert('No se pudo vincular el dispositivo: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+function openAddInvoiceModal() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Nueva factura</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group" style="margin-top:16px;">
+      <label class="form-label">Obra</label>
+      <select class="form-select" id="ni-project">
+        ${projects.map(p => `<option value="${p.id}">${p.id} · ${p.name} (${p.client})</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Concepto</label>
+      <input class="form-input" id="ni-concept" placeholder="Ej. Alquiler de maquinaria — agosto">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Importe total (IVA incluido)</label>
+      <input class="form-input" type="number" step="0.01" id="ni-amount" placeholder="0.00">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fecha de vencimiento</label>
+      <input class="form-input" type="date" id="ni-due">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="submitAddInvoice()">Guardar factura</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function submitAddInvoice() {
+  const projectId = document.getElementById('ni-project').value;
+  const concept = document.getElementById('ni-concept').value.trim();
+  const amount = parseFloat(document.getElementById('ni-amount').value);
+  const dueDate = document.getElementById('ni-due').value;
+  if (!amount || !dueDate) return;
+  const p = projects.find(x => x.id === projectId);
+  const newId = '2026-' + String(200 + invoices.length).padStart(4,'0');
+  invoices.push({ id: newId, client: p.client, project: projectId, concept, amount, dueDate, status: 'pending' });
+  facturaSeleccionada = newId;
+  saveState();
+  closeAddMachineModal();
+  renderFacturacion();
+  renderDashboard();
+}
+
+/* ============ INFORMES ============ */
+/* Todo calculado en el momento a partir de timeLogs / invoices / incidents reales — nada de gráficos con cifras inventadas */
+function reportBar(label, value, max, fmt, color) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return `
+    <div class="report-row">
+      <div class="report-label">${label}</div>
+      <div class="report-bar-track"><div class="report-bar-fill" style="width:${pct}%;${color?`background:${color};`:''}"></div></div>
+      <div class="report-value">${fmt}</div>
+    </div>`;
+}
+
+function renderInformes() {
+  // Horas trabajadas por trabajador (agosto)
+  const hoursByWorker = workers.map(w => ({
+    name: w.name,
+    hours: timeLogs.filter(l => l.worker === w.name && l.date.startsWith('2026-08')).reduce((s,l) => s + parseHoursStr(l.hours), 0),
+  })).sort((a,b) => b.hours - a.hours);
+  const maxHours = Math.max(1, ...hoursByWorker.map(h => h.hours));
+
+  // Facturación por obra
+  const billingByProject = projects.map(p => ({
+    name: p.id,
+    amount: invoices.filter(i => i.project === p.id).reduce((s,i) => s + i.amount, 0),
+  })).sort((a,b) => b.amount - a.amount);
+  const maxBilling = Math.max(1, ...billingByProject.map(b => b.amount));
+
+  // Incidencias por obra (abiertas + resueltas, total histórico)
+  const incByProject = projects.map(p => ({
+    name: p.id,
+    count: incidents.filter(i => i.project === p.id).length,
+    open: incidents.filter(i => i.project === p.id && !i.resolved).length,
+  })).sort((a,b) => b.count - a.count);
+  const maxInc = Math.max(1, ...incByProject.map(i => i.count));
+
+  // Uso de maquinaria (activa vs total, por tipo)
+  const machineTypes = [...new Set(machines.map(m => m.type))];
+  const machineUse = machineTypes.map(t => ({
+    name: t,
+    active: machines.filter(m => m.type === t && m.status === 'active').length,
+    total: machines.filter(m => m.type === t).length,
+  }));
+
+  document.getElementById('view-informes').innerHTML = `
+    <div class="dash-cols">
+      <div class="plate" style="flex:1;padding:20px;">${rivets}
+        <span class="f-display" style="font-size:15px;">HORAS TRABAJADAS POR TRABAJADOR · AGOSTO</span>
+        <div style="margin-top:12px;">
+          ${hoursByWorker.map(h => reportBar(h.name, h.hours, maxHours, h.hours.toLocaleString('es-ES',{maximumFractionDigits:1})+' h')).join('')}
+        </div>
+      </div>
+      <div class="plate" style="width:340px;flex-shrink:0;padding:20px;">${rivets}
+        <span class="f-display" style="font-size:15px;">USO DE MAQUINARIA</span>
+        <div style="margin-top:12px;">
+          ${machineUse.map(m => reportBar(m.name, m.active, m.total || 1, `${m.active}/${m.total}`, 'var(--success)')).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-cols" style="margin-top:20px;">
+      <div class="plate" style="flex:1;padding:20px;">${rivets}
+        <span class="f-display" style="font-size:15px;">FACTURACIÓN POR OBRA</span>
+        <div style="margin-top:12px;">
+          ${billingByProject.map(b => reportBar(b.name, b.amount, maxBilling, b.amount.toLocaleString('es-ES',{minimumFractionDigits:0})+' €', 'var(--amber-deep)')).join('')}
+        </div>
+      </div>
+      <div class="plate" style="width:340px;flex-shrink:0;padding:20px;">${rivets}
+        <span class="f-display" style="font-size:15px;">INCIDENCIAS POR OBRA</span>
+        <div style="margin-top:12px;">
+          ${incByProject.map(i => reportBar(i.name, i.count, maxInc, `${i.count} (${i.open} abiertas)`, i.open>0?'var(--danger)':'var(--idle)')).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTopbarUser() {
+  document.getElementById('topbar-username').textContent = currentUser.name;
+  document.getElementById('topbar-company').textContent = currentUser.company;
+  document.getElementById('topbar-avatar').innerHTML = currentUser.hasPhoto
+    ? '<i class="fa-solid fa-user"></i>'
+    : `<span class="f-mono">${currentUser.initials}</span>`;
+}
+
+/* ============ LOGIN / SESIÓN ============ */
+/* ============ LANDING ============ */
+/* Solo una de las tres pantallas puede estar visible a la vez: landing, login o app */
+function showScreen(which) {
+  document.getElementById('landing').classList.toggle('hidden', which !== 'landing');
+  document.getElementById('login-screen').classList.toggle('hidden', which !== 'login');
+  document.getElementById('app').classList.toggle('hidden', which !== 'app');
+  document.getElementById('trial-expired-screen').classList.toggle('hidden', which !== 'trial-expired');
+  window.scrollTo(0,0);
+}
+function showLogin() { showScreen('login'); }
+function showLanding() { showScreen('landing'); }
+function scrollLanding(id) {
+  document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* Los leads de demo se guardan de verdad en este navegador (localStorage).
+   Para que lleguen por email a tu equipo comercial hace falta backend: aquí
+   dejamos el punto exacto donde engancharía esa llamada a la API real. */
+function submitDemoRequest() {
+  const name = document.getElementById('demo-name').value.trim();
+  const company = document.getElementById('demo-company').value.trim();
+  const email = document.getElementById('demo-email').value.trim();
+  const phone = document.getElementById('demo-phone').value.trim();
+  const fleet = document.getElementById('demo-fleet').value;
+  if (!name || !company || !email) {
+    (!name ? document.getElementById('demo-name') : !company ? document.getElementById('demo-company') : document.getElementById('demo-email')).focus();
+    return;
+  }
+  const lead = { name, company, email, phone, fleet, date: new Date().toISOString() };
+  let leads = [];
+  try { leads = JSON.parse(localStorage.getItem('opertra_demo_leads') || '[]'); } catch(e) {}
+  leads.push(lead);
+  try { localStorage.setItem('opertra_demo_leads', JSON.stringify(leads)); } catch(e) {}
+
+  // TODO producción: sustituir por una llamada real, p.ej. fetch('/api/leads', {method:'POST', body: JSON.stringify(lead)})
+
+  document.getElementById('demo-success').style.display = 'flex';
+  ['demo-name','demo-company','demo-email','demo-phone'].forEach(id => document.getElementById(id).value = '');
+}
+
+/* ============ AUTENTICACIÓN REAL (Supabase Auth) ============ */
+
+function showAuthPanel(mode) {
+  document.getElementById('auth-panel-login').classList.toggle('hidden', mode !== 'login');
+  document.getElementById('auth-panel-signup').classList.toggle('hidden', mode !== 'signup');
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('signup-error').style.display = 'none';
+}
+
+function authErrorMessage(err) {
+  const msg = (err && err.message) || '';
+  if (msg.includes('Invalid login credentials')) return 'Correo o contraseña incorrectos.';
+  if (msg.includes('User already registered')) return 'Ya existe una cuenta con ese correo. Inicia sesión en vez de crear una nueva.';
+  if (msg.includes('Password should be at least')) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (msg.includes('Unable to validate email')) return 'Ese correo no parece válido.';
+  if (msg.includes('For security purposes')) return 'Espera unos segundos antes de volver a intentarlo.';
+  return msg || 'Ha ocurrido un error. Inténtalo de nuevo.';
+}
+
+function setButtonLoading(btnId, loading, textLoading, textNormal) {
+  const btn = document.getElementById(btnId);
+  btn.disabled = loading;
+  btn.innerHTML = loading ? `<i class="fa-solid fa-spinner fa-spin"></i> ${textLoading}` : textNormal;
+}
+
+/* Si el perfil todavía no existe (primer login tras confirmar el correo),
+   lo crea ahora usando los datos que quedaron guardados como metadatos al
+   registrarse. A partir de aquí ya hay sesión real, así que el candado (RLS)
+   permite escribir. Si ya existe, no hace nada. */
+async function ensureCompanyAndProfile(authUser) {
+  const sb = getSupabase();
+  const { data: existing } = await sb.from('profiles').select('id').eq('id', authUser.id).maybeSingle();
+  if (existing) return;
+  const meta = authUser.user_metadata || {};
+  if (!meta.pending_company_name) return; // no hay datos pendientes (p.ej. un trabajador invitado)
+
+  const { data: company, error: companyError } = await sb.from('companies').insert({
+    name: meta.pending_company_name, cif: meta.pending_cif || null,
+  }).select().single();
+  if (companyError) throw companyError;
+
+  const { error: profileError } = await sb.from('profiles').insert({
+    id: authUser.id, company_id: company.id, name: meta.pending_admin_name || authUser.email,
+    role: 'Administrador', access_level: 'admin',
+  });
+  if (profileError) throw profileError;
+}
+
+async function loadCurrentUserProfile(authUser) {
+  const { data: profile, error } = await getSupabase()
+    .from('profiles')
+    .select('id, name, role, access_level, has_photo, photo_url, company_id, companies(name, trial_ends_at)')
+    .eq('id', authUser.id)
+    .single();
+  if (error || !profile) throw error || new Error('No se encontró el perfil de este usuario.');
+  currentUser = {
+    id: profile.id,
+    name: profile.name,
+    role: profile.role,
+    accessLevel: profile.access_level,
+    company: profile.companies ? profile.companies.name : '',
+    companyId: profile.company_id,
+    trialEndsAt: profile.companies ? profile.companies.trial_ends_at : null,
+    initials: profile.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
+    hasPhoto: profile.has_photo,
+    email: authUser.email,
+  };
+}
+
+/* ============ PERIODO DE PRUEBA (50 días) ============
+   Hoy el límite se calcula desde trial_ends_at en la tabla companies.
+   TODO (cuando se active Stripe): en el registro, antes de crear la empresa,
+   se abrirá Stripe Checkout en modo suscripción con trial_period_days=50 para
+   pedir la tarjeta. Un webhook de Stripe (Edge Function) actualizará
+   trial_ends_at / el estado de pago aquí en Supabase automáticamente —
+   esta misma función seguirá funcionando igual, sin tocar nada más. */
+function daysLeftInTrial() {
+  if (!currentUser.trialEndsAt) return null;
+  const diffMs = new Date(currentUser.trialEndsAt) - new Date();
+  return Math.ceil(diffMs / 86400000);
+}
+function isTrialExpired() {
+  const d = daysLeftInTrial();
+  return d !== null && d <= 0;
+}
+function renderTrialBanner() {
+  const bar = document.getElementById('trial-banner');
+  if (!bar) return;
+  const d = daysLeftInTrial();
+  if (d === null || d > 10 || d <= 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = `<i class="fa-solid fa-clock"></i> Te quedan ${d} día${d === 1 ? '' : 's'} de prueba gratuita.`
+    + (currentUser.accessLevel !== 'trabajador' ? ' <span style="text-decoration:underline;cursor:pointer;margin-left:6px;" onclick="alert(\'La gestión de pagos estará disponible próximamente.\')">Gestionar suscripción</span>' : '');
+}
+function enterAppOrShowTrialExpired() {
+  if (isTrialExpired()) {
+    showScreen('trial-expired');
+    document.getElementById('trial-expired-admin-msg').style.display = currentUser.accessLevel !== 'trabajador' ? 'block' : 'none';
+    document.getElementById('trial-expired-worker-msg').style.display = currentUser.accessLevel === 'trabajador' ? 'block' : 'none';
+  } else {
+    showScreen('app');
+    renderTopbarUser(); renderNav(); renderTrialBanner(); switchTab('dashboard');
+    loadCompanyData();
+  }
+}
+
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value.trim();
+  const errBox = document.getElementById('login-error');
+  errBox.style.display = 'none';
+  if (!email || !pass) {
+    document.getElementById('login-error-text').textContent = 'Introduce tu correo y contraseña.';
+    errBox.style.display = 'flex';
+    return;
+  }
+  setButtonLoading('login-submit-btn', true, 'Entrando...', 'Iniciar sesión');
+  try {
+    const { data, error } = await getSupabase().auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+    await ensureCompanyAndProfile(data.user);
+    await loadCurrentUserProfile(data.user);
+    enterAppOrShowTrialExpired();
+  } catch (err) {
+    document.getElementById('login-error-text').textContent = authErrorMessage(err);
+    errBox.style.display = 'flex';
+  } finally {
+    setButtonLoading('login-submit-btn', false, '', 'Iniciar sesión');
+  }
+}
+
+async function handleSignup() {
+  const companyName = document.getElementById('signup-company').value.trim();
+  const cif = document.getElementById('signup-cif').value.trim();
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const pass = document.getElementById('signup-password').value.trim();
+  const pass2 = document.getElementById('signup-password2').value.trim();
+  const errBox = document.getElementById('signup-error');
+  errBox.style.display = 'none';
+
+  if (!companyName || !name || !email || !pass) {
+    document.getElementById('signup-error-text').textContent = 'Rellena todos los campos obligatorios.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (pass.length < 8) {
+    document.getElementById('signup-error-text').textContent = 'La contraseña debe tener al menos 8 caracteres.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (pass !== pass2) {
+    document.getElementById('signup-error-text').textContent = 'Las contraseñas no coinciden.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  setButtonLoading('signup-submit-btn', true, 'Creando cuenta...', 'Crear empresa y cuenta');
+  try {
+    const sb = getSupabase();
+    // Los datos de la empresa viajan como metadatos del propio usuario (no en las
+    // tablas todavía): así, aunque haga falta confirmar el correo antes de tener
+    // permiso para escribir en la base de datos, no se pierden y funcionan igual
+    // aunque confirmen el correo desde otro dispositivo distinto al del registro.
+    const { data: signUpData, error: signUpError } = await sb.auth.signUp({
+      email, password: pass,
+      options: { data: { pending_company_name: companyName, pending_cif: cif || null, pending_admin_name: name } },
+    });
+    if (signUpError) throw signUpError;
+    const user = signUpData.user;
+    if (!user) throw new Error('No se pudo crear el usuario. Revisa tu correo para confirmar la cuenta si es necesario.');
+
+    // Si el proyecto tiene confirmación de correo activada, no habrá sesión todavía.
+    const { data: sessionData } = await sb.auth.getSession();
+    if (sessionData.session) {
+      await ensureCompanyAndProfile(user);
+      await loadCurrentUserProfile(user);
+      enterAppOrShowTrialExpired();
+    } else {
+      document.getElementById('signup-error-text').textContent = '';
+      errBox.style.display = 'none';
+      showAuthPanel('login');
+      document.getElementById('login-error-text').textContent = 'Cuenta creada. Revisa tu correo para confirmarla y después inicia sesión.';
+      document.getElementById('login-error').style.display = 'flex';
+      document.getElementById('login-error').style.color = 'var(--success)';
+    }
+  } catch (err) {
+    document.getElementById('signup-error-text').textContent = authErrorMessage(err);
+    errBox.style.display = 'flex';
+  } finally {
+    setButtonLoading('signup-submit-btn', false, '', 'Crear empresa y cuenta');
+  }
+}
+
+async function handleForgotPassword() {
+  const email = document.getElementById('login-email').value.trim();
+  const errBox = document.getElementById('login-error');
+  if (!email) {
+    document.getElementById('login-error-text').textContent = 'Escribe tu correo arriba y vuelve a pulsar "¿Has olvidado tu contraseña?".';
+    errBox.style.display = 'flex';
+    return;
+  }
+  try {
+    const { error } = await getSupabase().auth.resetPasswordForEmail(email);
+    if (error) throw error;
+    document.getElementById('login-error-text').textContent = 'Te hemos enviado un correo con instrucciones para recuperar tu contraseña.';
+    errBox.style.display = 'flex';
+    errBox.style.color = 'var(--success)';
+  } catch (err) {
+    document.getElementById('login-error-text').textContent = authErrorMessage(err);
+    errBox.style.display = 'flex';
+    errBox.style.color = '';
+  }
+}
+
+async function logout() {
+  closeUserDropdown();
+  try { await getSupabase().auth.signOut(); } catch(e) {}
+  currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
+  showScreen('login');
+  showAuthPanel('login');
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+}
+
+/* Al cargar la página, comprueba si ya había una sesión iniciada (Supabase la
+   recuerda sola en el navegador) y entra directo a la app si es así. */
+async function checkExistingSession() {
+  try {
+    const { data } = await getSupabase().auth.getSession();
+    if (data.session) {
+      await ensureCompanyAndProfile(data.session.user);
+      await loadCurrentUserProfile(data.session.user);
+      enterAppOrShowTrialExpired();
+    } else {
+      showScreen('landing');
+    }
+  } catch (err) {
+    showScreen('landing');
+  }
+}
+
+/* ============ DROPDOWN DE USUARIO ============ */
+function toggleUserDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('user-dropdown');
+  const willOpen = !dd.classList.contains('active');
+  if (willOpen) renderUserDropdown();
+  dd.classList.toggle('active', willOpen);
+}
+function closeUserDropdown() { document.getElementById('user-dropdown').classList.remove('active'); }
+
+function renderUserDropdown() {
+  document.getElementById('user-dropdown').innerHTML = `
+    <div class="dropdown-header">
+      <div class="user-avatar" style="width:40px;height:40px;">${currentUser.hasPhoto ? '<i class="fa-solid fa-user"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}</div>
+      <div>
+        <div class="user-name">${currentUser.name}</div>
+        <div class="user-company">${currentUser.role} · ${currentUser.company}</div>
+      </div>
+    </div>
+    <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-user-pen"></i> Mi perfil</button>
+    <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-camera"></i> Cambiar foto de perfil</button>
+    <button class="dropdown-item" onclick="switchTab('avisos'); closeUserDropdown();"><i class="fa-solid fa-bullhorn"></i> Mis incidencias</button>
+    <div class="dropdown-divider"></div>
+    <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--steel);text-transform:uppercase;">Ver la app como</div>
+    <button class="dropdown-item" onclick="setAccessLevel('trabajador')"><i class="fa-solid ${currentUser.accessLevel==='trabajador'?'fa-circle-check':'fa-circle'}" style="color:${currentUser.accessLevel==='trabajador'?'var(--amber-deep)':'var(--steel)'};"></i> Trabajador (obra)</button>
+    <button class="dropdown-item" onclick="setAccessLevel('encargado')"><i class="fa-solid ${currentUser.accessLevel!=='trabajador'?'fa-circle-check':'fa-circle'}" style="color:${currentUser.accessLevel!=='trabajador'?'var(--amber-deep)':'var(--steel)'};"></i> Encargado / Admin</button>
+    <div class="dropdown-divider"></div>
+    <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-gear"></i> Ajustes de cuenta</button>
+    <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-building"></i> Ajustes de empresa</button>
+    <button class="dropdown-item" onclick="openLegal('privacidad'); closeUserDropdown();"><i class="fa-solid fa-shield-halved"></i> Privacidad y legal</button>
+    <div class="dropdown-divider"></div>
+    <button class="dropdown-item danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
+  `;
+}
+
+function setAccessLevel(level) {
+  currentUser.accessLevel = level;
+  closeUserDropdown();
+  renderNav();
+  if (!canAccess(currentTab)) switchTab('dashboard'); else renderDashboard();
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#user-block')) closeUserDropdown();
+});
+
+function openUserSettings() {
+  closeUserDropdown();
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Ajustes de cuenta</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:16px;">
+      <div class="user-avatar" style="width:56px;height:56px;font-size:16px;">${currentUser.hasPhoto ? '<i class="fa-solid fa-user"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}</div>
+      <button class="btn btn-outline" style="font-size:13px;"><i class="fa-solid fa-camera"></i> Cambiar foto</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nombre completo</label>
+      <input class="form-input" value="${currentUser.name}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Rol</label>
+      <input class="form-input" value="${currentUser.role}" disabled style="background:var(--surface);color:var(--steel);">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Empresa</label>
+      <input class="form-input" value="${currentUser.company}" disabled style="background:var(--surface);color:var(--steel);">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notificaciones</label>
+      <div class="form-hint" style="margin-top:0;"><i class="fa-solid fa-circle-info" style="margin-top:1px;"></i><span>Recibir aviso cuando se reporte una incidencia nueva del equipo.</span></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Datos guardados</label>
+      <div class="form-hint" style="margin-top:0;">
+        <i class="fa-solid fa-database" style="margin-top:1px;"></i>
+        <span>Los fichajes, incidencias, obras y facturas se guardan en este navegador (localStorage), sobreviven a cerrar la pestaña. No se comparten con otros dispositivos — eso ya requiere un servidor real.</span>
+      </div>
+      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;color:var(--danger);border-color:var(--danger-bg);" onclick="resetDemoData()"><i class="fa-solid fa-rotate-left"></i> Restablecer datos de ejemplo</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="closeAddMachineModal()">Guardar cambios</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+/* ============ LEGAL ============ */
+const LEGAL_CONTENT = {
+  aviso: {
+    title: "Aviso legal",
+    body: `
+      <p>Este apartado identifica al titular del sitio web y las condiciones generales de uso de la aplicación Opertra, en cumplimiento de la Ley 34/2002 de Servicios de la Sociedad de la Información (LSSI-CE).</p>
+      <h3>Titular</h3>
+      <p>[Razón social] · [CIF] · [Domicilio social] · [Correo de contacto]</p>
+      <h3>Condiciones de uso</h3>
+      <p>El acceso a Opertra atribuye la condición de usuario e implica la aceptación de las condiciones aquí recogidas. El uso indebido de la plataforma, incluyendo el acceso no autorizado a datos de máquinas, trabajadores o facturación de otras empresas, podrá dar lugar a la suspensión de la cuenta.</p>
+      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado y completado por un asesor legal antes de publicarse.</p>
+    `,
+  },
+  privacidad: {
+    title: "Política de privacidad",
+    body: `
+      <p>En Opertra tratamos los datos personales de trabajadores y usuarios conforme al Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.</p>
+      <h3>Datos que tratamos</h3>
+      <p>Datos de cuenta (nombre, correo, empresa), datos laborales necesarios para la gestión de fichajes y maquinaria, y las incidencias que reportes voluntariamente. No se recoge la ubicación del trabajador en ningún momento: la geolocalización se aplica exclusivamente a los dispositivos GPS instalados en la maquinaria.</p>
+      <h3>Finalidad y base legal</h3>
+      <p>Gestión de la relación laboral y control de flota, en base a la ejecución del contrato entre tu empresa y Opertra y al interés legítimo en la seguridad de los activos.</p>
+      <h3>Tus derechos</h3>
+      <p>Puedes ejercer tus derechos de acceso, rectificación, supresión, oposición, portabilidad y limitación escribiendo a [correo de contacto].</p>
+      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado por un asesor legal antes de publicarse.</p>
+    `,
+  },
+  cookies: {
+    title: "Política de cookies",
+    body: `
+      <p>Opertra utiliza cookies técnicas estrictamente necesarias para mantener tu sesión iniciada y recordar tus preferencias dentro de la aplicación.</p>
+      <h3>Tipos de cookies</h3>
+      <p><strong>Técnicas (siempre activas):</strong> gestión de sesión y seguridad.<br><strong>Analíticas (opcionales):</strong> nos ayudan a entender el uso de la app para mejorarla.</p>
+      <p>Puedes gestionar tus preferencias de cookies en cualquier momento desde Ajustes de cuenta.</p>
+      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado por un asesor legal antes de publicarse.</p>
+    `,
+  },
+  terminos: {
+    title: "Términos de uso",
+    body: `
+      <p>Estos términos regulan el acceso y uso de Opertra por parte de las empresas clientes y sus trabajadores autorizados.</p>
+      <h3>Licencia de uso</h3>
+      <p>Se concede a la empresa contratante una licencia no exclusiva para el uso de la plataforma durante la vigencia de su suscripción, incluyendo los módulos de maquinaria, fichaje, incidencias y facturación.</p>
+      <h3>Responsabilidad</h3>
+      <p>La empresa contratante es responsable de la veracidad de los datos introducidos y de garantizar que sus trabajadores han sido informados del tratamiento de sus datos conforme a la política de privacidad.</p>
+      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado por un asesor legal antes de publicarse.</p>
+    `,
+  },
+};
+
+function openLegal(type) {
+  const c = LEGAL_CONTENT[type];
+  document.getElementById('legal-modal').innerHTML = `
+    <div class="modal-top">
+      <h2>${c.title}</h2>
+      <button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="legal-updated">Última actualización: 5 de agosto de 2026</div>
+    ${c.body}
+  `;
+  document.getElementById('legal-overlay').classList.add('active');
+}
+function closeLegal() { document.getElementById('legal-overlay').classList.remove('active'); }
+
+/* ============ INIT ============ */
+const restoredFromStorage = loadState();
+renderDashboard();
+renderObras();
+renderFichaje();
+renderMaquinaria();
+renderTrabajadores();
+renderAvisos();
+renderClientes();
+renderFacturacion();
+renderInformes();
+checkExistingSession(); // decide si mostrar landing o entrar directo (sesión real de Supabase)
+
+document.addEventListener('click', (e) => {
+  const navBtn = e.target.closest('.nav-item[data-tab]');
+  if (navBtn) switchTab(navBtn.dataset.tab);
+});
+document.getElementById('overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'overlay') closeDrawer();
+});
+document.getElementById('modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-overlay') closeAddMachineModal();
+});
+document.getElementById('legal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'legal-overlay') closeLegal();
+});
+</script>
+</body>
+</html>
