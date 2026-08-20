@@ -3081,35 +3081,27 @@ function setButtonLoading(btnId, loading, textLoading, textNormal) {
   btn.innerHTML = loading ? `<i class="fa-solid fa-spinner fa-spin"></i> ${textLoading}` : textNormal;
 }
 
-/* Si el perfil todavía no existe (primer login tras confirmar el correo),
-   lo crea ahora usando los datos que quedaron guardados como metadatos al
-   registrarse. A partir de aquí ya hay sesión real, así que el candado (RLS)
-   permite escribir. Si ya existe, no hace nada. */
-async function ensureCompanyAndProfile(authUser) {
-  const sb = getSupabase();
-  const { data: existing } = await sb.from('profiles').select('id').eq('id', authUser.id).maybeSingle();
-  if (existing) return;
-  const meta = authUser.user_metadata || {};
-  if (!meta.pending_company_name) return; // no hay datos pendientes (p.ej. un trabajador invitado)
+/* La empresa y el perfil los crea AUTOMÁTICAMENTE la base de datos (disparador
+   handle_new_user sobre auth.users) en el mismo instante del registro, usando
+   los datos que se envían como metadatos en signUp(). El navegador no crea nada:
+   solo lee. Por eso aquí ya no hay ninguna inserción — intentarla desde el
+   navegador chocaba contra el candado (RLS) y provocaba el error 403. */
 
-  const { data: company, error: companyError } = await sb.from('companies').insert({
-    name: meta.pending_company_name, cif: meta.pending_cif || null,
-  }).select().single();
-  if (companyError) throw companyError;
-
-  const { error: profileError } = await sb.from('profiles').insert({
-    id: authUser.id, company_id: company.id, name: meta.pending_admin_name || authUser.email,
-    role: 'Administrador', access_level: 'admin',
-  });
-  if (profileError) throw profileError;
-}
-
-async function loadCurrentUserProfile(authUser) {
-  const { data: profile, error } = await getSupabase()
-    .from('profiles')
-    .select('id, name, role, access_level, has_photo, photo_url, company_id, companies(name, trial_ends_at)')
-    .eq('id', authUser.id)
-    .single();
+async function loadCurrentUserProfile(authUser, intentos = 5) {
+  let profile = null, error = null;
+  // El disparador de la base de datos crea la empresa y el perfil en el mismo
+  // instante del registro, pero puede tardar una fracción de segundo. Si aún no
+  // está, reintentamos unas cuantas veces antes de darlo por fallido.
+  for (let i = 0; i < intentos; i++) {
+    const res = await getSupabase()
+      .from('profiles')
+      .select('id, name, role, access_level, has_photo, photo_url, company_id, companies(name, trial_ends_at)')
+      .eq('id', authUser.id)
+      .maybeSingle();
+    profile = res.data; error = res.error;
+    if (profile) break;
+    await new Promise(r => setTimeout(r, 600));
+  }
   if (error || !profile) throw error || new Error('No se encontró el perfil de este usuario.');
   currentUser = {
     id: profile.id,
@@ -3176,7 +3168,6 @@ async function handleLogin() {
   try {
     const { data, error } = await getSupabase().auth.signInWithPassword({ email, password: pass });
     if (error) throw error;
-    await ensureCompanyAndProfile(data.user);
     await loadCurrentUserProfile(data.user);
     enterAppOrShowTrialExpired();
   } catch (err) {
@@ -3228,7 +3219,6 @@ async function handleSignup() {
     // Si el proyecto tiene confirmación de correo activada, no habrá sesión todavía.
     const { data: sessionData } = await sb.auth.getSession();
     if (sessionData.session) {
-      await ensureCompanyAndProfile(user);
       await loadCurrentUserProfile(user);
       enterAppOrShowTrialExpired();
     } else {
@@ -3332,7 +3322,6 @@ async function checkExistingSession() {
   try {
     const { data } = await getSupabase().auth.getSession();
     if (data.session) {
-      await ensureCompanyAndProfile(data.session.user);
       await loadCurrentUserProfile(data.session.user);
       enterAppOrShowTrialExpired();
     } else {
