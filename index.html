@@ -3025,7 +3025,7 @@ function showScreen(which) {
   document.getElementById('trial-expired-screen').classList.toggle('hidden', which !== 'trial-expired');
   window.scrollTo(0,0);
 }
-function showLogin() { showScreen('login'); }
+function showLogin() { showScreen('login'); showAuthPanel('login'); }
 function showLanding() { showScreen('landing'); }
 function scrollLanding(id) {
   document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3280,6 +3280,54 @@ async function logout() {
 
 /* Al cargar la página, comprueba si ya había una sesión iniciada (Supabase la
    recuerda sola en el navegador) y entra directo a la app si es así. */
+/* Cuando alguien confirma su correo (o recupera contraseña), Supabase le
+   devuelve a esta misma web con un código en la URL. Según la configuración,
+   puede venir de dos formas distintas — nos aseguramos de leer las dos, para
+   que la sesión quede iniciada de verdad sin que el usuario tenga que volver
+   a escribir su contraseña. */
+async function handleAuthRedirect() {
+  try {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const queryError = url.searchParams.get('error_description') || url.searchParams.get('error');
+
+    // El enlace del correo puede traer el error en la URL normal (?error=...)
+    // o en el hash (#error=...) según el caso — miramos los dos sitios.
+    let hashParams = null;
+    if (window.location.hash) hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const hashError = hashParams ? (hashParams.get('error_description') || hashParams.get('error')) : null;
+
+    if (queryError || hashError) {
+      const msg = decodeURIComponent((hashError || queryError || '').replace(/\+/g, ' '));
+      window.history.replaceState({}, document.title, window.location.pathname);
+      showScreen('login');
+      showAuthPanel('login');
+      document.getElementById('login-error-text').textContent =
+        'El enlace de confirmación no es válido o ha caducado. Vuelve a intentar crear la cuenta (o pide que te reenvíen el correo) para recibir uno nuevo.' +
+        (msg ? ' (' + msg + ')' : '');
+      document.getElementById('login-error').style.display = 'flex';
+      document.getElementById('login-error').style.color = '';
+      return;
+    }
+
+    if (code) {
+      await getSupabase().auth.exchangeCodeForSession(window.location.href);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+    if (hashParams && hashParams.get('access_token')) {
+      const access_token = hashParams.get('access_token');
+      const refresh_token = hashParams.get('refresh_token');
+      if (access_token && refresh_token) {
+        await getSupabase().auth.setSession({ access_token, refresh_token });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  } catch (err) {
+    console.warn('No se pudo procesar el enlace de confirmación:', err);
+  }
+}
+
 async function checkExistingSession() {
   try {
     const { data } = await getSupabase().auth.getSession();
@@ -3458,7 +3506,7 @@ renderAvisos();
 renderClientes();
 renderFacturacion();
 renderInformes();
-checkExistingSession(); // decide si mostrar landing o entrar directo (sesión real de Supabase)
+handleAuthRedirect().then(checkExistingSession); // procesa el enlace del correo (si lo hay) y luego decide qué pantalla mostrar
 
 document.addEventListener('click', (e) => {
   const navBtn = e.target.closest('.nav-item[data-tab]');
