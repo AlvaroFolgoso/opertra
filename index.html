@@ -1131,8 +1131,9 @@ async function loadCompanyData() {
 
     await cargarFichajes();
     await cargarEstadoFichaje();
+    await cargarIncidencias();
 
-    renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje();
+    renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje(); renderAvisos(); renderNav();
     arrancarContador();
     suscribirCambios();
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
@@ -1147,13 +1148,7 @@ let workers = [];
 let timeLogs = [];
 
 /* Incidencias/avisos — un incidente resuelto se elimina del array (no se archiva) */
-let incidents = [
-  { id: "INC-101", priority: "alta", photo: null, title: "Rueda pinchada", description: "Rueda delantera derecha del CM-045 pinchada, no se puede mover hasta cambiarla.", worker: "Laura Gómez", machine: "CM-045", project: "OBR-02", time: Date.now() - 1000 * 60 * 8, resolved: false },
-  { id: "INC-100", priority: "media", photo: null, title: "Falta cemento en Obra Este", description: "Quedan menos de 2 sacos, hace falta reponer para mañana a primera hora.", worker: "Laura Gómez", machine: "—", project: "OBR-02", time: Date.now() - 1000 * 60 * 42, resolved: false },
-  { id: "INC-099", priority: "alta", photo: null, title: "Ruido extraño en la grúa", description: "El motor de giro de la GR-208 hace un ruido metálico al girar a la izquierda.", worker: "Iván Torres", machine: "GR-208", project: "OBR-03", time: Date.now() - 1000 * 60 * 60 * 3, resolved: false },
-  { id: "INC-098", priority: "baja", photo: null, title: "Falta de EPIs", description: "No quedan cascos de repuesto en el almacén de obra Norte.", worker: "Nadia Castillo", machine: "—", project: "OBR-01", time: Date.now() - 1000 * 60 * 60 * 5, resolved: false },
-];
-let incidentCounter = 102;
+let incidents = [];
 
 const statusLabel = {
   active: "En marcha", maintenance: "Mantenimiento", idle: "Parada",
@@ -1238,7 +1233,7 @@ const STORAGE_KEY = 'opertra_demo_v1';
 function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      workers, incidents, invoices, timeLogs, incidentCounter,
+      invoices,
       savedAt: Date.now(),
     }));
   } catch (e) {
@@ -1252,11 +1247,11 @@ function loadState() {
   if (!raw) return false;
   try {
     const data = JSON.parse(raw);
-    if (data.workers) { workers.length = 0; workers.push(...data.workers); }
-    if (data.incidents) { incidents.length = 0; incidents.push(...data.incidents); }
+
+
     if (data.invoices) { invoices.length = 0; invoices.push(...data.invoices); }
-    if (data.timeLogs) { timeLogs.length = 0; timeLogs.push(...data.timeLogs); }
-    if (typeof data.incidentCounter === 'number') incidentCounter = data.incidentCounter;
+
+
     return true;
   } catch (e) {
     console.warn('Datos guardados corruptos, se ignoran', e);
@@ -1594,12 +1589,12 @@ function renderDashboard() {
           <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('avisos')">ver todos <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
         </div>
         <div style="margin-top:14px;">
-          ${incidents.length === 0 ? `
+          ${incidents.filter(i=>!i.resolved).length === 0 ? `
             <div style="text-align:center;padding:24px 8px;color:var(--steel);font-size:13px;">
               <i class="fa-solid fa-champagne-glasses" style="font-size:20px;opacity:0.4;display:block;margin-bottom:8px;"></i>
               Sin incidencias abiertas
             </div>` :
-            incidents.slice().sort((a,b)=>b.time-a.time).slice(0,5).map(inc => `
+            incidents.filter(i=>!i.resolved).slice().sort((a,b)=>b.time-a.time).slice(0,5).map(inc => `
               <div class="alert-box" style="background:var(--amber-bg);cursor:pointer;" onclick="switchTab('avisos'); showAvisosTab('incidencias');">
                 <i class="fa-solid fa-triangle-exclamation" style="color:var(--amber-deep);margin-top:2px;"></i>
                 <div>
@@ -1919,6 +1914,7 @@ function suscribirCambios() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'machines', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'workers', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, recargarEnBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents', filter: filtro }, recargarEnBreve)
     .subscribe();
 }
 
@@ -3148,37 +3144,49 @@ let avisosJustSubmitted = false;
 function showAvisosTab(tab) { avisosSubTab = tab; avisosJustSubmitted = false; renderAvisos(); }
 
 function renderAvisos() {
-  const unresolved = incidents.filter(i => !i.resolved).sort((a,b) => b.time - a.time);
+  const abiertas = incidents.filter(i => !i.resolved);
+  const resueltas = incidents.filter(i => i.resolved);
 
   document.getElementById('view-avisos').innerHTML = `
     <div class="avisos-tabs">
       <button class="avisos-tab-btn ${avisosSubTab==='reportar'?'active':''}" onclick="showAvisosTab('reportar')">
         <div class="avisos-tab-icon"><i class="fa-solid fa-circle-plus"></i></div>
-        <div><div class="avisos-tab-title">Reportar incidencia</div><div class="avisos-tab-sub">Rueda pinchada, falta de material, avería...</div></div>
+        <div><div class="avisos-tab-title">Reportar</div><div class="avisos-tab-sub">Avería, falta de material...</div></div>
       </button>
       <button class="avisos-tab-btn ${avisosSubTab==='incidencias'?'active':''}" onclick="showAvisosTab('incidencias')">
         <div class="avisos-tab-icon"><i class="fa-solid fa-list-check"></i></div>
-        <div><div class="avisos-tab-title">Incidencias no resueltas</div><div class="avisos-tab-sub">${unresolved.length} pendiente${unresolved.length!==1?'s':''}</div></div>
+        <div><div class="avisos-tab-title">Pendientes</div><div class="avisos-tab-sub">${abiertas.length} sin resolver</div></div>
+      </button>
+      <button class="avisos-tab-btn ${avisosSubTab==='resueltas'?'active':''}" onclick="showAvisosTab('resueltas')">
+        <div class="avisos-tab-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+        <div><div class="avisos-tab-title">Resueltas</div><div class="avisos-tab-sub">${resueltas.length} en el histórico</div></div>
       </button>
     </div>
 
-    ${avisosSubTab === 'reportar' ? renderReportarForm() : renderIncidenciasList(unresolved)}
+    ${avisosSubTab === 'reportar' ? renderReportarForm()
+      : avisosSubTab === 'resueltas' ? renderIncidenciasList(resueltas, true)
+      : renderIncidenciasList(abiertas, false)}
   `;
+  incidents.forEach(i => { if (i.photoPath) pintarImagen('inc-thumb-' + i.dbId, i.photoPath, i.title); });
 }
 
-let incPhotoData = null;
+let incPhotoFile = null;
 
 function renderReportarForm() {
+  const ficha = miFichaTrabajador();
+  const quien = ficha ? ficha.name : currentUser.name;
+  const rol = ficha ? ficha.role : currentUser.role;
+
   return `
     <div class="plate" style="max-width:520px;padding:24px;">${rivets}
-      ${avisosJustSubmitted ? `<div class="success-banner"><i class="fa-solid fa-circle-check"></i> Incidencia enviada, ya la ven todos los compañeros.</div>` : ''}
+      ${avisosJustSubmitted ? `<div class="success-banner"><i class="fa-solid fa-circle-check"></i> Incidencia enviada. Ya la ve todo el equipo.</div>` : ''}
       <div class="form-group" style="margin-top:0;">
-        <label class="form-label">Título</label>
-        <input class="form-input" id="inc-title" placeholder="Ej. Rueda pinchada, falta de cemento...">
+        <label class="form-label">¿Qué pasa?</label>
+        <input class="form-input" id="inc-title" placeholder="Ej. Rueda pinchada, falta cemento...">
       </div>
       <div class="form-group">
-        <label class="form-label">Descripción</label>
-        <textarea class="textarea" id="inc-desc" placeholder="Cuenta el detalle: qué pasa, dónde, y desde cuándo"></textarea>
+        <label class="form-label">Detalle</label>
+        <textarea class="textarea" id="inc-desc" placeholder="Cuenta qué pasa, dónde y desde cuándo"></textarea>
       </div>
       <div class="form-group">
         <label class="form-label">Prioridad</label>
@@ -3191,8 +3199,15 @@ function renderReportarForm() {
       <div class="form-group">
         <label class="form-label">Máquina relacionada (opcional)</label>
         <select class="form-select" id="inc-machine">
-          <option value="—">Ninguna / no aplica</option>
-          ${machines.map(m => `<option value="${m.id}">${m.id} · ${m.type}</option>`).join('')}
+          <option value="">Ninguna / no aplica</option>
+          ${machines.map(m => `<option value="${m.dbId}" ${ficha && ficha.machineDbId === m.dbId ? 'selected' : ''}>${m.id} · ${m.type}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t('S')} (opcional)</label>
+        <select class="form-select" id="inc-project">
+          <option value="">Sin especificar</option>
+          ${projects.map(p => `<option value="${p.dbId}" ${(fichajeAbierto && fichajeAbierto.projectId === p.dbId) || (ficha && ficha.projectDbId === p.dbId) ? 'selected' : ''}>${p.name}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -3203,11 +3218,12 @@ function renderReportarForm() {
           <div style="font-size:12.5px;color:var(--steel);margin-top:4px;">Toca para hacer o subir una foto</div>
         </label>
       </div>
+      <div id="inc-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="inc-error-text"></span></div>
       <div class="form-hint">
         <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-        <span>Se enviará como ${currentUser.name} (${currentUser.role}). Todo el equipo lo verá al momento en el panel general.</span>
+        <span>Se enviará como ${quien} (${rol}). Todo el equipo lo verá al momento.</span>
       </div>
-      <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:20px;" onclick="submitIncident()">
+      <button class="btn btn-amber" id="inc-submit" style="width:100%;justify-content:center;padding:12px;margin-top:20px;" onclick="submitIncident()">
         <i class="fa-solid fa-paper-plane"></i> Enviar incidencia
       </button>
     </div>
@@ -3217,39 +3233,43 @@ function renderReportarForm() {
 function handleIncPhoto(event) {
   const file = event.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    incPhotoData = e.target.result;
-    document.getElementById('inc-photo-box').innerHTML = `<img src="${incPhotoData}" class="photo-preview">`;
+  incPhotoFile = file;
+  const lector = new FileReader();
+  lector.onload = e => {
+    document.getElementById('inc-photo-box').innerHTML =
+      `<img src="${e.target.result}" class="photo-preview">
+       <div style="font-size:12px;color:var(--steel);margin-top:6px;">Toca para cambiar la foto</div>`;
   };
-  reader.readAsDataURL(file);
+  lector.readAsDataURL(file);
 }
 
-let incidentPhotoViewing = null;
-function viewIncidentPhoto(src) {
-  incidentPhotoViewing = src;
+async function viewIncidentPhoto(ruta) {
+  const url = await urlArchivo(ruta);
+  if (!url) { alert('No se pudo abrir la foto.'); return; }
   document.getElementById('legal-modal').innerHTML = `
     <div class="modal-top"><h2 style="font-size:15px;">Foto de la incidencia</h2><button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button></div>
-    <img src="${src}" style="width:100%;border-radius:8px;margin-top:10px;">
+    <img src="${url}" style="width:100%;border-radius:8px;margin-top:10px;">
   `;
   document.getElementById('legal-overlay').classList.add('active');
 }
 
-function renderIncidenciasList(unresolved) {
-  if (unresolved.length === 0) {
+function renderIncidenciasList(lista, esHistorico) {
+  if (lista.length === 0) {
     return `
       <div class="plate empty-state">${rivets}
-        <i class="fa-solid fa-champagne-glasses"></i>
-        <div style="font-size:14px;font-weight:600;color:var(--ink);">No hay incidencias pendientes</div>
-        <div style="font-size:13px;margin-top:2px;">Todo resuelto por ahora.</div>
+        <i class="fa-solid fa-${esHistorico ? 'clock-rotate-left' : 'champagne-glasses'}"></i>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);">${esHistorico ? 'Sin incidencias resueltas' : 'No hay incidencias pendientes'}</div>
+        <div style="font-size:13px;margin-top:2px;">${esHistorico ? 'Aquí se guardan las que se vayan resolviendo.' : 'Todo en orden por ahora.'}</div>
       </div>`;
   }
-  const order = { alta: 0, media: 1, baja: 2 };
-  const sorted = unresolved.slice().sort((a,b) => (order[a.priority]??1) - (order[b.priority]??1) || b.time - a.time);
-  return sorted.map(inc => `
-    <div class="plate incident-card">${rivets}
+  const orden = { alta: 0, media: 1, baja: 2 };
+  const ordenadas = lista.slice().sort((a,b) =>
+    esHistorico ? b.time - a.time : ((orden[a.priority]??1) - (orden[b.priority]??1) || b.time - a.time));
+
+  return ordenadas.map(inc => `
+    <div class="plate incident-card" style="${esHistorico ? 'opacity:0.75;' : ''}">${rivets}
       <div class="incident-top">
-        ${inc.photo ? `<img src="${inc.photo}" class="incident-thumb" onclick="viewIncidentPhoto('${inc.photo}')">` : ''}
+        ${inc.photoPath ? `<div class="incident-thumb" id="inc-thumb-${inc.dbId}" onclick="viewIncidentPhoto('${inc.photoPath}')" style="background:var(--surface);display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-image" style="color:var(--steel);font-size:14px;"></i></div>` : ''}
         <div style="flex:1;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span class="priority-badge priority-${inc.priority||'media'}">${inc.priority||'media'}</span>
@@ -3257,51 +3277,140 @@ function renderIncidenciasList(unresolved) {
           </div>
           <div class="incident-desc">${inc.description}</div>
         </div>
-        <button class="resolve-btn" onclick="resolveIncident('${inc.id}')"><i class="fa-solid fa-check"></i> Marcar resuelta</button>
+        ${!esHistorico
+          ? `<button class="resolve-btn" onclick="pedirConfirmacionResolver('${inc.dbId}')"><i class="fa-solid fa-check"></i> Marcar resuelta</button>`
+          : `<span class="chip status-vigente" style="white-space:nowrap;"><span class="dot"></span>Resuelta</span>`}
       </div>
       <div class="incident-meta">
         <span><i class="fa-solid fa-user"></i> ${inc.worker}</span>
         ${inc.machine !== '—' ? `<span class="f-mono"><i class="fa-solid fa-truck"></i> ${inc.machine}</span>` : ''}
-        ${inc.project ? `<span class="f-mono"><i class="fa-solid fa-diagram-project"></i> ${inc.project}</span>` : ''}
+        ${inc.project ? `<span><i class="fa-solid fa-diagram-project"></i> ${inc.project}</span>` : ''}
         <span><i class="fa-solid fa-clock"></i> ${timeAgo(inc.time)}</span>
+        ${esHistorico && inc.resolvedAt ? `<span style="color:var(--success);"><i class="fa-solid fa-check"></i> Resuelta ${timeAgo(new Date(inc.resolvedAt).getTime())}</span>` : ''}
       </div>
     </div>
   `).join('');
 }
 
-function submitIncident() {
+async function submitIncident() {
   const title = document.getElementById('inc-title').value.trim();
   const desc = document.getElementById('inc-desc').value.trim();
   const priority = document.getElementById('inc-priority').value;
-  const machine = document.getElementById('inc-machine').value;
-  if (!title) { document.getElementById('inc-title').focus(); return; }
+  const machineId = document.getElementById('inc-machine').value || null;
+  const projectId = document.getElementById('inc-project').value || null;
+  const errBox = document.getElementById('inc-error');
+  errBox.style.display = 'none';
 
-  const relatedMachine = machines.find(m => m.id === machine);
-  const reporter = workers.find(w => w.id === currentUser.id);
-  const project = (relatedMachine && relatedMachine.project) || (reporter && reporter.project) || null;
+  if (!title) {
+    document.getElementById('inc-error-text').textContent = 'Escribe qué ha pasado.';
+    errBox.style.display = 'flex';
+    document.getElementById('inc-title').focus();
+    return;
+  }
 
-  incidents.unshift({
-    id: 'INC-' + (incidentCounter++),
-    title, description: desc || 'Sin descripción adicional.', priority,
-    photo: incPhotoData,
-    worker: currentUser.name, machine, project, time: Date.now(), resolved: false,
-  });
+  setButtonLoading('inc-submit', true, 'Enviando...', '<i class="fa-solid fa-paper-plane"></i> Enviar incidencia');
+  try {
+    let rutaFoto = null;
+    if (incPhotoFile) rutaFoto = await subirArchivo(incPhotoFile, 'incidents');
 
-  incPhotoData = null;
-  avisosJustSubmitted = true;
-  avisosSubTab = 'incidencias';
-  saveState();
-  renderAvisos();
-  renderNav();
-  renderDashboard();
+    const sb = getSupabase();
+    const ficha = miFichaTrabajador();
+
+    if (currentUser.isWorker) {
+      const { error } = await sb.rpc('worker_reportar_incidencia', {
+        p_worker_id: ficha.dbId, p_pin: ficha.pin, p_title: title,
+        p_description: desc || 'Sin descripción adicional.', p_priority: priority,
+        p_project_id: projectId, p_machine_id: machineId, p_photo_path: rutaFoto,
+      });
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from('incidents').insert({
+        company_id: currentUser.companyId, worker_id: ficha ? ficha.dbId : null,
+        project_id: projectId, machine_id: machineId, title,
+        description: desc || 'Sin descripción adicional.', priority,
+        photo_path: rutaFoto, resolved: false,
+      });
+      if (error) throw error;
+    }
+
+    incPhotoFile = null;
+    avisosJustSubmitted = true;
+    avisosSubTab = 'incidencias';
+    await cargarIncidencias();
+    renderAvisos(); renderNav(); renderDashboard();
+  } catch (err) {
+    document.getElementById('inc-error-text').textContent = 'No se pudo enviar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('inc-submit', false, '', '<i class="fa-solid fa-paper-plane"></i> Enviar incidencia');
+  }
 }
 
-function resolveIncident(id) {
-  incidents = incidents.filter(i => i.id !== id);
-  saveState();
-  renderAvisos();
-  renderNav();
-  renderDashboard();
+/* Confirmación antes de resolver — para que nadie la cierre sin querer */
+function pedirConfirmacionResolver(dbId) {
+  const inc = incidents.find(i => i.dbId === dbId);
+  if (!inc) return;
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">¿Marcar como resuelta?</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:14px;border-radius:8px;background:var(--surface);border:1px solid var(--border);margin-top:14px;">
+      <div style="font-size:14px;font-weight:700;">${inc.title}</div>
+      <div style="font-size:13px;color:var(--steel);margin-top:4px;">${inc.description}</div>
+    </div>
+    <div class="form-hint" style="margin-top:14px;">
+      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+      <span>Dejará de aparecer en pendientes, pero se guarda en el histórico por si hay que consultarla más adelante.</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="res-submit" onclick="resolveIncident('${dbId}')"><i class="fa-solid fa-check"></i> Sí, está resuelta</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function resolveIncident(dbId) {
+  setButtonLoading('res-submit', true, 'Guardando...', '<i class="fa-solid fa-check"></i> Sí, está resuelta');
+  try {
+    const ficha = miFichaTrabajador();
+    const { error } = await getSupabase().from('incidents').update({
+      resolved: true, resolved_at: new Date().toISOString(),
+      resolved_by_worker: ficha ? ficha.dbId : null,
+    }).eq('id', dbId);
+    if (error) throw error;
+    closeAddMachineModal();
+    await cargarIncidencias();
+    renderAvisos(); renderNav(); renderDashboard();
+  } catch (err) {
+    alert('No se pudo marcar como resuelta: ' + (err.message || 'inténtalo de nuevo.'));
+    setButtonLoading('res-submit', false, '', '<i class="fa-solid fa-check"></i> Sí, está resuelta');
+  }
+}
+
+async function cargarIncidencias() {
+  try {
+    const sb = getSupabase();
+    let data, error;
+    if (currentUser.isWorker) {
+      const ficha = miFichaTrabajador();
+      ({ data, error } = await sb.rpc('worker_incidencias', { p_worker_id: ficha.dbId, p_pin: ficha.pin }));
+    } else {
+      ({ data, error } = await sb.from('incidents').select('*').order('created_at', { ascending: false }));
+    }
+    if (error) throw error;
+    incidents = (data || []).map(i => {
+      const w = workers.find(x => x.dbId === i.worker_id);
+      const m = machines.find(x => x.dbId === i.machine_id);
+      const p = projects.find(x => x.dbId === i.project_id);
+      return {
+        dbId: i.id, title: i.title, description: i.description, priority: i.priority,
+        photoPath: i.photo_path, worker: w ? w.name : 'Alguien del equipo',
+        machine: m ? m.id : '—', project: p ? p.name : null,
+        time: new Date(i.created_at).getTime(), resolved: i.resolved, resolvedAt: i.resolved_at,
+      };
+    });
+  } catch (e) { console.error('Error cargando incidencias:', e); }
 }
 
 /* ============ CLIENTES ============ */
