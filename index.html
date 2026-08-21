@@ -1119,7 +1119,7 @@ async function loadCompanyData() {
       project: w.project_id ? (codeByProjectDbId[w.project_id] || null) : null,
       projectDbId: w.project_id,
       status: 'off', since: '—', // se calculará con los fichajes reales
-      photoPath: w.photo_path,
+      photoPath: w.photo_path, profileId: w.profile_id,
       documents: docsByWorker[w.id] || [], vacations: [],
     }));
 
@@ -1130,7 +1130,7 @@ async function loadCompanyData() {
     });
 
     await cargarFichajes();
-    if (currentUser.isWorker) await cargarEstadoFichaje();
+    await cargarEstadoFichaje();
 
     renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje();
     arrancarContador();
@@ -1864,26 +1864,34 @@ function horasDecimales(desdeISO, hastaISO) {
   return (new Date(hastaISO) - new Date(desdeISO)) / 3600000;
 }
 
+/* Ficha de trabajador de quien esté conectado: puede ser alguien que entró con
+   PIN, o un admin que se ha dado de alta a sí mismo como trabajador. */
+function miFichaTrabajador() {
+  if (currentUser.isWorker) return workers.find(x => x.dbId === currentUser.id) || null;
+  return workers.find(x => x.profileId === currentUser.id) || null;
+}
+function puedoFichar() { return !!miFichaTrabajador(); }
+
 function myAssignedMachine() {
-  if (!currentUser.isWorker) return null;
-  const w = workers.find(x => x.dbId === currentUser.id);
+  const w = miFichaTrabajador();
   if (!w || !w.machineDbId) return null;
   return machines.find(m => m.dbId === w.machineDbId) || null;
 }
 
 /* Obra propuesta: la del último fichaje, o la asignada al trabajador */
 function obraPropuesta() {
-  const ultimo = timeLogs.find(l => l.workerId === currentUser.id && l.projectDbId);
+  const ficha = miFichaTrabajador();
+  const ultimo = ficha ? timeLogs.find(l => l.workerId === ficha.dbId && l.projectDbId) : null;
   if (ultimo) return ultimo.projectDbId;
-  const w = workers.find(x => x.dbId === currentUser.id);
-  return w && w.projectDbId ? w.projectDbId : (projects[0] ? projects[0].dbId : null);
+  return (ficha && ficha.projectDbId) ? ficha.projectDbId : (projects[0] ? projects[0].dbId : null);
 }
 
 async function cargarEstadoFichaje() {
-  if (!currentUser.isWorker) return;
+  const ficha = miFichaTrabajador();
+  if (!ficha) { fichajeAbierto = null; return; }
   try {
     const { data, error } = await getSupabase().rpc('worker_estado', {
-      p_worker_id: currentUser.id, p_pin: currentUser.pin,
+      p_worker_id: ficha.dbId, p_pin: ficha.pin,
     });
     if (error) throw error;
     fichajeAbierto = (data && data.length)
@@ -1923,7 +1931,7 @@ async function cargarFichajes() {
 }
 
 function renderFichaje() {
-  const esTrabajador = !!currentUser.isWorker;
+  const esTrabajador = puedoFichar();
   document.getElementById('view-fichaje').innerHTML = `
     <div class="avisos-tabs">
       ${esTrabajador ? `
@@ -1936,8 +1944,46 @@ function renderFichaje() {
         <div><div class="avisos-tab-title">Registro de horas</div><div class="avisos-tab-sub">Historial de entradas y salidas</div></div>
       </button>
     </div>
+    ${!esTrabajador && !currentUser.isWorker ? `
+      <div class="plate" style="padding:18px 20px;margin-bottom:14px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">${rivets}
+        <i class="fa-solid fa-user-clock" style="font-size:20px;color:var(--amber-deep);margin-top:2px;"></i>
+        <div style="flex:1;min-width:220px;">
+          <div style="font-size:14px;font-weight:700;">¿Tú también fichas?</div>
+          <div style="font-size:13px;color:var(--steel);margin-top:4px;line-height:1.5;">
+            Como administrador puedes ver las horas de todo el equipo, pero para fichar tú necesitas tener también tu ficha de trabajador. Se crea en un clic y podrás fichar como cualquiera.
+          </div>
+        </div>
+        <button class="btn btn-amber" id="btn-autoalta" onclick="darmeDeAltaComoTrabajador()"><i class="fa-solid fa-plus"></i> Darme de alta</button>
+      </div>` : ''}
     ${(esTrabajador && fichajeSubTab === 'fichar') ? renderFicharCard() : renderRegistroHoras()}
   `;
+  arrancarContador();
+}
+
+async function darmeDeAltaComoTrabajador() {
+  const btn = document.getElementById('btn-autoalta');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...'; }
+  try {
+    const pin = suggestPin();
+    const code = 'T-' + String(workers.length + 1).padStart(3, '0');
+    const { data, error } = await getSupabase().from('workers').insert({
+      company_id: currentUser.companyId, code, name: currentUser.name,
+      role: currentUser.role || 'Administrador', pin,
+      profile_id: currentUser.id, active: true,
+    }).select().single();
+    if (error) throw error;
+    workers.push({
+      dbId: data.id, id: data.code, name: data.name, role: data.role, pin: data.pin,
+      machine: '—', machineDbId: null, project: null, projectDbId: null,
+      profileId: data.profile_id, status: 'off', since: '—',
+      photoPath: null, documents: [], vacations: [],
+    });
+    renderFichaje(); renderTrabajadores(); renderDashboard();
+    alert(`Listo. Ya puedes fichar.\n\nTu PIN es ${pin} — te sirve para entrar también desde el móvil con el código ${currentUser.accessCode}.`);
+  } catch (err) {
+    alert('No se pudo crear tu ficha: ' + (err.message || 'inténtalo de nuevo.'));
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Darme de alta'; }
+  }
 }
 
 function renderFicharCard() {
@@ -1949,8 +1995,8 @@ function renderFicharCard() {
     <div id="fichaje-wrap">
       <div style="width:100%;max-width:420px;">
         <div class="plate fichaje-card">${rivets}
-          <div class="f-mono" style="font-size:12px;color:var(--steel);">${currentUser.name.toUpperCase()}</div>
-          <div style="font-size:13px;color:var(--steel);margin-top:2px;">${currentUser.role}</div>
+          <div class="f-mono" style="font-size:12px;color:var(--steel);">${(miFichaTrabajador()||currentUser).name.toUpperCase()}</div>
+          <div style="font-size:13px;color:var(--steel);margin-top:2px;">${(miFichaTrabajador()||currentUser).role}</div>
 
           ${abierto ? `
             <div class="fichaje-check" style="flex-direction:column;gap:4px;padding:18px;">
@@ -2019,8 +2065,10 @@ async function ficharAhora() {
     const selObra = document.getElementById('fichaje-obra');
     const projectId = fichajeAbierto ? fichajeAbierto.projectId : (selObra ? selObra.value : null);
 
+    const ficha = miFichaTrabajador();
+    if (!ficha) throw new Error('No tienes ficha de trabajador para poder fichar.');
     const { data, error } = await getSupabase().rpc('worker_fichar', {
-      p_worker_id: currentUser.id, p_pin: currentUser.pin,
+      p_worker_id: ficha.dbId, p_pin: ficha.pin,
       p_project_id: projectId || null, p_machine_id: machine ? machine.dbId : null,
     });
     if (error) throw error;
@@ -2050,7 +2098,7 @@ function fichajesFiltrados() {
     if (filtroFichajeTrabajador && l.workerId !== filtroFichajeTrabajador) return false;
     if (filtroFichajeDesde && l.date < filtroFichajeDesde) return false;
     if (filtroFichajeHasta && l.date > filtroFichajeHasta) return false;
-    if (currentUser.isWorker && l.workerId !== currentUser.id) return false; // cada uno ve lo suyo
+    if (currentUser.isWorker) { const f = miFichaTrabajador(); if (!f || l.workerId !== f.dbId) return false; }
     return true;
   });
 }
@@ -4021,10 +4069,7 @@ function renderUserDropdown() {
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-user-pen"></i> Mi perfil</button>
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-camera"></i> Cambiar foto de perfil</button>
     <button class="dropdown-item" onclick="switchTab('avisos'); closeUserDropdown();"><i class="fa-solid fa-bullhorn"></i> Mis incidencias</button>
-    <div class="dropdown-divider"></div>
-    <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--steel);text-transform:uppercase;">Ver la app como</div>
-    <button class="dropdown-item" onclick="setAccessLevel('trabajador')"><i class="fa-solid ${currentUser.accessLevel==='trabajador'?'fa-circle-check':'fa-circle'}" style="color:${currentUser.accessLevel==='trabajador'?'var(--amber-deep)':'var(--steel)'};"></i> Trabajador (obra)</button>
-    <button class="dropdown-item" onclick="setAccessLevel('encargado')"><i class="fa-solid ${currentUser.accessLevel!=='trabajador'?'fa-circle-check':'fa-circle'}" style="color:${currentUser.accessLevel!=='trabajador'?'var(--amber-deep)':'var(--steel)'};"></i> Encargado / Admin</button>
+
     <div class="dropdown-divider"></div>
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-gear"></i> Ajustes de cuenta</button>
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-building"></i> Ajustes de empresa</button>
@@ -4033,13 +4078,6 @@ function renderUserDropdown() {
     <button class="dropdown-item danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
   `;
   if (currentUser.photoPath) pintarImagen('dropdown-avatar', currentUser.photoPath, currentUser.name);
-}
-
-function setAccessLevel(level) {
-  currentUser.accessLevel = level;
-  closeUserDropdown();
-  renderNav();
-  if (!canAccess(currentTab)) switchTab('dashboard'); else renderDashboard();
 }
 
 document.addEventListener('click', (e) => {
