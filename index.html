@@ -2373,7 +2373,10 @@ function openAddMachineModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Foto de la máquina</label>
-      <div class="form-photo-upload"><i class="fa-solid fa-camera" style="margin-right:6px;"></i>Subir foto (opcional)</div>
+      <input type="file" accept="image/*" id="nm-photo" style="display:none;" onchange="mostrarFotoMaquinaNueva(event)">
+      <div class="form-photo-upload" id="nm-photo-box" onclick="document.getElementById('nm-photo').click()">
+        <i class="fa-solid fa-camera" style="margin-right:6px;"></i>Subir foto (opcional)
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">Dispositivo de localización GPS</label>
@@ -2393,6 +2396,18 @@ function openAddMachineModal() {
 }
 function closeAddMachineModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 
+function mostrarFotoMaquinaNueva(event) {
+  const f = event.target.files[0];
+  if (!f) return;
+  const lector = new FileReader();
+  lector.onload = e => {
+    document.getElementById('nm-photo-box').innerHTML =
+      `<img src="${e.target.result}" style="max-height:120px;border-radius:6px;">
+       <div style="font-size:12px;color:var(--steel);margin-top:6px;">${f.name} — toca para cambiar</div>`;
+  };
+  lector.readAsDataURL(f);
+}
+
 function toggleCustomMachineType() {
   const esOtro = document.getElementById('nm-type').value === '__otro__';
   const campo = document.getElementById('nm-type-custom');
@@ -2411,12 +2426,15 @@ async function submitAddMachine() {
   const newCode = type.slice(0,2).toUpperCase() + '-' + Math.floor(100 + Math.random()*900);
   const qrCode = 'OPERTRA-' + currentUser.companyId.slice(0,8) + '-' + newCode;
 
+  const foto = document.getElementById('nm-photo').files[0];
   const btn = event ? event.target.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
   try {
+    let rutaFoto = null;
+    if (foto) rutaFoto = await subirArchivo(foto, `machines/${newCode}`);
     const { data, error } = await getSupabase().from('machines').insert({
       company_id: currentUser.companyId, code: newCode, qr_code: qrCode, type, model, plate,
-      status: 'idle', fuel: 0,
+      status: 'idle', fuel: 0, photo_url: rutaFoto, has_photo: !!rutaFoto,
       lat: 37.175 + (Math.random()-0.5)*0.02, lng: -3.59 + (Math.random()-0.5)*0.02,
       device_id: deviceId || null, device_model: deviceId ? 'Pendiente de confirmar' : null, device_linked: !!deviceId,
     }).select().single();
@@ -2424,7 +2442,8 @@ async function submitAddMachine() {
     machines.push({
       dbId: data.id, id: data.code, qrCode: data.qr_code, type: data.type, model: data.model, plate: data.plate,
       status: data.status, operator: '—', project: null, location: 'Sin ubicación aún', fuel: data.fuel, since: '—',
-      lat: data.lat, lng: data.lng, gpsAge: deviceId ? 'esperando señal' : 'sin dispositivo', hasPhoto: false,
+      lat: data.lat, lng: data.lng, gpsAge: deviceId ? 'esperando señal' : 'sin dispositivo',
+      hasPhoto: !!data.photo_url, photoUrl: data.photo_url,
       device: { id: data.device_id, model: data.device_model, linked: data.device_linked }, documents: [],
     });
     closeAddMachineModal();
@@ -3504,9 +3523,10 @@ function renderInformes() {
 function renderTopbarUser() {
   document.getElementById('topbar-username').textContent = currentUser.name;
   document.getElementById('topbar-company').textContent = currentUser.company;
-  document.getElementById('topbar-avatar').innerHTML = currentUser.hasPhoto
-    ? '<i class="fa-solid fa-user"></i>'
-    : `<span class="f-mono">${currentUser.initials}</span>`;
+  const av = document.getElementById('topbar-avatar');
+  av.style.overflow = 'hidden';
+  av.innerHTML = `<span class="f-mono">${currentUser.initials}</span>`;
+  if (currentUser.photoPath) pintarImagen('topbar-avatar', currentUser.photoPath, currentUser.name);
 }
 
 /* ============ LOGIN / SESIÓN ============ */
@@ -3632,6 +3652,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     businessType: profile.companies ? profile.companies.business_type : 'construccion',
     initials: profile.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
     hasPhoto: profile.has_photo,
+    photoPath: profile.photo_url,
     email: authUser.email,
   };
 }
@@ -3923,9 +3944,10 @@ function toggleUserDropdown(e) {
 function closeUserDropdown() { document.getElementById('user-dropdown').classList.remove('active'); }
 
 function renderUserDropdown() {
-  document.getElementById('user-dropdown').innerHTML = `
+  const dd = document.getElementById('user-dropdown');
+  dd.innerHTML = `
     <div class="dropdown-header">
-      <div class="user-avatar" style="width:40px;height:40px;">${currentUser.hasPhoto ? '<i class="fa-solid fa-user"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}</div>
+      <div class="user-avatar" style="width:40px;height:40px;overflow:hidden;" id="dropdown-avatar"><span class="f-mono">${currentUser.initials}</span></div>
       <div>
         <div class="user-name">${currentUser.name}</div>
         <div class="user-company">${currentUser.role} · ${currentUser.company}</div>
@@ -3945,6 +3967,7 @@ function renderUserDropdown() {
     <div class="dropdown-divider"></div>
     <button class="dropdown-item danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
   `;
+  if (currentUser.photoPath) pintarImagen('dropdown-avatar', currentUser.photoPath, currentUser.name);
 }
 
 function setAccessLevel(level) {
@@ -3960,45 +3983,121 @@ document.addEventListener('click', (e) => {
 
 function openUserSettings() {
   closeUserDropdown();
+  const esTrabajador = !!currentUser.isWorker;
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
       <span class="f-display" style="font-size:18px;">Ajustes de cuenta</span>
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="display:flex;align-items:center;gap:14px;margin-top:16px;">
-      <div class="user-avatar" style="width:56px;height:56px;font-size:16px;">${currentUser.hasPhoto ? '<i class="fa-solid fa-user"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}</div>
-      <button class="btn btn-outline" style="font-size:13px;"><i class="fa-solid fa-camera"></i> Cambiar foto</button>
+      <div class="user-avatar" style="width:56px;height:56px;font-size:16px;overflow:hidden;" id="settings-avatar">
+        ${currentUser.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}
+      </div>
+      <input type="file" accept="image/*" id="settings-photo" style="display:none;" onchange="subirFotoPerfil(event)">
+      <button class="btn btn-outline" style="font-size:13px;" onclick="document.getElementById('settings-photo').click()">
+        <i class="fa-solid fa-camera"></i> ${currentUser.photoPath ? 'Cambiar foto' : 'Subir foto'}
+      </button>
     </div>
+
     <div class="form-group">
       <label class="form-label">Nombre completo</label>
-      <input class="form-input" value="${currentUser.name}">
+      <input class="form-input" id="settings-name" value="${currentUser.name}">
     </div>
     <div class="form-group">
-      <label class="form-label">Rol</label>
+      <label class="form-label">Puesto</label>
       <input class="form-input" value="${currentUser.role}" disabled style="background:var(--surface);color:var(--steel);">
     </div>
     <div class="form-group">
       <label class="form-label">Empresa</label>
       <input class="form-input" value="${currentUser.company}" disabled style="background:var(--surface);color:var(--steel);">
     </div>
+    ${!esTrabajador ? `
     <div class="form-group">
-      <label class="form-label">Notificaciones</label>
-      <div class="form-hint" style="margin-top:0;"><i class="fa-solid fa-circle-info" style="margin-top:1px;"></i><span>Recibir aviso cuando se reporte una incidencia nueva del equipo.</span></div>
-    </div>
+      <label class="form-label">Código de acceso para tu equipo</label>
+      <input class="form-input f-mono" value="${currentUser.accessCode || '—'}" disabled style="background:var(--surface);color:var(--amber-deep);font-size:16px;letter-spacing:2px;">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Tus trabajadores entran con este código y su PIN personal.</span>
+      </div>
+    </div>` : ''}
+
     <div class="form-group">
-      <label class="form-label">Datos guardados</label>
+      <label class="form-label">Tus datos</label>
       <div class="form-hint" style="margin-top:0;">
         <i class="fa-solid fa-database" style="margin-top:1px;"></i>
-        <span>Los fichajes, incidencias, obras y facturas se guardan en este navegador (localStorage), sobreviven a cerrar la pestaña. No se comparten con otros dispositivos — eso ya requiere un servidor real.</span>
+        <span>Todo se guarda en la base de datos de tu empresa: sobrevive a cerrar sesión, cambiar de móvil o de ordenador, y solo tu empresa puede verlo.</span>
       </div>
-      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;color:var(--danger);border-color:var(--danger-bg);" onclick="resetDemoData()"><i class="fa-solid fa-rotate-left"></i> Restablecer datos de ejemplo</button>
     </div>
+
+    <div id="settings-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="settings-error-text"></span></div>
+
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
-      <button class="btn btn-amber" onclick="closeAddMachineModal()">Guardar cambios</button>
+      <button class="btn btn-amber" id="settings-submit" onclick="guardarAjustesCuenta()">Guardar cambios</button>
     </div>
   `;
   document.getElementById('modal-overlay').classList.add('active');
+  if (currentUser.photoPath) pintarImagen('settings-avatar', currentUser.photoPath, currentUser.name);
+}
+
+async function subirFotoPerfil(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const av = document.getElementById('settings-avatar');
+  if (av) av.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  try {
+    const anterior = currentUser.photoPath;
+    const ruta = await subirArchivo(file, 'profiles');
+    const sb = getSupabase();
+    if (currentUser.isWorker) {
+      const { error } = await sb.from('workers').update({ photo_path: ruta }).eq('id', currentUser.id);
+      if (error) throw error;
+      const w = workers.find(x => x.dbId === currentUser.id);
+      if (w) w.photoPath = ruta;
+    } else {
+      const { error } = await sb.from('profiles').update({ photo_url: ruta, has_photo: true }).eq('id', currentUser.id);
+      if (error) throw error;
+    }
+    if (anterior) borrarArchivo(anterior);
+    currentUser.photoPath = ruta;
+    currentUser.hasPhoto = true;
+    if (currentUser.isWorker) { try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {} }
+    openUserSettings();
+    renderTopbarUser();
+  } catch (err) {
+    alert('No se pudo subir la foto: ' + (err.message || 'inténtalo de nuevo.'));
+    openUserSettings();
+  }
+}
+
+async function guardarAjustesCuenta() {
+  const nombre = document.getElementById('settings-name').value.trim();
+  const errBox = document.getElementById('settings-error');
+  errBox.style.display = 'none';
+  if (!nombre) {
+    document.getElementById('settings-error-text').textContent = 'El nombre no puede quedar vacío.';
+    errBox.style.display = 'flex'; return;
+  }
+  setButtonLoading('settings-submit', true, 'Guardando...', 'Guardar cambios');
+  try {
+    const sb = getSupabase();
+    const tabla = currentUser.isWorker ? 'workers' : 'profiles';
+    const { error } = await sb.from(tabla).update({ name: nombre }).eq('id', currentUser.id);
+    if (error) throw error;
+    currentUser.name = nombre;
+    currentUser.initials = nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    if (currentUser.isWorker) {
+      const w = workers.find(x => x.dbId === currentUser.id);
+      if (w) w.name = nombre;
+      try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
+    }
+    closeAddMachineModal();
+    renderTopbarUser(); renderTrabajadores();
+  } catch (err) {
+    document.getElementById('settings-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('settings-submit', false, '', 'Guardar cambios');
+  }
 }
 
 /* ============ LEGAL ============ */
