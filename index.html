@@ -122,7 +122,7 @@
   .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--steel); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 6px; }
   .form-input, .form-select { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); font-family: 'Manrope', sans-serif; font-size: 14px; background: var(--card); color: var(--ink); }
   .form-hint { font-size: 12px; color: var(--steel); margin-top: 6px; display: flex; gap: 6px; }
-  .form-photo-upload { width: 100%; padding: 20px; border-radius: 6px; border: 1px dashed var(--border); background: var(--surface); text-align: center; color: var(--steel); font-size: 13px; cursor: pointer; }
+  .form-photo-upload { width: 100%; cursor: pointer; padding: 20px; border-radius: 6px; border: 1px dashed var(--border); background: var(--surface); text-align: center; color: var(--steel); font-size: 13px; cursor: pointer; }
   .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
   .modal-actions .btn { flex: 1; justify-content: center; padding: 11px; }
   .btn-outline { background: none; border: 1px solid var(--border); color: var(--ink); }
@@ -2215,8 +2215,8 @@ function openDrawer(id) {
     </div>
     <div class="drawer-photo ${m.photoUrl ? 'has-photo' : 'no-photo'}" id="drawer-photo-${m.id}">
       ${m.photoUrl ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-camera"></i><span>Añadir foto de la máquina</span>'}
-      <input type="file" accept="image/*" id="file-machine-${m.id}" style="display:none;" onchange="subirFotoMaquina('${m.id}', event)">
-      <button class="drawer-upload" onclick="document.getElementById('file-machine-${m.id}').click()"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar' : 'Subir'}</button>
+      <input type="file" accept="image/*" id="file-machine-${m.id}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoMaquina('${m.id}', event)">
+      <label class="drawer-upload" for="file-machine-${m.id}"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar' : 'Subir'}</label>
     </div>
     <div><div class="drawer-title">${m.type}</div><div class="drawer-model">${m.model}</div></div>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -2373,10 +2373,10 @@ function openAddMachineModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Foto de la máquina</label>
-      <input type="file" accept="image/*" id="nm-photo" style="display:none;" onchange="mostrarFotoMaquinaNueva(event)">
-      <div class="form-photo-upload" id="nm-photo-box" onclick="document.getElementById('nm-photo').click()">
+      <input type="file" accept="image/*" id="nm-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="mostrarFotoMaquinaNueva(event)">
+      <label class="form-photo-upload" for="nm-photo" id="nm-photo-box" style="display:block;">
         <i class="fa-solid fa-camera" style="margin-right:6px;"></i>Subir foto (opcional)
-      </div>
+      </label>
     </div>
     <div class="form-group">
       <label class="form-label">Dispositivo de localización GPS</label>
@@ -2556,10 +2556,10 @@ function openAddDocModal(tipo, ownerDbId, ownerCode) {
     </div>
     <div class="form-group">
       <label class="form-label">Archivo (PDF o foto)</label>
-      <input type="file" accept="image/*,application/pdf" id="nd-file" style="display:none;" onchange="mostrarNombreArchivo(event)">
-      <div class="form-photo-upload" id="nd-file-box" onclick="document.getElementById('nd-file').click()">
+      <input type="file" accept="image/*,application/pdf" id="nd-file" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="mostrarNombreArchivo(event)">
+      <label class="form-photo-upload" for="nd-file" id="nd-file-box" style="display:block;">
         <i class="fa-solid fa-paperclip" style="margin-right:6px;"></i>Seleccionar archivo (opcional)
-      </div>
+      </label>
     </div>
     <div id="nd-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="nd-error-text"></span></div>
 
@@ -2878,8 +2878,8 @@ function openWorkerDrawer(id) {
     </div>
     <div class="drawer-photo ${w.photoPath ? 'has-photo' : 'no-photo'}" style="height:120px;" id="drawer-photo-w-${w.id}">
       ${w.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-user" style="font-size:28px;"></i><span>Añadir foto del trabajador</span>'}
-      <input type="file" accept="image/*" id="file-worker-${w.id}" style="display:none;" onchange="subirFotoTrabajador('${w.id}', event)">
-      <button class="drawer-upload" onclick="document.getElementById('file-worker-${w.id}').click()"><i class="fa-solid fa-camera"></i> ${w.photoPath ? 'Cambiar' : 'Subir'}</button>
+      <input type="file" accept="image/*" id="file-worker-${w.id}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoTrabajador('${w.id}', event)">
+      <label class="drawer-upload" for="file-worker-${w.id}"><i class="fa-solid fa-camera"></i> ${w.photoPath ? 'Cambiar' : 'Subir'}</label>
     </div>
     <div><div class="drawer-title">${w.name}</div><div class="drawer-model">${w.role}</div></div>
     <div style="display:flex;gap:8px;align-items:center;">${chip(w.status)}</div>
@@ -3043,11 +3043,11 @@ function renderReportarForm() {
       </div>
       <div class="form-group">
         <label class="form-label">Foto (opcional)</label>
-        <input type="file" accept="image/*" capture="environment" id="inc-photo-input" style="display:none;" onchange="handleIncPhoto(event)">
-        <div class="photo-upload-box" onclick="document.getElementById('inc-photo-input').click()" id="inc-photo-box">
+        <input type="file" accept="image/*" capture="environment" id="inc-photo-input" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="handleIncPhoto(event)">
+        <label class="photo-upload-box" for="inc-photo-input" id="inc-photo-box" style="display:block;">
           <i class="fa-solid fa-camera" style="color:var(--steel);"></i>
           <div style="font-size:12.5px;color:var(--steel);margin-top:4px;">Toca para hacer o subir una foto</div>
-        </div>
+        </label>
       </div>
       <div class="form-hint">
         <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
@@ -3993,10 +3993,10 @@ function openUserSettings() {
       <div class="user-avatar" style="width:56px;height:56px;font-size:16px;overflow:hidden;" id="settings-avatar">
         ${currentUser.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}
       </div>
-      <input type="file" accept="image/*" id="settings-photo" style="display:none;" onchange="subirFotoPerfil(event)">
-      <button class="btn btn-outline" style="font-size:13px;" onclick="document.getElementById('settings-photo').click()">
+      <input type="file" accept="image/*" id="settings-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoPerfil(event)">
+      <label class="btn btn-outline" for="settings-photo" style="font-size:13px;">
         <i class="fa-solid fa-camera"></i> ${currentUser.photoPath ? 'Cambiar foto' : 'Subir foto'}
-      </button>
+      </label>
     </div>
 
     <div class="form-group">
