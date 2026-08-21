@@ -343,6 +343,11 @@
   .login-brand .brand-icon { width: 36px; height: 36px; }
   .login-brand-name { font-family: 'Oswald', sans-serif; font-size: 18px; letter-spacing: 0.02em; }
   .login-title { font-family: 'Oswald', sans-serif; font-size: 20px; text-align: center; }
+
+  .auth-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 8px; background: var(--surface); margin-bottom: 22px; }
+  .auth-tab { flex: 1; padding: 9px 8px; border-radius: 6px; border: none; background: none; cursor: pointer; font-family: 'Manrope', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--steel); display: flex; align-items: center; justify-content: center; gap: 7px; }
+  .auth-tab.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .auth-tab i { font-size: 12px; }
   .login-sub { font-size: 13px; color: var(--steel); text-align: center; margin-top: 4px; margin-bottom: 22px; }
   .login-btn-social { width: 100%; padding: 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
   .login-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--steel); font-size: 12px; }
@@ -660,10 +665,45 @@
 
 <div id="login-screen" class="hidden">
   <div class="login-box">
-    <button class="btn-ghost" style="margin-bottom:12px;" onclick="showLanding()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
+    <button class="btn-ghost" id="auth-back-btn" style="margin-bottom:12px;" onclick="authGoBack()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
     <div class="login-brand">
       <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
       <span class="login-brand-name">OPERTRA</span>
+    </div>
+
+    <!-- ===== SELECTOR: cómo entras ===== -->
+    <div id="auth-tabs" class="auth-tabs">
+      <button class="auth-tab active" id="tab-correo" onclick="showAuthPanel('login')">
+        <i class="fa-solid fa-envelope"></i> Con correo
+      </button>
+      <button class="auth-tab" id="tab-pin" onclick="showAuthPanel('pin')">
+        <i class="fa-solid fa-hashtag"></i> Con PIN
+      </button>
+    </div>
+
+    <!-- ===== ACCESO TRABAJADOR (código empresa + PIN) ===== -->
+    <div id="auth-panel-pin" class="hidden">
+      <div class="login-title">Acceso de trabajador</div>
+      <div class="login-sub">Introduce el código que te ha dado tu empresa</div>
+
+      <div class="form-group" style="margin-top:0;">
+        <label class="form-label">Código de empresa</label>
+        <input class="form-input f-mono" id="pin-company" placeholder="OP-XXXXX" style="text-transform:uppercase;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tu PIN</label>
+        <input class="form-input f-mono" id="pin-code" placeholder="4 dígitos" type="password" inputmode="numeric" maxlength="4" style="font-size:20px;letter-spacing:8px;text-align:center;">
+      </div>
+      <div id="pin-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="pin-error-text"></span></div>
+
+      <button class="btn btn-amber" id="pin-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:16px;" onclick="handleWorkerLogin()">
+        Entrar
+      </button>
+
+      <div class="form-hint" style="margin-top:14px;">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>¿No tienes código o PIN? Pídeselo al responsable de tu empresa — él te da de alta desde su cuenta.</span>
+      </div>
     </div>
 
     <!-- ===== MODO INICIAR SESIÓN ===== -->
@@ -3059,11 +3099,34 @@ function submitDemoRequest() {
 
 /* ============ AUTENTICACIÓN REAL (Supabase Auth) ============ */
 
+/* Tres formas de entrar:
+   - 'login'  : correo + contraseña (admin y encargados)
+   - 'signup' : crear la empresa (solo desde 'login')
+   - 'pin'    : código de empresa + PIN (personal de obra, sin cuenta) */
+let authMode = 'login';
+
 function showAuthPanel(mode) {
+  authMode = mode;
   document.getElementById('auth-panel-login').classList.toggle('hidden', mode !== 'login');
   document.getElementById('auth-panel-signup').classList.toggle('hidden', mode !== 'signup');
-  document.getElementById('login-error').style.display = 'none';
-  document.getElementById('signup-error').style.display = 'none';
+  document.getElementById('auth-panel-pin').classList.toggle('hidden', mode !== 'pin');
+
+  // Las pestañas solo tienen sentido eligiendo cómo entrar, no al crear empresa
+  document.getElementById('auth-tabs').classList.toggle('hidden', mode === 'signup');
+  document.getElementById('tab-correo').classList.toggle('active', mode === 'login');
+  document.getElementById('tab-pin').classList.toggle('active', mode === 'pin');
+
+  ['login-error','signup-error','pin-error'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.display = 'none'; el.style.color = ''; }
+  });
+}
+
+/* Volver retrocede UN solo paso: de crear empresa vuelve al login,
+   y solo desde el login sale a la portada. */
+function authGoBack() {
+  if (authMode === 'signup') showAuthPanel('login');
+  else showLanding();
 }
 
 function authErrorMessage(err) {
@@ -3152,6 +3215,52 @@ function enterAppOrShowTrialExpired() {
     showScreen('app');
     renderTopbarUser(); renderNav(); renderTrialBanner(); switchTab('dashboard');
     loadCompanyData();
+  }
+}
+
+async function handleWorkerLogin() {
+  const code = document.getElementById('pin-company').value.trim().toUpperCase();
+  const pin = document.getElementById('pin-code').value.trim();
+  const errBox = document.getElementById('pin-error');
+  errBox.style.display = 'none';
+
+  if (!code || !pin) {
+    document.getElementById('pin-error-text').textContent = 'Introduce el código de tu empresa y tu PIN.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    document.getElementById('pin-error-text').textContent = 'El PIN son 4 dígitos.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  setButtonLoading('pin-submit-btn', true, 'Entrando...', 'Entrar');
+  try {
+    // La validación se hace en la base de datos, no aquí: el navegador nunca
+    // recibe la lista de PINs, solo el resultado de comprobar uno concreto.
+    const { data, error } = await getSupabase().rpc('worker_login', {
+      p_access_code: code, p_pin: pin,
+    });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      document.getElementById('pin-error-text').textContent = 'Código de empresa o PIN incorrectos.';
+      errBox.style.display = 'flex';
+      return;
+    }
+    const w = data[0];
+    currentUser = {
+      id: w.worker_id, name: w.worker_name, role: w.worker_role,
+      accessLevel: 'trabajador', company: w.company_name, companyId: w.company_id,
+      trialEndsAt: w.trial_ends_at,
+      initials: w.worker_name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
+      hasPhoto: false, email: '', isWorker: true,
+    };
+    try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
+    enterAppOrShowTrialExpired();
+  } catch (err) {
+    document.getElementById('pin-error-text').textContent = err.message || 'No se pudo verificar. Inténtalo de nuevo.';
+    errBox.style.display = 'flex';
+  } finally {
+    setButtonLoading('pin-submit-btn', false, '', 'Entrar');
   }
 }
 
@@ -3262,6 +3371,7 @@ async function handleForgotPassword() {
 async function logout() {
   closeUserDropdown();
   try { await getSupabase().auth.signOut(); } catch(e) {}
+  try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
   currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
   showScreen('login');
   showAuthPanel('login');
@@ -3320,6 +3430,19 @@ async function handleAuthRedirect() {
 }
 
 async function checkExistingSession() {
+  // Sesión de trabajador (entró con PIN, no tiene cuenta de Supabase Auth)
+  try {
+    const raw = localStorage.getItem('opertra_worker_session');
+    if (raw) {
+      const w = JSON.parse(raw);
+      if (w && w.id && w.companyId) {
+        currentUser = w;
+        enterAppOrShowTrialExpired();
+        return;
+      }
+    }
+  } catch (e) {}
+
   try {
     const { data } = await getSupabase().auth.getSession();
     if (data.session) {
