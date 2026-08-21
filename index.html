@@ -1134,6 +1134,7 @@ async function loadCompanyData() {
 
     renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje();
     arrancarContador();
+    suscribirCambios();
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
   } catch (err) {
     console.error('Error cargando datos de la empresa:', err);
@@ -1901,6 +1902,45 @@ async function cargarEstadoFichaje() {
   renderFichaje();
 }
 
+/* ======================================================================
+   ACTUALIZACIÓN EN VIVO
+   Si el responsable crea una obra o da de alta una máquina mientras alguien
+   tiene la app abierta, ese cambio le llega solo — sin recargar la página.
+   ====================================================================== */
+let canalTiempoReal = null;
+let recargaPendiente = null;
+
+function suscribirCambios() {
+  if (canalTiempoReal || !currentUser.companyId) return;
+  const filtro = `company_id=eq.${currentUser.companyId}`;
+  canalTiempoReal = getSupabase()
+    .channel('cambios-empresa')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: filtro }, recargarEnBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'machines', filter: filtro }, recargarEnBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'workers', filter: filtro }, recargarEnBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, recargarEnBreve)
+    .subscribe();
+}
+
+/* Si llegan varios cambios seguidos, espera un momento y recarga una sola vez */
+function recargarEnBreve() {
+  clearTimeout(recargaPendiente);
+  recargaPendiente = setTimeout(() => {
+    // Si está con un desplegable abierto o escribiendo, no le interrumpimos
+    const activo = document.activeElement;
+    if (activo && ['SELECT','INPUT','TEXTAREA'].includes(activo.tagName)) {
+      recargarEnBreve();
+      return;
+    }
+    loadCompanyData();
+  }, 800);
+}
+
+function cortarSuscripcion() {
+  if (canalTiempoReal) { getSupabase().removeChannel(canalTiempoReal); canalTiempoReal = null; }
+  clearTimeout(recargaPendiente);
+}
+
 async function cargarFichajes() {
   try {
     const { data, error } = await getSupabase()
@@ -2016,8 +2056,11 @@ function renderFicharCard() {
           ` : `
             <div class="f-display" style="font-size:18px;margin-top:14px;">¿Dónde vas a trabajar?</div>
             ${projects.length === 0 ? `
-              <div style="font-size:13px;color:var(--steel);margin-top:10px;">
-                Todavía no hay ${t('p')} dadas de alta. Pide a tu responsable que cree una para poder fichar.
+              <div style="font-size:13px;color:var(--steel);margin-top:10px;line-height:1.55;">
+                Todavía no hay ${t('p')} dadas de alta. Pide a tu responsable que cree una — en cuanto lo haga, aparecerá aquí sola y podrás fichar.
+              </div>
+              <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--steel);margin-top:14px;">
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Esperando...
               </div>
             ` : `
               <select class="form-select" id="fichaje-obra" style="margin-top:12px;text-align:center;font-size:15px;padding:12px;">
@@ -3960,6 +4003,7 @@ async function handleForgotPassword() {
 
 async function logout() {
   closeUserDropdown();
+  cortarSuscripcion();
   try { await getSupabase().auth.signOut(); } catch(e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
   currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
