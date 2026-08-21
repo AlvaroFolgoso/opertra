@@ -933,6 +933,49 @@ function t(forma) {
   return v[forma];
 }
 
+/* ======================================================================
+   ARCHIVOS (Supabase Storage)
+   Cada archivo se guarda en la carpeta de su empresa:
+     <company_id>/machines/<código>/<archivo>
+   El almacén es privado: para verlo se pide un enlace temporal que caduca.
+   ====================================================================== */
+const BUCKET = 'opertra';
+
+function limpiarNombre(nombre) {
+  return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase();
+}
+
+async function subirArchivo(file, carpeta) {
+  if (!file) return null;
+  if (file.size > 50 * 1024 * 1024) throw new Error('El archivo supera los 50 MB.');
+  const ruta = `${currentUser.companyId}/${carpeta}/${Date.now()}-${limpiarNombre(file.name)}`;
+  const { error } = await getSupabase().storage.from(BUCKET).upload(ruta, file, { upsert: false });
+  if (error) throw error;
+  return ruta;
+}
+
+/* Enlace temporal (1 hora) para ver o descargar un archivo privado */
+async function urlArchivo(ruta) {
+  if (!ruta) return null;
+  const { data, error } = await getSupabase().storage.from(BUCKET).createSignedUrl(ruta, 3600);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+async function borrarArchivo(ruta) {
+  if (!ruta) return;
+  try { await getSupabase().storage.from(BUCKET).remove([ruta]); } catch (e) {}
+}
+
+/* Pinta una imagen guardada dentro de un elemento, cuando llegue su enlace */
+async function pintarImagen(elId, ruta, alt) {
+  if (!ruta) return;
+  const url = await urlArchivo(ruta);
+  const el = document.getElementById(elId);
+  if (url && el) el.innerHTML = `<img src="${url}" alt="${alt||''}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+}
+
 /* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
    sesión (ver loadCompanyData). Empiezan vacíos, ya no hay datos de mentira aquí. */
 let machines = [];
@@ -1028,7 +1071,7 @@ async function loadCompanyData() {
     const [projRes, machRes, docRes, workRes] = await Promise.all([
       sb.from('projects').select('*').order('created_at'),
       sb.from('machines').select('*').order('created_at'),
-      sb.from('documents').select('*').eq('owner_type', 'machine'),
+      sb.from('documents').select('*'),
       sb.from('workers').select('*').eq('active', true).order('created_at'),
     ]);
     if (projRes.error) throw projRes.error;
@@ -1042,10 +1085,13 @@ async function loadCompanyData() {
       return { dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status, start: p.start_date, end: p.end_date };
     });
 
-    const docsByMachine = {};
+    const docsByMachine = {}, docsByWorker = {};
     (docRes.data || []).forEach(d => {
-      if (!docsByMachine[d.owner_id]) docsByMachine[d.owner_id] = [];
-      docsByMachine[d.owner_id].push({ name: d.name, expiry: d.expiry_date ? fmtDate(d.expiry_date) : 'sin caducidad', status: d.status });
+      const doc = { dbId: d.id, name: d.name,
+        expiry: d.expiry_date ? fmtDate(d.expiry_date) : 'sin caducidad',
+        status: estadoCaducidad(d.expiry_date), filePath: d.file_path };
+      if (d.worker_id) { (docsByWorker[d.worker_id] ||= []).push(doc); }
+      else if (d.owner_type === 'machine') { (docsByMachine[d.owner_id] ||= []).push(doc); }
     });
 
     machines = (machRes.data || []).map(m => ({
@@ -1071,7 +1117,8 @@ async function loadCompanyData() {
       project: w.project_id ? (codeByProjectDbId[w.project_id] || null) : null,
       projectDbId: w.project_id,
       status: 'off', since: '—', // se calculará con los fichajes reales
-      documents: [], vacations: [],
+      photoPath: w.photo_path,
+      documents: docsByWorker[w.id] || [], vacations: [],
     }));
 
     // Ahora que hay trabajadores, cada máquina sabe quién la lleva
@@ -1257,16 +1304,22 @@ function chip(status) {
   return `<span class="chip status-${status}"><span class="dot"></span>${statusLabel[status]}</span>`;
 }
 
-const MACHINE_TYPES = ["Excavadora", "Camión", "Grúa torre", "Grúa móvil", "Tractor", "Plataforma elevadora", "Tráiler", "Dumper", "Compactadora", "Barco / embarcación", "Otra"];
+const MACHINE_TYPES = ["Excavadora", "Camión", "Furgoneta", "Grúa torre", "Grúa móvil", "Tractor", "Plataforma elevadora", "Tráiler", "Dumper", "Compactadora", "Retroexcavadora", "Hormigonera", "Barco / embarcación", "__otro__"];
 
 const docStatusLabel = { vigente: "Vigente", proximo: "Caduca pronto", caducado: "Caducado" };
 function docChip(status) {
   return `<span class="chip status-${status}"><span class="dot"></span>${docStatusLabel[status]}</span>`;
 }
 function docList(docs) {
+  if (!docs || docs.length === 0) {
+    return `<div style="font-size:13px;color:var(--steel);padding:8px 0;">Sin documentos todavía.</div>`;
+  }
   return docs.map(d => `
-    <div class="doc-row">
-      <div><div class="doc-name">${d.name}</div><div class="doc-expiry f-mono">Caduca: ${d.expiry}</div></div>
+    <div class="doc-row" ${d.filePath ? `style="cursor:pointer;" onclick="abrirDocumento('${d.filePath}')"` : ''}>
+      <div>
+        <div class="doc-name">${d.name} ${d.filePath ? '<i class="fa-solid fa-paperclip" style="font-size:11px;color:var(--blue);margin-left:4px;"></i>' : ''}</div>
+        <div class="doc-expiry f-mono">Caduca: ${d.expiry}</div>
+      </div>
       ${docChip(d.status)}
     </div>`).join('');
 }
@@ -2054,8 +2107,8 @@ function machineCardHTML(m) {
   return `
     <div class="plate machine-card" onclick="openDrawer('${m.id}')">${rivets}
       <div class="machine-top">
-        <div class="machine-photo ${m.hasPhoto ? 'has-photo' : 'no-photo'}">
-          ${m.hasPhoto ? '<i class="fa-solid fa-truck"></i>' : '<i class="fa-solid fa-camera"></i><span>añadir foto</span>'}
+        <div class="machine-photo ${m.photoUrl ? 'has-photo' : 'no-photo'}" id="card-photo-${m.id}">
+          ${m.photoUrl ? '<i class="fa-solid fa-truck"></i>' : '<i class="fa-solid fa-camera"></i><span>añadir foto</span>'}
         </div>
         <div style="flex:1;min-width:0;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -2107,7 +2160,9 @@ function renderMaquinaria() {
     </div>
     ${maquinariaView === 'lista' ? `
     <div class="machine-grid" id="machine-results">
-      ${machines.map(machineCardHTML).join('')}
+      ${machines.length === 0
+        ? `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-truck"></i><div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay máquinas</div><div style="font-size:13px;margin-top:3px;">Dale a "Añadir máquina" para registrar la primera.</div></div>`
+        : machines.map(machineCardHTML).join('')}
     </div>
     ` : `
     <div class="plate" style="padding:0;overflow:hidden;">${rivets}
@@ -2121,6 +2176,7 @@ function renderMaquinaria() {
     `}
   `;
   if (maquinariaView === 'mapa') setTimeout(initFleetMap, 0);
+  else machines.forEach(m => { if (m.photoUrl) pintarImagen('card-photo-' + m.id, m.photoUrl, m.type); });
 }
 
 function initFleetMap() {
@@ -2157,9 +2213,10 @@ function openDrawer(id) {
       <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${m.id}</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="drawer-photo ${m.hasPhoto ? 'has-photo' : 'no-photo'}">
-      ${m.hasPhoto ? '<i class="fa-solid fa-truck"></i>' : '<i class="fa-solid fa-camera"></i><span>Añadir foto de la máquina</span>'}
-      <button class="drawer-upload"><i class="fa-solid fa-camera"></i> ${m.hasPhoto ? 'Cambiar' : 'Subir'}</button>
+    <div class="drawer-photo ${m.photoUrl ? 'has-photo' : 'no-photo'}" id="drawer-photo-${m.id}">
+      ${m.photoUrl ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-camera"></i><span>Añadir foto de la máquina</span>'}
+      <input type="file" accept="image/*" id="file-machine-${m.id}" style="display:none;" onchange="subirFotoMaquina('${m.id}', event)">
+      <button class="drawer-upload" onclick="document.getElementById('file-machine-${m.id}').click()"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar' : 'Subir'}</button>
     </div>
     <div><div class="drawer-title">${m.type}</div><div class="drawer-model">${m.model}</div></div>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -2217,11 +2274,21 @@ function openDrawer(id) {
       <span class="f-display" style="font-size:15px;">DOCUMENTOS Y PERMISOS</span>
     </div>
     <div class="doc-list">${docList(m.documents)}</div>
-    <button class="add-doc-btn"><i class="fa-solid fa-plus"></i> Añadir documento (ITV, seguro, revisión...)</button>
+    <button class="add-doc-btn" onclick="openAddDocModal('machine', '${m.dbId}', '${m.id}')"><i class="fa-solid fa-plus"></i> Añadir documento (ITV, seguro, revisión...)</button>
 
-    <button class="btn btn-dark" style="margin-top:10px;justify-content:center;">Reasignar operario</button>
+    <div class="doc-section-title" style="margin-top:6px;">
+      <span class="f-display" style="font-size:15px;">OPERARIO</span>
+    </div>
+    <div class="vac-form">
+      <select class="form-select" id="reassign-operator" style="padding:8px 10px;font-size:13px;">
+        <option value="">Sin operario asignado</option>
+        ${workers.map(w => `<option value="${w.dbId}" ${w.machineDbId === m.dbId ? 'selected' : ''}>${w.name} · ${w.role}</option>`).join('')}
+      </select>
+      <button class="btn btn-amber" style="padding:8px 12px;" onclick="reasignarOperario('${m.id}')"><i class="fa-solid fa-check"></i></button>
+    </div>
   `;
   document.getElementById('overlay').classList.add('active');
+  if (m.photoUrl) pintarImagen('drawer-photo-' + m.id, m.photoUrl, m.type);
   const qrHolder = document.getElementById('qr-render-' + m.id);
   if (qrHolder && window.QRCode) {
     new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M });
@@ -2289,9 +2356,12 @@ function openAddMachineModal() {
 
     <div class="form-group">
       <label class="form-label">Tipo de máquina</label>
-      <select class="form-select" id="nm-type">
-        ${MACHINE_TYPES.map(t => `<option>${t}</option>`).join('')}
+      <select class="form-select" id="nm-type" onchange="toggleCustomMachineType()">
+        ${MACHINE_TYPES.map(mt => mt === '__otro__'
+          ? `<option value="__otro__">Otro (escribir el tipo)</option>`
+          : `<option>${mt}</option>`).join('')}
       </select>
+      <input class="form-input hidden" id="nm-type-custom" placeholder="Escribe el tipo (ej. Barredora, Carretilla...)" style="margin-top:8px;">
     </div>
     <div class="form-group">
       <label class="form-label">Modelo</label>
@@ -2323,8 +2393,18 @@ function openAddMachineModal() {
 }
 function closeAddMachineModal() { document.getElementById('modal-overlay').classList.remove('active'); }
 
+function toggleCustomMachineType() {
+  const esOtro = document.getElementById('nm-type').value === '__otro__';
+  const campo = document.getElementById('nm-type-custom');
+  campo.classList.toggle('hidden', !esOtro);
+  if (esOtro) campo.focus();
+}
+
 async function submitAddMachine() {
-  const type = document.getElementById('nm-type').value;
+  const sel = document.getElementById('nm-type').value;
+  const type = sel === '__otro__'
+    ? (document.getElementById('nm-type-custom').value.trim() || 'Sin especificar')
+    : sel;
   const model = document.getElementById('nm-model').value || 'Modelo sin especificar';
   const plate = document.getElementById('nm-plate').value || '—';
   const deviceId = document.getElementById('nm-device').value;
@@ -2356,6 +2436,193 @@ async function submitAddMachine() {
   }
 }
 
+async function reasignarOperario(machineCode) {
+  const m = machines.find(x => x.id === machineCode);
+  const workerDbId = document.getElementById('reassign-operator').value || null;
+  try {
+    const sb = getSupabase();
+    // Quitar esta máquina a quien la tuviera antes
+    const anterior = workers.find(w => w.machineDbId === m.dbId);
+    if (anterior && anterior.dbId !== workerDbId) {
+      await sb.from('workers').update({ machine_id: null }).eq('id', anterior.dbId);
+      anterior.machineDbId = null; anterior.machine = '—';
+    }
+    if (workerDbId) {
+      const { error } = await sb.from('workers').update({ machine_id: m.dbId }).eq('id', workerDbId);
+      if (error) throw error;
+      const nuevo = workers.find(w => w.dbId === workerDbId);
+      if (nuevo) { nuevo.machineDbId = m.dbId; nuevo.machine = m.id; m.operator = nuevo.name; }
+    } else {
+      m.operator = '—';
+    }
+    openDrawer(machineCode);
+    renderMaquinaria(); renderTrabajadores(); renderDashboard();
+  } catch (err) {
+    alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+/* ============ SUBIDA DE ARCHIVOS ============ */
+
+async function subirFotoMaquina(machineCode, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const m = machines.find(x => x.id === machineCode);
+  const cont = document.getElementById('drawer-photo-' + machineCode);
+  if (cont) cont.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Subiendo...</span>';
+  try {
+    const rutaAnterior = m.photoUrl;
+    const ruta = await subirArchivo(file, `machines/${m.id}`);
+    const { error } = await getSupabase().from('machines')
+      .update({ photo_url: ruta, has_photo: true }).eq('id', m.dbId);
+    if (error) throw error;
+    if (rutaAnterior) borrarArchivo(rutaAnterior);
+    m.photoUrl = ruta; m.hasPhoto = true;
+    openDrawer(machineCode);
+    renderMaquinaria();
+  } catch (err) {
+    alert('No se pudo subir la foto: ' + (err.message || 'inténtalo de nuevo.'));
+    openDrawer(machineCode);
+  }
+}
+
+async function subirFotoTrabajador(workerCode, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const w = workers.find(x => x.id === workerCode);
+  const cont = document.getElementById('drawer-photo-w-' + workerCode);
+  if (cont) cont.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Subiendo...</span>';
+  try {
+    const rutaAnterior = w.photoPath;
+    const ruta = await subirArchivo(file, `workers/${w.id}`);
+    const { error } = await getSupabase().from('workers')
+      .update({ photo_path: ruta }).eq('id', w.dbId);
+    if (error) throw error;
+    if (rutaAnterior) borrarArchivo(rutaAnterior);
+    w.photoPath = ruta;
+    openWorkerDrawer(workerCode);
+    renderTrabajadores();
+  } catch (err) {
+    alert('No se pudo subir la foto: ' + (err.message || 'inténtalo de nuevo.'));
+    openWorkerDrawer(workerCode);
+  }
+}
+
+/* Documentos: nombre + caducidad + archivo (PDF o foto) */
+function openAddDocModal(tipo, ownerDbId, ownerCode) {
+  const esMaquina = tipo === 'machine';
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Añadir documento</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">Para ${esMaquina ? 'la máquina' : 'el trabajador'} <span class="f-mono">${ownerCode}</span></div>
+
+    <div class="form-group">
+      <label class="form-label">Tipo de documento</label>
+      <input class="form-input" id="nd-name" list="docs-sugeridos" placeholder="Escribe o elige uno">
+      <datalist id="docs-sugeridos">
+        ${esMaquina
+          ? '<option>ITV</option><option>Seguro</option><option>Ficha técnica</option><option>Revisión periódica</option><option>Certificado CE</option><option>Permiso de circulación</option><option>Tarjeta de transporte</option>'
+          : '<option>DNI</option><option>Contrato</option><option>PRL 20h</option><option>PRL 60h</option><option>Carnet de conducir</option><option>Carnet C+E</option><option>ADR</option><option>Carnet de grúa</option><option>Certificado médico</option><option>Alta Seguridad Social</option>'}
+      </datalist>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fecha de caducidad</label>
+      <input class="form-input" type="date" id="nd-expiry">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Déjalo vacío si el documento no caduca. La app te avisará cuando se acerque la fecha.</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Archivo (PDF o foto)</label>
+      <input type="file" accept="image/*,application/pdf" id="nd-file" style="display:none;" onchange="mostrarNombreArchivo(event)">
+      <div class="form-photo-upload" id="nd-file-box" onclick="document.getElementById('nd-file').click()">
+        <i class="fa-solid fa-paperclip" style="margin-right:6px;"></i>Seleccionar archivo (opcional)
+      </div>
+    </div>
+    <div id="nd-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="nd-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="nd-submit" onclick="submitAddDoc('${tipo}','${ownerDbId}','${ownerCode}')">Guardar documento</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function mostrarNombreArchivo(event) {
+  const f = event.target.files[0];
+  if (f) document.getElementById('nd-file-box').innerHTML =
+    `<i class="fa-solid fa-file-circle-check" style="margin-right:6px;color:var(--success);"></i>${f.name}`;
+}
+
+function estadoCaducidad(fechaISO) {
+  if (!fechaISO) return 'vigente';
+  const dias = Math.round((new Date(fechaISO) - new Date()) / 86400000);
+  if (dias < 0) return 'caducado';
+  if (dias <= 45) return 'proximo';
+  return 'vigente';
+}
+
+async function submitAddDoc(tipo, ownerDbId, ownerCode) {
+  const name = document.getElementById('nd-name').value.trim();
+  const expiry = document.getElementById('nd-expiry').value || null;
+  const file = document.getElementById('nd-file').files[0];
+  const errBox = document.getElementById('nd-error');
+  errBox.style.display = 'none';
+
+  if (!name) {
+    document.getElementById('nd-error-text').textContent = 'Escribe qué documento es.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  setButtonLoading('nd-submit', true, 'Guardando...', 'Guardar documento');
+  try {
+    let ruta = null;
+    if (file) ruta = await subirArchivo(file, `documents/${ownerCode}`);
+
+    const fila = {
+      company_id: currentUser.companyId, owner_type: tipo === 'machine' ? 'machine' : 'profile',
+      owner_id: ownerDbId, name, expiry_date: expiry,
+      status: estadoCaducidad(expiry), file_path: ruta,
+    };
+    if (tipo === 'worker') fila.worker_id = ownerDbId;
+
+    const { error } = await getSupabase().from('documents').insert(fila);
+    if (error) throw error;
+
+    closeAddMachineModal();
+    await recargarDocumentos();
+    if (tipo === 'machine') openDrawer(ownerCode); else openWorkerDrawer(ownerCode);
+    renderDashboard();
+  } catch (err) {
+    document.getElementById('nd-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('nd-submit', false, '', 'Guardar documento');
+  }
+}
+
+async function recargarDocumentos() {
+  const { data } = await getSupabase().from('documents').select('*');
+  const porMaquina = {}, porTrabajador = {};
+  (data || []).forEach(d => {
+    const doc = { dbId: d.id, name: d.name, expiry: d.expiry_date ? fmtDate(d.expiry_date) : 'sin caducidad',
+                  status: estadoCaducidad(d.expiry_date), filePath: d.file_path };
+    if (d.worker_id) { (porTrabajador[d.worker_id] ||= []).push(doc); }
+    else if (d.owner_type === 'machine') { (porMaquina[d.owner_id] ||= []).push(doc); }
+  });
+  machines.forEach(m => { m.documents = porMaquina[m.dbId] || []; });
+  workers.forEach(w => { w.documents = porTrabajador[w.dbId] || []; });
+}
+
+async function abrirDocumento(ruta) {
+  const url = await urlArchivo(ruta);
+  if (url) window.open(url, '_blank');
+  else alert('No se pudo abrir el archivo.');
+}
+
 /* ============ AÑADIR TRABAJADOR (modal) ============ */
 function suggestPin() {
   const usados = new Set(workers.map(w => w.pin));
@@ -2378,7 +2645,15 @@ function openAddWorkerModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Puesto</label>
-      <input class="form-input" id="nw-role" placeholder="Ej. Maquinista, Conductor" value="Operario">
+      <input class="form-input" id="nw-role" list="roles-sugeridos" placeholder="Escribe o elige uno" value="Operario">
+      <datalist id="roles-sugeridos">
+        <option>Operario</option><option>Maquinista</option><option>Conductor</option>
+        <option>Peón</option><option>Encargado</option><option>Jefe de equipo</option>
+        <option>Oficial 1ª</option><option>Oficial 2ª</option><option>Gruista</option>
+        <option>Repartidor</option><option>Instalador</option><option>Técnico</option>
+        <option>Electricista</option><option>Fontanero</option><option>Soldador</option>
+        <option>Topógrafo</option><option>Administrativo</option>
+      </datalist>
     </div>
     <div class="form-group">
       <label class="form-label">PIN de acceso (4 dígitos)</label>
@@ -2582,10 +2857,10 @@ function openWorkerDrawer(id) {
       <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${w.id}</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="drawer-photo no-photo" style="height:120px;">
-      <i class="fa-solid fa-user" style="font-size:28px;"></i>
-      <span>Añadir foto del trabajador</span>
-      <button class="drawer-upload"><i class="fa-solid fa-camera"></i> Subir</button>
+    <div class="drawer-photo ${w.photoPath ? 'has-photo' : 'no-photo'}" style="height:120px;" id="drawer-photo-w-${w.id}">
+      ${w.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-user" style="font-size:28px;"></i><span>Añadir foto del trabajador</span>'}
+      <input type="file" accept="image/*" id="file-worker-${w.id}" style="display:none;" onchange="subirFotoTrabajador('${w.id}', event)">
+      <button class="drawer-upload" onclick="document.getElementById('file-worker-${w.id}').click()"><i class="fa-solid fa-camera"></i> ${w.photoPath ? 'Cambiar' : 'Subir'}</button>
     </div>
     <div><div class="drawer-title">${w.name}</div><div class="drawer-model">${w.role}</div></div>
     <div style="display:flex;gap:8px;align-items:center;">${chip(w.status)}</div>
@@ -2599,7 +2874,7 @@ function openWorkerDrawer(id) {
       <span class="f-display" style="font-size:15px;">DOCUMENTOS Y PERMISOS</span>
     </div>
     <div class="doc-list">${docList(w.documents)}</div>
-    <button class="add-doc-btn"><i class="fa-solid fa-plus"></i> Añadir carnet, permiso o certificado</button>
+    <button class="add-doc-btn" onclick="openAddDocModal('worker', '${w.dbId}', '${w.id}')"><i class="fa-solid fa-plus"></i> Añadir carnet, permiso o certificado</button>
 
     <div class="doc-section-title">
       <span class="f-display" style="font-size:15px;">VACACIONES</span>
@@ -2617,9 +2892,40 @@ function openWorkerDrawer(id) {
       <button class="btn btn-amber" style="padding:8px 12px;" onclick="addVacation('${w.id}')"><i class="fa-solid fa-plus"></i></button>
     </div>
 
-    <button class="btn btn-dark" style="margin-top:10px;justify-content:center;">Reasignar máquina</button>
+    <div class="doc-section-title" style="margin-top:6px;">
+      <span class="f-display" style="font-size:15px;">MÁQUINA ASIGNADA</span>
+    </div>
+    <div class="vac-form">
+      <select class="form-select" id="reassign-machine" style="padding:8px 10px;font-size:13px;">
+        <option value="">Sin máquina asignada</option>
+        ${machines.map(m => `<option value="${m.dbId}" ${w.machineDbId === m.dbId ? 'selected' : ''}>${m.id} · ${m.type}</option>`).join('')}
+      </select>
+      <button class="btn btn-amber" style="padding:8px 12px;" onclick="reasignarMaquina('${w.id}')"><i class="fa-solid fa-check"></i></button>
+    </div>
   `;
   document.getElementById('overlay').classList.add('active');
+  if (w.photoPath) pintarImagen('drawer-photo-w-' + w.id, w.photoPath, w.name);
+}
+
+async function reasignarMaquina(workerCode) {
+  const w = workers.find(x => x.id === workerCode);
+  const machineDbId = document.getElementById('reassign-machine').value || null;
+  try {
+    const { error } = await getSupabase().from('workers')
+      .update({ machine_id: machineDbId }).eq('id', w.dbId);
+    if (error) throw error;
+    // La máquina anterior se queda sin operario
+    const anterior = machines.find(m => m.dbId === w.machineDbId);
+    if (anterior) anterior.operator = '—';
+    w.machineDbId = machineDbId;
+    const nueva = machines.find(m => m.dbId === machineDbId);
+    w.machine = nueva ? nueva.id : '—';
+    if (nueva) nueva.operator = w.name;
+    openWorkerDrawer(workerCode);
+    renderTrabajadores(); renderMaquinaria(); renderDashboard();
+  } catch (err) {
+    alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
 }
 
 function renderVacList(w) {
