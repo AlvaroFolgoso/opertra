@@ -973,9 +973,19 @@ async function borrarArchivo(ruta) {
 /* Pinta una imagen guardada dentro de un elemento, cuando llegue su enlace */
 async function pintarImagen(elId, ruta, alt) {
   if (!ruta) return;
-  const url = await urlArchivo(ruta);
   const el = document.getElementById(elId);
-  if (url && el) el.innerHTML = `<img src="${url}" alt="${alt||''}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+  try {
+    const url = await urlArchivo(ruta);
+    if (!el) return;
+    if (url) {
+      el.innerHTML = `<img src="${url}" alt="${alt||''}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+    } else {
+      // Si no se pudo obtener el enlace, no dejamos un spinner girando para siempre
+      el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);" title="No se pudo cargar la imagen"></i>`;
+    }
+  } catch (e) {
+    if (el) el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);"></i>`;
+  }
 }
 
 /* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
@@ -1070,16 +1080,18 @@ const gpsDataProvider = (() => {
 async function loadCompanyData() {
   const sb = getSupabase();
   try {
-    const [projRes, machRes, docRes, workRes] = await Promise.all([
+    const [projRes, machRes, docRes, workRes, vacRes] = await Promise.all([
       sb.from('projects').select('*').order('created_at'),
       sb.from('machines').select('*').order('created_at'),
       sb.from('documents').select('*'),
       sb.from('workers').select('*').eq('active', true).order('created_at'),
+      sb.from('vacations').select('*').order('start_date'),
     ]);
     if (projRes.error) throw projRes.error;
     if (machRes.error) throw machRes.error;
     if (docRes.error) throw docRes.error;
     if (workRes.error) throw workRes.error;
+    if (vacRes.error) throw vacRes.error;
 
     const codeByProjectDbId = {};
     projects = (projRes.data || []).map(p => {
@@ -1120,7 +1132,11 @@ async function loadCompanyData() {
       projectDbId: w.project_id,
       status: 'off', since: '—', // se calculará con los fichajes reales
       photoPath: w.photo_path, profileId: w.profile_id,
-      documents: docsByWorker[w.id] || [], vacations: [],
+      documents: docsByWorker[w.id] || [],
+      vacations: (vacRes.data || []).filter(v => v.worker_id === w.id).map(v => ({
+        dbId: v.id, id: v.id, start: v.start_date, end: v.end_date,
+        days: Math.round((new Date(v.end_date) - new Date(v.start_date)) / 86400000) + 1,
+      })),
     }));
 
     // Ahora que hay trabajadores, cada máquina sabe quién la lleva
@@ -1163,7 +1179,7 @@ function timeAgo(ts) {
   return `hace ${Math.floor(diff / 86400)} d`;
 }
 
-const TODAY = new Date("2026-08-08");
+const TODAY = new Date();
 function vacationStatus(v) {
   const s = new Date(v.start), e = new Date(v.end);
   if (e < TODAY) return "pasada";
@@ -1449,14 +1465,14 @@ function obraCardHTML(p, detailed) {
 function buildCriticalAlerts() {
   const alerts = [];
   machines.forEach(m => {
-    m.documents.forEach(d => {
+    (m.documents || []).forEach(d => {
       if (d.status === 'caducado') alerts.push({ sev: 'red', icon: 'fa-file-circle-xmark', text: `${d.name} caducado — ${m.type} ${m.id}`, tab: 'maquinaria' });
       else if (d.status === 'proximo') alerts.push({ sev: 'orange', icon: 'fa-file-circle-exclamation', text: `${d.name} caduca pronto — ${m.type} ${m.id}`, tab: 'maquinaria' });
     });
     if (m.status === 'maintenance') alerts.push({ sev: 'yellow', icon: 'fa-wrench', text: `${m.id} en mantenimiento — ${m.type}`, tab: 'maquinaria' });
   });
   workers.forEach(w => {
-    w.documents.forEach(d => {
+    (w.documents || []).forEach(d => {
       if (d.status === 'caducado') alerts.push({ sev: 'red', icon: 'fa-id-card', text: `${d.name} caducado — ${w.name}`, tab: 'trabajadores' });
       else if (d.status === 'proximo') alerts.push({ sev: 'orange', icon: 'fa-id-card', text: `${d.name} caduca pronto — ${w.name}`, tab: 'trabajadores' });
     });
@@ -1635,7 +1651,7 @@ function renderObras() {
 }
 function filterObras(q) {
   q = q.trim().toLowerCase();
-  const results = projects.filter(p => !q || p.name.toLowerCase().includes(q) || p.client.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  const results = projects.filter(p => !q || (p.name||'').toLowerCase().includes(q) || (p.client||'').toLowerCase().includes(q) || (p.id||'').toLowerCase().includes(q));
   document.getElementById('obras-results').innerHTML = results.length
     ? results.map(p => obraCardHTML(p, true)).join('')
     : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
@@ -1725,14 +1741,23 @@ function openObraDrawer(id) {
   document.getElementById('overlay').classList.add('active');
 }
 
-function assignWorkerToObra(projId) {
-  const id = document.getElementById('assign-worker-select').value;
-  if (!id) return;
-  const w = workers.find(x => x.id === id);
-  w.project = projId;
-  saveState();
-  openObraDrawer(projId);
-  renderDashboard();
+async function assignWorkerToObra(projId) {
+  const code = document.getElementById('assign-worker-select').value;
+  if (!code) return;
+  const w = workers.find(x => x.id === code);
+  const proj = projects.find(p => p.id === projId);
+  if (!w || !proj) return;
+  try {
+    const { error } = await getSupabase().from('workers')
+      .update({ project_id: proj.dbId }).eq('id', w.dbId);
+    if (error) throw error;
+    w.project = projId;
+    w.projectDbId = proj.dbId;
+    openObraDrawer(projId);
+    renderDashboard(); renderTrabajadores();
+  } catch (err) {
+    alert('No se pudo asignar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
 }
 async function assignMachineToObra(projId) {
   const code = document.getElementById('assign-machine-select').value;
@@ -2280,7 +2305,7 @@ function machineCardHTML(m) {
 }
 function filterMachines(q) {
   q = q.trim().toLowerCase();
-  const results = machines.filter(m => !q || m.id.toLowerCase().includes(q) || m.type.toLowerCase().includes(q) || m.model.toLowerCase().includes(q) || m.plate.toLowerCase().includes(q));
+  const results = machines.filter(m => !q || (m.id||'').toLowerCase().includes(q) || (m.type||'').toLowerCase().includes(q) || (m.model||'').toLowerCase().includes(q) || (m.plate||'').toLowerCase().includes(q));
   const el = document.getElementById('machine-results');
   if (!el) return;
   el.innerHTML = results.length ? results.map(machineCardHTML).join('') : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
@@ -2327,7 +2352,7 @@ function renderMaquinaria() {
 function initFleetMap() {
   const el = document.getElementById('fleet-map');
   if (!el || !window.L) return;
-  const linked = machines.filter(m => m.device.linked);
+  const linked = machines.filter(m => m.device.linked && typeof m.lat === 'number' && typeof m.lng === 'number');
   if (linked.length === 0) return;
 
   fleetMap = L.map(el, { attributionControl: false }).setView([linked[0].lat, linked[0].lng], 13);
@@ -2774,7 +2799,8 @@ async function submitAddDoc(tipo, ownerDbId, ownerCode) {
 }
 
 async function recargarDocumentos() {
-  const { data } = await getSupabase().from('documents').select('*');
+  const { data, error } = await getSupabase().from('documents').select('*');
+  if (error) { console.error('Error recargando documentos:', error); return; }
   const porMaquina = {}, porTrabajador = {};
   (data || []).forEach(d => {
     const doc = { dbId: d.id, name: d.name, expiry: d.expiry_date ? fmtDate(d.expiry_date) : 'sin caducidad',
@@ -2931,14 +2957,14 @@ function workerRowHTML(w) {
 function workerMatchesFilter(w) {
   if (workerFilter === 'working') return w.status === 'working';
   if (workerFilter === 'off') return w.status === 'off';
-  if (workerFilter === 'docpending') return w.documents.some(d => d.status === 'proximo' || d.status === 'caducado');
-  if (workerFilter === 'onvacation') return w.vacations.some(v => vacationStatus(v) === 'en_curso');
+  if (workerFilter === 'docpending') return (w.documents||[]).some(d => d.status === 'proximo' || d.status === 'caducado');
+  if (workerFilter === 'onvacation') return (w.vacations||[]).some(v => vacationStatus(v) === 'en_curso');
   return true;
 }
 
 function applyWorkerFilters() {
   const q = workerQuery.trim().toLowerCase();
-  const results = workers.filter(w => workerMatchesFilter(w) && (!q || w.name.toLowerCase().includes(q) || w.role.toLowerCase().includes(q) || w.id.toLowerCase().includes(q)));
+  const results = workers.filter(w => workerMatchesFilter(w) && (!q || (w.name||'').toLowerCase().includes(q) || (w.role||'').toLowerCase().includes(q) || (w.id||'').toLowerCase().includes(q)));
   const tbody = document.getElementById('workers-tbody');
   if (!tbody) return;
   tbody.innerHTML = results.length ? results.map(workerRowHTML).join('') :
@@ -2949,7 +2975,7 @@ function searchWorkers(q) { workerQuery = q; applyWorkerFilters(); }
 
 function renderTrabajadores() {
   const upcoming = [];
-  workers.forEach(w => w.vacations.forEach(v => {
+  workers.forEach(w => (w.vacations||[]).forEach(v => {
     const st = vacationStatus(v);
     if (st === 'proxima' || st === 'en_curso') upcoming.push({ ...v, worker: w.name, status: st });
   }));
@@ -3117,24 +3143,40 @@ function renderVacList(w) {
   }).join('');
 }
 
-function addVacation(workerId) {
+async function addVacation(workerId) {
   const w = workers.find(x => x.id === workerId);
   const start = document.getElementById('vac-start').value;
   const end = document.getElementById('vac-end').value;
-  if (!start || !end || end < start) return;
+  if (!start || !end) return;
+  if (end < start) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
   const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
-  w.vacations.push({ id: 'V-' + Date.now(), start, end, days });
-  saveState();
-  document.getElementById('vac-list').innerHTML = renderVacList(w);
-  document.getElementById('vac-start').value = '';
-  document.getElementById('vac-end').value = '';
+  try {
+    const { data, error } = await getSupabase().from('vacations').insert({
+      company_id: currentUser.companyId, worker_id: w.dbId,
+      start_date: start, end_date: end,
+    }).select().single();
+    if (error) throw error;
+    w.vacations.push({ dbId: data.id, id: data.id, start, end, days });
+    document.getElementById('vac-list').innerHTML = renderVacList(w);
+    document.getElementById('vac-start').value = '';
+    document.getElementById('vac-end').value = '';
+    renderTrabajadores();
+  } catch (err) {
+    alert('No se pudieron guardar las vacaciones: ' + (err.message || 'inténtalo de nuevo.'));
+  }
 }
 
-function deleteVacation(workerId, vacId) {
+async function deleteVacation(workerId, vacId) {
   const w = workers.find(x => x.id === workerId);
-  w.vacations = w.vacations.filter(v => v.id !== vacId);
-  saveState();
-  document.getElementById('vac-list').innerHTML = renderVacList(w);
+  try {
+    const { error } = await getSupabase().from('vacations').delete().eq('id', vacId);
+    if (error) throw error;
+    w.vacations = w.vacations.filter(v => v.id !== vacId);
+    document.getElementById('vac-list').innerHTML = renderVacList(w);
+    renderTrabajadores();
+  } catch (err) {
+    alert('No se pudieron borrar las vacaciones: ' + (err.message || 'inténtalo de nuevo.'));
+  }
 }
 
 /* ============ AVISOS / INCIDENCIAS ============ */
@@ -3914,7 +3956,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     trialEndsAt: profile.companies ? profile.companies.trial_ends_at : null,
     accessCode: profile.companies ? profile.companies.access_code : null,
     businessType: profile.companies ? profile.companies.business_type : 'construccion',
-    initials: profile.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
+    initials: (profile.name||'?').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0,2).toUpperCase() || '?',
     hasPhoto: profile.has_photo,
     photoPath: profile.photo_url,
     email: authUser.email,
@@ -3992,7 +4034,7 @@ async function handleWorkerLogin() {
       id: w.worker_id, name: w.worker_name, role: w.worker_role,
       accessLevel: 'trabajador', company: w.company_name, companyId: w.company_id,
       trialEndsAt: w.trial_ends_at, businessType: w.business_type || 'construccion',
-      initials: w.worker_name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
+      initials: (w.worker_name||'?').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0,2).toUpperCase() || '?',
       hasPhoto: false, email: '', isWorker: true, pin: pin, photoPath: w.photo_path || null,
     };
     try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
