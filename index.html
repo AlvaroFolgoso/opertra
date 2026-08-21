@@ -219,7 +219,7 @@
   .machine-card { padding: 16px; cursor: pointer; transition: box-shadow 0.15s; }
   .machine-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   .machine-top { display: flex; gap: 12px; }
-  .machine-photo { width: 64px; height: 64px; border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); }
+  .machine-photo { width: 112px; height: 84px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); overflow: hidden; }
   .machine-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 22px; }
   .machine-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 2px; font-size: 9px; }
   .machine-id { font-size: 12px; color: var(--steel); font-family: 'IBM Plex Mono', monospace; }
@@ -238,7 +238,7 @@
   .drawer-top-left { display: flex; align-items: center; gap: 12px; }
   .drawer-close { background: none; border: none; cursor: pointer; color: var(--steel); font-size: 18px; }
   .drawer-back { background: none; border: none; cursor: pointer; color: var(--blue); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; font-family: 'Manrope', sans-serif; }
-  .drawer-photo { width: 100%; height: 160px; border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; }
+  .drawer-photo { width: 100%; height: 220px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; }
   .drawer-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 40px; }
   .drawer-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 6px; font-size: 13px; }
   .drawer-upload { position: absolute; bottom: 8px; right: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px; font-weight: 500; cursor: pointer; }
@@ -451,6 +451,8 @@
 
     table { font-size: 12.5px; }
     th, td { padding: 9px 12px; }
+    .machine-photo { width: 88px; height: 68px; }
+    .drawer-photo { height: 190px; }
 
     .invoice-doc { padding: 18px; }
     .inv-totals-box { width: 100%; }
@@ -2233,8 +2235,9 @@ function openDrawer(id) {
     <div class="device-box ${m.device.linked ? 'linked' : 'unlinked'}">
       <i class="fa-solid ${m.device.linked ? 'fa-microchip' : 'fa-triangle-exclamation'}" style="color:${m.device.linked ? 'var(--steel)' : 'var(--amber-deep)'};"></i>
       <div style="flex:1;">
-        <div style="font-size:13px;font-weight:500;">${m.device.linked ? 'Dispositivo de localización vinculado' : 'Sin dispositivo vinculado'}</div>
+        <div style="font-size:13px;font-weight:500;">${m.device.linked ? (m.lat ? 'Enviando ubicación' : 'Dispositivo registrado, sin señal todavía') : 'Sin dispositivo vinculado'}</div>
         <div class="f-mono" style="font-size:11px;color:var(--steel);margin-top:2px;">${m.device.linked ? m.device.id + ' · ' + m.device.model : 'Esta máquina aún no envía ubicación'}</div>
+        ${m.device.linked && !m.lat ? `<div style="font-size:11.5px;color:var(--amber-deep);margin-top:6px;line-height:1.45;"><i class="fa-solid fa-triangle-exclamation"></i> El código está guardado, pero todavía no llega ninguna señal. Comprueba que el dispositivo esté instalado y configurado para enviar datos.</div>` : ''}
       </div>
       <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="openLinkDeviceModal('${m.id}')">${m.device.linked ? 'Cambiar' : 'Vincular'}</button>
     </div>
@@ -2383,7 +2386,7 @@ function openAddMachineModal() {
       <input class="form-input" id="nm-device" placeholder="Código del dispositivo (ej. TRK-2301)">
       <div class="form-hint">
         <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-        <span>Cada máquina necesita su propio dispositivo GPS físico para poder localizarse. Si aún no lo tienes instalado, puedes guardar la máquina y vincularlo más adelante.</span>
+        <span>Cada máquina necesita su propio dispositivo GPS físico instalado para poder localizarse. Puedes guardar la máquina ahora y vincular el dispositivo cuando lo tengas.</span>
       </div>
     </div>
 
@@ -2539,7 +2542,11 @@ function openAddDocModal(tipo, ownerDbId, ownerCode) {
 
     <div class="form-group">
       <label class="form-label">Tipo de documento</label>
-      <input class="form-input" id="nd-name" list="docs-sugeridos" placeholder="Escribe o elige uno">
+      <input class="form-input" id="nd-name" list="docs-sugeridos" placeholder="Escribe el que sea, o elige de la lista">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Puedes escribir cualquier documento aunque no salga en la lista — las opciones son solo sugerencias.</span>
+      </div>
       <datalist id="docs-sugeridos">
         ${esMaquina
           ? '<option>ITV</option><option>Seguro</option><option>Ficha técnica</option><option>Revisión periódica</option><option>Certificado CE</option><option>Permiso de circulación</option><option>Tarjeta de transporte</option>'
@@ -2664,7 +2671,7 @@ function openAddWorkerModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Puesto</label>
-      <input class="form-input" id="nw-role" list="roles-sugeridos" placeholder="Escribe o elige uno" value="Operario">
+      <input class="form-input" id="nw-role" list="roles-sugeridos" placeholder="Escribe el puesto, o elige de la lista" value="Operario">
       <datalist id="roles-sugeridos">
         <option>Operario</option><option>Maquinista</option><option>Conductor</option>
         <option>Peón</option><option>Encargado</option><option>Jefe de equipo</option>
@@ -3365,7 +3372,7 @@ function openLinkDeviceModal(machineId) {
     </div>
     <div class="form-hint">
       <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-      <span>Vincula el código de serie del dispositivo GPS instalado en la máquina. Empezará a enviar su ubicación en cuanto esté conectado.</span>
+      <span>Guarda aquí el código de serie del dispositivo GPS. <b>Importante:</b> esto solo lo deja registrado — para que la máquina envíe su ubicación de verdad hace falta tener el dispositivo instalado y configurado por el instalador o el fabricante.</span>
     </div>
 
     <div class="modal-actions">
