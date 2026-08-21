@@ -750,6 +750,18 @@
         <input class="form-input" id="signup-company" placeholder="Construcciones Ejemplo S.L.">
       </div>
       <div class="form-group">
+        <label class="form-label">¿A qué se dedica tu empresa?</label>
+        <select class="form-select" id="signup-business">
+          <option value="construccion">Construcción, excavaciones, reformas</option>
+          <option value="transporte">Transporte, reparto, logística</option>
+          <option value="mantenimiento">Mantenimiento, instalaciones, servicios técnicos</option>
+        </select>
+        <div class="form-hint">
+          <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+          <span>Adapta el vocabulario de la app a tu sector: hablarás de obras, servicios o proyectos según lo que elijas.</span>
+        </div>
+      </div>
+      <div class="form-group">
         <label class="form-label">CIF (opcional)</label>
         <input class="form-input" id="signup-cif" placeholder="B12345678">
       </div>
@@ -901,6 +913,26 @@ function canAccess(key) {
   return currentUser.accessLevel !== 'trabajador' || !RESTRICTED_KEYS.includes(key);
 }
 
+/* ======================================================================
+   VOCABULARIO POR TIPO DE EMPRESA
+   Una constructora habla de "obras", un transportista de "servicios" y una
+   empresa de mantenimiento de "proyectos". Es la MISMA tabla por debajo
+   (projects) — solo cambia cómo se llama en pantalla. El tipo se elige al
+   registrar la empresa y se guarda en companies.business_type.
+   Para añadir un sector nuevo, basta con añadir una entrada aquí.
+   ====================================================================== */
+const VOCABULARIO = {
+  construccion: { s: 'obra', p: 'obras', S: 'Obra', P: 'Obras', PP: 'OBRAS', pref: 'OBR', ej: 'Ej. Obra Sur · Sector 1', label: 'Construcción, excavaciones, reformas' },
+  transporte:   { s: 'servicio', p: 'servicios', S: 'Servicio', P: 'Servicios', PP: 'SERVICIOS', pref: 'SRV', ej: 'Ej. Ruta Almería · Madrid', label: 'Transporte, reparto, logística' },
+  mantenimiento:{ s: 'proyecto', p: 'proyectos', S: 'Proyecto', P: 'Proyectos', PP: 'PROYECTOS', pref: 'PRY', ej: 'Ej. Instalación climatización', label: 'Mantenimiento, instalaciones, servicios técnicos' },
+};
+
+/* t('S') devuelve "Obra" o "Servicio" o "Proyecto" según la empresa conectada */
+function t(forma) {
+  const v = VOCABULARIO[currentUser.businessType] || VOCABULARIO.construccion;
+  return v[forma];
+}
+
 /* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
    sesión (ver loadCompanyData). Empiezan vacíos, ya no hay datos de mentira aquí. */
 let machines = [];
@@ -993,14 +1025,16 @@ const gpsDataProvider = (() => {
 async function loadCompanyData() {
   const sb = getSupabase();
   try {
-    const [projRes, machRes, docRes] = await Promise.all([
+    const [projRes, machRes, docRes, workRes] = await Promise.all([
       sb.from('projects').select('*').order('created_at'),
       sb.from('machines').select('*').order('created_at'),
       sb.from('documents').select('*').eq('owner_type', 'machine'),
+      sb.from('workers').select('*').eq('active', true).order('created_at'),
     ]);
     if (projRes.error) throw projRes.error;
     if (machRes.error) throw machRes.error;
     if (docRes.error) throw docRes.error;
+    if (workRes.error) throw workRes.error;
 
     const codeByProjectDbId = {};
     projects = (projRes.data || []).map(p => {
@@ -1027,45 +1061,33 @@ async function loadCompanyData() {
       documents: docsByMachine[m.id] || [],
     }));
 
-    renderObras(); renderMaquinaria(); renderDashboard();
-    if (currentTab === 'obras' || currentTab === 'maquinaria') switchTab(currentTab); // refresca el subtítulo con el conteo real
+    const codeByMachineDbId = {};
+    machines.forEach(m => { codeByMachineDbId[m.dbId] = m.id; });
+
+    workers = (workRes.data || []).map(w => ({
+      dbId: w.id, id: w.code, name: w.name, role: w.role, pin: w.pin,
+      machine: w.machine_id ? (codeByMachineDbId[w.machine_id] || '—') : '—',
+      machineDbId: w.machine_id,
+      project: w.project_id ? (codeByProjectDbId[w.project_id] || null) : null,
+      projectDbId: w.project_id,
+      status: 'off', since: '—', // se calculará con los fichajes reales
+      documents: [], vacations: [],
+    }));
+
+    // Ahora que hay trabajadores, cada máquina sabe quién la lleva
+    machines.forEach(m => {
+      const op = workers.find(w => w.machineDbId === m.dbId);
+      m.operator = op ? op.name : '—';
+    });
+
+    renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores();
+    if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
   } catch (err) {
     console.error('Error cargando datos de la empresa:', err);
   }
 }
 
-const workers = [
-  { id: "W-1042", name: "Marcos Ruiz", role: "Maquinista", machine: "EX-114", project: "OBR-01", status: "working", since: "08:12",
-    documents: [
-      { name: "Carnet de grúa", expiry: "sin caducidad", status: "vigente" },
-      { name: "Excavadora >6t", expiry: "09 oct 2027", status: "vigente" },
-      { name: "PRL 20h", expiry: "15 feb 2027", status: "vigente" },
-    ],
-    vacations: [
-      { id: "V-1", start: "2026-08-17", end: "2026-08-31", days: 15 },
-      { id: "V-2", start: "2026-04-06", end: "2026-04-10", days: 5 },
-    ] },
-  { id: "W-1088", name: "Laura Gómez", role: "Conductora", machine: "CM-045", project: "OBR-02", status: "working", since: "07:45",
-    documents: [
-      { name: "Carnet C+E", expiry: "22 may 2028", status: "vigente" },
-      { name: "ADR", expiry: "19 ago 2026", status: "proximo" },
-    ],
-    vacations: [
-      { id: "V-3", start: "2026-09-01", end: "2026-09-12", days: 10 },
-    ] },
-  { id: "W-1103", name: "Iván Torres", role: "Maquinista", machine: "GR-208", project: "OBR-03", status: "off", since: "—",
-    documents: [
-      { name: "Carnet grúa torre", expiry: "03 mar 2026", status: "caducado" },
-    ],
-    vacations: [] },
-  { id: "W-1121", name: "Nadia Castillo", role: "Operaria", machine: "—", project: "OBR-01", status: "off", since: "—",
-    documents: [
-      { name: "PRL 20h", expiry: "30 nov 2026", status: "vigente" },
-    ],
-    vacations: [
-      { id: "V-4", start: "2026-07-20", end: "2026-07-27", days: 8 },
-    ] },
-];
+let workers = [];
 
 /* Registro de fichajes — entrada/salida por trabajador y día */
 const timeLogs = [
@@ -1208,7 +1230,7 @@ function resetDemoData() {
 
 const NAV = [
   { key: "dashboard", label: "Panel general", icon: "fa-gauge-high" },
-  { key: "obras", label: "Obras", icon: "fa-diagram-project" },
+  { key: "obras", label: null, icon: "fa-diagram-project" },
   { key: "fichaje", label: "Fichaje", icon: "fa-tower-broadcast" },
   { key: "maquinaria", label: "Maquinaria", icon: "fa-truck" },
   { key: "trabajadores", label: "Trabajadores", icon: "fa-users" },
@@ -1220,12 +1242,12 @@ const NAV = [
 
 const VIEW_META = {
   dashboard: ["Panel general", "Vista de hoy, 5 de agosto"],
-  obras: ["Obras", projects.length + " obras registradas"],
+  obras: [null, null],
   fichaje: ["Fichaje", "Verificación por NFC/QR en la máquina"],
   maquinaria: ["Maquinaria", machines.length + " máquinas registradas"],
   trabajadores: ["Trabajadores", workers.length + " trabajadores registrados"],
   avisos: ["Avisos", "Incidencias reportadas por el equipo"],
-  clientes: ["Clientes", "Obras y facturación por cliente"],
+  clientes: ["Clientes", null],
   facturacion: ["Facturación", "Todas las facturas emitidas"],
   informes: ["Informes", "Datos reales de la actividad de la empresa"],
 };
@@ -1257,7 +1279,7 @@ function renderNav() {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
     <button class="nav-item" data-tab="${n.key}">
-      <i class="fa-solid ${n.icon}"></i>${n.label}${badge}
+      <i class="fa-solid ${n.icon}"></i>${n.label || t('P')}${badge}
     </button>`;
   }).join('');
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => {
@@ -1270,7 +1292,7 @@ function renderNav() {
    Para el rol trabajador, los accesos principales son los que usa a diario en obra. */
 const MOBILE_PRIMARY_DEFAULT = [
   { key: 'dashboard', label: 'Inicio', icon: 'fa-gauge-high' },
-  { key: 'obras', label: 'Obras', icon: 'fa-diagram-project' },
+  { key: 'obras', label: null, icon: 'fa-diagram-project' },
   { key: 'maquinaria', label: 'Maquinaria', icon: 'fa-truck' },
   { key: 'trabajadores', label: 'Personal', icon: 'fa-users' },
 ];
@@ -1295,7 +1317,7 @@ function renderMobileNav() {
 
   document.getElementById('mobile-nav-items').innerHTML = primary.map(n => `
     <button class="nav-item" data-tab="${n.key}">
-      <i class="fa-solid ${n.icon}"></i><span>${n.label}</span>
+      <i class="fa-solid ${n.icon}"></i><span>${n.label || t('P')}</span>
     </button>`).join('') + `
     <button class="nav-item" onclick="toggleMoreSheet()">
       <i class="fa-solid fa-ellipsis"></i><span>Más</span>
@@ -1309,7 +1331,7 @@ function renderMobileNav() {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
     <button class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
-      <i class="fa-solid ${n.icon}"></i><span>${n.label}</span>${badge}
+      <i class="fa-solid ${n.icon}"></i><span>${n.label || t('P')}</span>${badge}
     </button>`;
   }).join('');
 }
@@ -1335,19 +1357,19 @@ function switchTab(tab) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + tab).classList.add('active');
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.getElementById('view-title').textContent = VIEW_META[tab][0];
+  document.getElementById('view-title').textContent = VIEW_META[tab][0] || t('P');
   document.getElementById('view-subtitle').textContent =
-    tab === 'obras' ? projects.length + ' obras registradas' :
+    tab === 'obras' ? projects.length + ' ' + (projects.length===1?t('s'):t('p')) + ' registrada' + (projects.length===1?'':'s') :
     tab === 'maquinaria' ? machines.length + ' máquinas registradas' :
     tab === 'trabajadores' ? workers.length + ' trabajadores registrados' :
-    VIEW_META[tab][1];
+    (tab === 'clientes' ? t('P') + ' y facturación por cliente' : VIEW_META[tab][1]);
 }
 
 /* ============ DASHBOARD ============ */
 function obraCardHTML(p, detailed) {
   const { pct, daysLeft } = obraSchedule(p);
   let plazoText;
-  if (p.status === 'finished') plazoText = 'Obra finalizada';
+  if (p.status === 'finished') plazoText = t('S') + ' finalizada';
   else if (daysLeft < 0) plazoText = `Plazo superado por ${Math.abs(daysLeft)} días`;
   else if (daysLeft === 0) plazoText = 'Termina hoy';
   else plazoText = `${daysLeft} días para el fin de plazo`;
@@ -1456,7 +1478,7 @@ function renderDashboard() {
       </div>
       <div class="plate kpi-card" onclick="switchTab('obras')">${rivets}
         <div class="stat-top">
-          <div><div class="stat-label">Obras activas</div><div class="stat-value">${obrasActivas}</div><div class="stat-sub">de ${projects.length} en total</div></div>
+          <div><div class="stat-label">${t('P')} activas</div><div class="stat-value">${obrasActivas}</div><div class="stat-sub">de ${projects.length} en total</div></div>
           <div class="stat-icon" style="background:#C87F0018;color:var(--amber-deep)"><i class="fa-solid fa-diagram-project"></i></div>
         </div>
       </div>
@@ -1543,7 +1565,7 @@ function renderDashboard() {
 
     <div style="margin-top:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span class="f-display" style="font-size:16px;">RESUMEN DE OBRAS</span>
+        <span class="f-display" style="font-size:16px;">RESUMEN DE ${t('PP')}</span>
         <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('obras')">ver todas <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
       </div>
       <div class="obras-grid">
@@ -1696,7 +1718,7 @@ function openAddObraModal() {
     </div>
     <div class="form-group" style="margin-top:16px;">
       <label class="form-label">Nombre de la obra</label>
-      <input class="form-input" id="no-name" placeholder="Ej. Obra Sur · Sector 1">
+      <input class="form-input" id="no-name" placeholder="${t('ej')}">
     </div>
     <div class="form-group">
       <label class="form-label">Cliente</label>
@@ -1723,7 +1745,7 @@ async function submitAddObra() {
   const start = document.getElementById('no-start').value;
   const end = document.getElementById('no-end').value;
   if (!name || !start || !end) return;
-  const newCode = 'OBR-' + String(projects.length + 1).padStart(2,'0');
+  const newCode = t('pref') + '-' + String(projects.length + 1).padStart(2,'0');
 
   const btn = event ? event.target.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
@@ -2334,19 +2356,129 @@ async function submitAddMachine() {
   }
 }
 
+/* ============ AÑADIR TRABAJADOR (modal) ============ */
+function suggestPin() {
+  const usados = new Set(workers.map(w => w.pin));
+  let pin;
+  do { pin = String(Math.floor(1000 + Math.random() * 9000)); } while (usados.has(pin));
+  return pin;
+}
+
+function openAddWorkerModal() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Añadir trabajador</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">Con su PIN podrá entrar en la app para fichar y reportar incidencias. No necesita correo ni contraseña.</div>
+
+    <div class="form-group">
+      <label class="form-label">Nombre y apellidos</label>
+      <input class="form-input" id="nw-name" placeholder="Ej. Marcos Ruiz">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Puesto</label>
+      <input class="form-input" id="nw-role" placeholder="Ej. Maquinista, Conductor" value="Operario">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN de acceso (4 dígitos)</label>
+      <input class="form-input f-mono" id="nw-pin" maxlength="4" inputmode="numeric" value="${suggestPin()}" style="font-size:18px;letter-spacing:6px;">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Apúntalo y dáselo al trabajador junto al código de empresa <b class="f-mono">${currentUser.accessCode || ''}</b>.</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Máquina asignada (opcional)</label>
+      <select class="form-select" id="nw-machine">
+        <option value="">Sin máquina asignada</option>
+        ${machines.map(m => `<option value="${m.dbId}">${m.id} · ${m.type}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('S')} (opcional)</label>
+      <select class="form-select" id="nw-project">
+        <option value="">Sin obra asignada</option>
+        ${projects.map(p => `<option value="${p.dbId}">${p.id} · ${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="nw-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="nw-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="nw-submit" onclick="submitAddWorker()">Guardar trabajador</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function submitAddWorker() {
+  const name = document.getElementById('nw-name').value.trim();
+  const role = document.getElementById('nw-role').value.trim() || 'Operario';
+  const pin = document.getElementById('nw-pin').value.trim();
+  const machineId = document.getElementById('nw-machine').value || null;
+  const projectId = document.getElementById('nw-project').value || null;
+  const errBox = document.getElementById('nw-error');
+  errBox.style.display = 'none';
+
+  if (!name) {
+    document.getElementById('nw-error-text').textContent = 'Escribe el nombre del trabajador.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    document.getElementById('nw-error-text').textContent = 'El PIN debe ser de 4 dígitos.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (workers.some(w => w.pin === pin)) {
+    document.getElementById('nw-error-text').textContent = 'Ese PIN ya lo tiene otro trabajador. Elige otro.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  const code = 'T-' + String(workers.length + 1).padStart(3, '0');
+  setButtonLoading('nw-submit', true, 'Guardando...', 'Guardar trabajador');
+  try {
+    const { data, error } = await getSupabase().from('workers').insert({
+      company_id: currentUser.companyId, code, name, role, pin,
+      machine_id: machineId, project_id: projectId, active: true,
+    }).select().single();
+    if (error) throw error;
+
+    const machineCode = machineId ? (machines.find(m => m.dbId === machineId)?.id || '—') : '—';
+    workers.push({
+      dbId: data.id, id: data.code, name: data.name, role: data.role, pin: data.pin,
+      machine: machineCode, machineDbId: data.machine_id,
+      project: projectId ? (projects.find(p => p.dbId === projectId)?.id || null) : null,
+      projectDbId: data.project_id,
+      status: 'off', since: '—', documents: [], vacations: [],
+    });
+    if (machineId) {
+      const m = machines.find(x => x.dbId === machineId);
+      if (m) m.operator = data.name;
+    }
+    closeAddMachineModal();
+    renderTrabajadores(); renderDashboard(); renderMaquinaria();
+    switchTab('trabajadores');
+  } catch (err) {
+    document.getElementById('nw-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('nw-submit', false, '', 'Guardar trabajador');
+  }
+}
+
 /* ============ TRABAJADORES ============ */
 let workerQuery = '';
 let workerFilter = 'all'; // all | working | off | docpending | onvacation
 
 function workerRowHTML(w) {
+  const esAdmin = currentUser.accessLevel !== 'trabajador';
   return `
     <tr style="cursor:pointer;" onclick="openWorkerDrawer('${w.id}')">
       <td class="f-mono" style="font-size:12px;color:var(--steel);">${w.id}</td>
       <td style="font-weight:500;">${w.name}</td>
       <td style="color:var(--steel);">${w.role}</td>
+      ${esAdmin ? `<td class="f-mono" style="font-size:13px;letter-spacing:2px;color:var(--amber-deep);font-weight:600;">${w.pin || '—'}</td>` : ''}
       <td class="f-mono" style="font-size:12px;color:${w.project ? 'var(--amber-deep)' : 'var(--steel)'};">${w.project || 'Sin asignar'}</td>
       <td class="f-mono" style="font-size:12px;color:${w.machine !== '—' ? 'var(--blue)' : 'var(--steel)'};">${w.machine}</td>
-      <td>${w.documents.map(d => `<span class="permit-tag">${d.name}</span>`).join('')}</td>
       <td>${chip(w.status)}</td>
       <td><i class="fa-solid fa-chevron-right" style="color:var(--steel);font-size:12px;"></i></td>
     </tr>`;
@@ -2392,8 +2524,17 @@ function renderTrabajadores() {
       <div class="search-box">
         <input class="search-input" id="trabajadores-search" placeholder="Buscar trabajador..." value="${workerQuery}" oninput="searchWorkers(this.value)">
       </div>
-      <button class="btn btn-amber"><i class="fa-solid fa-plus"></i> Añadir trabajador</button>
+      <button class="btn btn-amber" onclick="openAddWorkerModal()"><i class="fa-solid fa-plus"></i> Añadir trabajador</button>
     </div>
+
+    ${currentUser.accessLevel !== 'trabajador' ? `
+    <div class="plate" style="padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">${rivets}
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:12px;font-weight:600;color:var(--steel);text-transform:uppercase;letter-spacing:0.02em;">Código de acceso de tu empresa</div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:4px;line-height:1.5;">Tus trabajadores entran en la app con este código y su PIN personal. Dáselo junto a su PIN.</div>
+      </div>
+      <div class="f-mono" style="font-size:20px;font-weight:500;letter-spacing:2px;padding:8px 16px;border-radius:8px;background:var(--amber-bg);color:var(--amber-deep);">${currentUser.accessCode || '—'}</div>
+    </div>` : ''}
 
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
       ${filters.map(f => `
@@ -2417,10 +2558,16 @@ function renderTrabajadores() {
       <div class="table-scroll">
       <table>
         <thead><tr>
-          <th>ID</th><th>Nombre</th><th>Rol</th><th>Obra</th><th>Máquina</th><th>Permisos</th><th>Estado</th><th></th>
+          <th>ID</th><th>Nombre</th><th>Puesto</th>${currentUser.accessLevel !== 'trabajador' ? '<th>PIN</th>' : ''}<th>${t('S')}</th><th>Máquina</th><th>Estado</th><th></th>
         </tr></thead>
         <tbody id="workers-tbody">
-          ${workers.filter(workerMatchesFilter).map(workerRowHTML).join('')}
+          ${workers.length === 0
+            ? `<tr><td colspan="8" style="text-align:center;padding:40px 20px;color:var(--steel);">
+                 <i class="fa-solid fa-users" style="font-size:26px;opacity:0.35;display:block;margin-bottom:10px;"></i>
+                 <div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay trabajadores</div>
+                 <div style="font-size:13px;margin-top:3px;">Dale a "Añadir trabajador" para dar de alta a tu equipo.</div>
+               </td></tr>`
+            : workers.filter(workerMatchesFilter).map(workerRowHTML).join('')}
         </tbody>
       </table>
       </div>
@@ -2744,7 +2891,7 @@ function openClientDrawer(name) {
       <div class="drawer-row"><span>Pendiente de cobro</span><span class="f-mono" style="color:${c.pending>0?'var(--amber-deep)':'var(--ink)'};">${c.pending.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
     </div>
 
-    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">OBRAS (${c.projects.length})</span></div>
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">${t('PP')} (${c.projects.length})</span></div>
     <div class="doc-list">
       ${c.projects.map(p => `
         <div class="doc-row" style="cursor:pointer;" onclick="drawerBack=()=>{switchTab('clientes');openClientDrawer(decodeURIComponent('${encodeURIComponent(c.name)}'));};switchTab('obras');openObraDrawer('${p.id}');">
@@ -2830,7 +2977,7 @@ function renderInvoicePreview(inv) {
           <div style="font-size:11px;text-transform:uppercase;color:var(--steel);">Cliente</div>
           <div style="font-size:14px;margin-top:4px;">${inv.client}</div>
         </div>
-        ${inv.project ? `<div><div style="font-size:11px;text-transform:uppercase;color:var(--steel);">Obra</div><div style="font-size:14px;margin-top:4px;" class="f-mono">${inv.project}</div></div>` : ''}
+        ${inv.project ? `<div><div style="font-size:11px;text-transform:uppercase;color:var(--steel);">${t('S')}</div><div style="font-size:14px;margin-top:4px;" class="f-mono">${inv.project}</div></div>` : ''}
       </div>
 
       <table class="inv-table">
@@ -2931,7 +3078,7 @@ function openAddInvoiceModal() {
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="form-group" style="margin-top:16px;">
-      <label class="form-label">Obra</label>
+      <label class="form-label">${t('S')}</label>
       <select class="form-select" id="ni-project">
         ${projects.map(p => `<option value="${p.id}">${p.id} · ${p.name} (${p.client})</option>`).join('')}
       </select>
@@ -3159,7 +3306,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
   for (let i = 0; i < intentos; i++) {
     const res = await getSupabase()
       .from('profiles')
-      .select('id, name, role, access_level, has_photo, photo_url, company_id, companies(name, trial_ends_at)')
+      .select('id, name, role, access_level, has_photo, photo_url, company_id, companies(name, trial_ends_at, access_code, business_type)')
       .eq('id', authUser.id)
       .maybeSingle();
     profile = res.data; error = res.error;
@@ -3175,6 +3322,8 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     company: profile.companies ? profile.companies.name : '',
     companyId: profile.company_id,
     trialEndsAt: profile.companies ? profile.companies.trial_ends_at : null,
+    accessCode: profile.companies ? profile.companies.access_code : null,
+    businessType: profile.companies ? profile.companies.business_type : 'construccion',
     initials: profile.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
     hasPhoto: profile.has_photo,
     email: authUser.email,
@@ -3250,7 +3399,7 @@ async function handleWorkerLogin() {
     currentUser = {
       id: w.worker_id, name: w.worker_name, role: w.worker_role,
       accessLevel: 'trabajador', company: w.company_name, companyId: w.company_id,
-      trialEndsAt: w.trial_ends_at,
+      trialEndsAt: w.trial_ends_at, businessType: w.business_type || 'construccion',
       initials: w.worker_name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase(),
       hasPhoto: false, email: '', isWorker: true,
     };
@@ -3291,6 +3440,7 @@ async function handleLogin() {
 async function handleSignup() {
   const companyName = document.getElementById('signup-company').value.trim();
   const cif = document.getElementById('signup-cif').value.trim();
+  const businessType = document.getElementById('signup-business').value;
   const name = document.getElementById('signup-name').value.trim();
   const email = document.getElementById('signup-email').value.trim();
   const pass = document.getElementById('signup-password').value.trim();
@@ -3320,7 +3470,7 @@ async function handleSignup() {
     // aunque confirmen el correo desde otro dispositivo distinto al del registro.
     const { data: signUpData, error: signUpError } = await sb.auth.signUp({
       email, password: pass,
-      options: { data: { pending_company_name: companyName, pending_cif: cif || null, pending_admin_name: name } },
+      options: { data: { pending_company_name: companyName, pending_cif: cif || null, pending_admin_name: name, pending_business_type: businessType } },
     });
     if (signUpError) throw signUpError;
     const user = signUpData.user;
