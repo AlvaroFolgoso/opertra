@@ -1192,6 +1192,7 @@ async function loadCompanyData() {
       m.operator = op ? op.name : '—';
     });
 
+    resultadosFiltro = null;
     await cargarFichajes();
     await cargarEstadoFichaje();
     await cargarIncidencias();
@@ -1696,39 +1697,43 @@ function filterObras(q) {
 /* ============ FICHA DE OBRA (real: trabajadores, máquinas, incidencias, facturas) ============ */
 /* Quién ha trabajado en esta obra y cuántas horas — sale de los fichajes reales */
 function horasDeObra(p) {
-  const suyos = timeLogs.filter(l => l.projectDbId === p.dbId && l.checkOutISO);
-  if (suyos.length === 0) {
-    return `<div style="font-size:13px;color:var(--steel);padding:8px 0;">Todavía no se ha fichado ninguna jornada aquí.</div>`;
-  }
-  const porTrabajador = {};
-  suyos.forEach(l => {
-    if (!porTrabajador[l.worker]) porTrabajador[l.worker] = { horas: 0, jornadas: 0, maquinas: new Set() };
-    porTrabajador[l.worker].horas += l.hours;
-    porTrabajador[l.worker].jornadas += 1;
-    if (l.machine && l.machine !== '—') porTrabajador[l.worker].maquinas.add(l.machine);
-  });
-  const lista = Object.entries(porTrabajador).sort((a,b) => b[1].horas - a[1].horas);
-  const total = suyos.reduce((s,l) => s + l.hours, 0);
+  cargarResumenObra(p.dbId);
+  return `<div id="hist-p-${p.dbId}" style="font-size:13px;color:var(--steel);padding:8px 0;">
+            <i class="fa-solid fa-circle-notch fa-spin"></i> Calculando horas...
+          </div>`;
+}
 
-  return `
-    <div class="doc-list">
-      ${lista.map(([nombre, d]) => `
-        <div class="doc-row">
-          <div style="min-width:0;">
-            <div class="doc-name">${nombre}</div>
-            <div class="doc-expiry f-mono">
-              ${d.jornadas} jornada${d.jornadas!==1?'s':''}
-              ${d.maquinas.size > 0 ? ' · ' + Array.from(d.maquinas).join(', ') : ' · sin máquina'}
+async function cargarResumenObra(projectDbId) {
+  const pinta = (html) => {
+    const el = document.getElementById('hist-p-' + projectDbId);
+    if (el) el.innerHTML = html;
+  };
+  try {
+    const { data, error } = await getSupabase().rpc('resumen_horas_obra', { p_project_id: projectDbId });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      pinta('Todavía no se ha fichado ninguna jornada aquí.'); return;
+    }
+    const total = data.reduce((s,r) => s + Number(r.horas || 0), 0);
+    pinta(`
+      <div class="doc-list">
+        ${data.map(r => `
+          <div class="doc-row">
+            <div style="min-width:0;">
+              <div class="doc-name">${r.trabajador}</div>
+              <div class="doc-expiry f-mono">${r.jornadas} jornada${r.jornadas!=1?'s':''}${r.maquinas ? ' · ' + r.maquinas : ' · sin máquina'}</div>
             </div>
-          </div>
-          <span class="f-mono" style="font-weight:600;white-space:nowrap;">${d.horas.toLocaleString('es-ES',{maximumFractionDigits:1})} h</span>
-        </div>`).join('')}
-      <div class="doc-row" style="background:var(--amber-bg);border-color:#F0D9A6;">
-        <div class="doc-name" style="font-weight:700;">TOTAL</div>
-        <span class="f-mono" style="font-weight:700;">${total.toLocaleString('es-ES',{maximumFractionDigits:1})} h</span>
+            <span class="f-mono" style="font-weight:600;white-space:nowrap;">${Number(r.horas).toLocaleString('es-ES',{maximumFractionDigits:1})} h</span>
+          </div>`).join('')}
+        <div class="doc-row" style="background:var(--amber-bg);border-color:#F0D9A6;">
+          <div class="doc-name" style="font-weight:700;">TOTAL</div>
+          <span class="f-mono" style="font-weight:700;">${total.toLocaleString('es-ES',{maximumFractionDigits:1})} h</span>
+        </div>
       </div>
-    </div>
-  `;
+    `);
+  } catch (e) {
+    pinta('No se pudieron calcular las horas.');
+  }
 }
 
 function openObraDrawer(id) {
@@ -2039,25 +2044,22 @@ function cortarSuscripcion() {
   clearTimeout(recargaPendiente);
 }
 
+/* Solo se traen los fichajes de los últimos 60 días, y como mucho 300.
+   Para históricos más largos están los filtros del registro de horas, que
+   consultan la base de datos bajo demanda. Los totales y resúmenes los
+   calcula Postgres — así da igual que haya 100 fichajes o 10 millones. */
+const DIAS_FICHAJES_EN_MEMORIA = 60;
+
 async function cargarFichajes() {
   try {
+    const desde = new Date(Date.now() - DIAS_FICHAJES_EN_MEMORIA * 86400000).toISOString();
     const { data, error } = await getSupabase()
-      .from('time_logs').select('*').order('check_in', { ascending: false }).limit(500);
+      .from('time_logs').select('*')
+      .gte('check_in', desde)
+      .order('check_in', { ascending: false })
+      .limit(300);
     if (error) throw error;
-    timeLogs = (data || []).map(l => {
-      const w = workers.find(x => x.dbId === l.worker_id);
-      const p = projects.find(x => x.dbId === l.project_id);
-      const m = machines.find(x => x.dbId === l.machine_id);
-      return {
-        dbId: l.id, workerId: l.worker_id, worker: w ? w.name : 'Trabajador dado de baja',
-        projectDbId: l.project_id, project: p ? p.name : '—', projectCode: p ? p.id : '—',
-        machine: m ? m.id : '—',
-        checkInISO: l.check_in, checkOutISO: l.check_out,
-        date: l.check_in.slice(0,10),
-        checkIn: horaDe(l.check_in), checkOut: l.check_out ? horaDe(l.check_out) : '—',
-        hours: l.check_out ? horasDecimales(l.check_in, l.check_out) : 0,
-      };
-    });
+    timeLogs = (data || []).map(mapearFichaje);
     // Un trabajador con jornada abierta cuenta como "trabajando"
     const abiertos = new Set((data || []).filter(l => !l.check_out).map(l => l.worker_id));
     workers.forEach(w => {
@@ -2235,20 +2237,65 @@ async function ficharAhora() {
 let filtroFichajeDesde = '', filtroFichajeHasta = '', filtroFichajeTrabajador = '';
 
 function fichajesFiltrados() {
-  return timeLogs.filter(l => {
-    if (filtroFichajeTrabajador && l.workerId !== filtroFichajeTrabajador) return false;
-    if (filtroFichajeDesde && l.date < filtroFichajeDesde) return false;
-    if (filtroFichajeHasta && l.date > filtroFichajeHasta) return false;
+  const base = resultadosFiltro !== null ? resultadosFiltro : timeLogs;
+  return base.filter(l => {
+    // Un trabajador solo ve lo suyo, filtre lo que filtre
     if (currentUser.isWorker) { const f = miFichaTrabajador(); if (!f || l.workerId !== f.dbId) return false; }
     return true;
   });
 }
 
-function aplicarFiltroFichaje() {
-  filtroFichajeDesde = document.getElementById('ff-desde')?.value || '';
-  filtroFichajeHasta = document.getElementById('ff-hasta')?.value || '';
-  filtroFichajeTrabajador = document.getElementById('ff-trabajador')?.value || '';
+/* Los filtros consultan la base de datos, no la memoria: así se pueden pedir
+   fichajes de hace dos años sin tenerlos cargados todo el rato. */
+let resultadosFiltro = null;   // null = usar los que ya hay en memoria
+let filtrando = false;
+
+async function aplicarFiltroFichaje() {
+  const el = (id) => document.getElementById(id);
+  filtroFichajeDesde = (el('ff-desde') && el('ff-desde').value) || '';
+  filtroFichajeHasta = (el('ff-hasta') && el('ff-hasta').value) || '';
+  filtroFichajeTrabajador = (el('ff-trabajador') && el('ff-trabajador').value) || '';
+
+  // Sin filtros: volvemos a lo que ya está cargado
+  if (!filtroFichajeDesde && !filtroFichajeHasta && !filtroFichajeTrabajador) {
+    resultadosFiltro = null;
+    renderFichaje();
+    return;
+  }
+
+  filtrando = true;
   renderFichaje();
+  try {
+    let q = getSupabase().from('time_logs').select('*').order('check_in', { ascending: false }).limit(2000);
+    if (filtroFichajeDesde) q = q.gte('check_in', filtroFichajeDesde + 'T00:00:00');
+    if (filtroFichajeHasta) q = q.lte('check_in', filtroFichajeHasta + 'T23:59:59');
+    if (filtroFichajeTrabajador) q = q.eq('worker_id', filtroFichajeTrabajador);
+    const { data, error } = await q;
+    if (error) throw error;
+    resultadosFiltro = (data || []).map(mapearFichaje);
+  } catch (e) {
+    alert('No se pudieron cargar los fichajes: ' + (e.message || 'inténtalo de nuevo.'));
+    resultadosFiltro = [];
+  } finally {
+    filtrando = false;
+    renderFichaje();
+  }
+}
+
+/* Convierte una fila de la base de datos al formato que usa la app */
+function mapearFichaje(l) {
+  const w = workers.find(x => x.dbId === l.worker_id);
+  const p = projects.find(x => x.dbId === l.project_id);
+  const m = machines.find(x => x.dbId === l.machine_id);
+  return {
+    dbId: l.id, workerId: l.worker_id, worker: w ? w.name : 'Trabajador dado de baja',
+    projectDbId: l.project_id, project: p ? p.name : '—', projectCode: p ? p.id : '—',
+    machine: m ? m.id : '—',
+    checkInISO: l.check_in, checkOutISO: l.check_out,
+    date: l.check_in.slice(0,10),
+    checkIn: horaDe(l.check_in), checkOut: l.check_out ? horaDe(l.check_out) : '—',
+    hours: l.check_out ? horasDecimales(l.check_in, l.check_out) : 0,
+  };
 }
 
 function renderRegistroHoras() {
@@ -2289,10 +2336,14 @@ function renderRegistroHoras() {
         <span class="f-display" style="font-size:15px;">${esAdmin ? 'REGISTRO DE FICHAJES' : 'MIS HORAS'}</span>
         <span class="f-mono" style="font-size:11px;color:var(--steel);">${visible.length} de ${lista.length}</span>
       </div>
-      ${lista.length === 0 ? `
+      ${filtrando ? `
+        <div class="empty-state" style="padding:40px 20px;">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);">Buscando fichajes...</div>
+        </div>` : lista.length === 0 ? `
         <div class="empty-state" style="padding:40px 20px;">
           <i class="fa-solid fa-clock"></i>
-          <div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay fichajes</div>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);">${resultadosFiltro !== null ? 'Sin fichajes con estos filtros' : 'Todavía no hay fichajes'}</div>
           <div style="font-size:13px;margin-top:3px;">Aparecerán aquí en cuanto tu equipo empiece a fichar.</div>
         </div>` : `
       <div class="table-scroll">
@@ -3132,57 +3183,63 @@ function renderTrabajadores() {
 
 /* Historial real de un trabajador: dónde ha trabajado, cuántas horas y con qué
    máquina. Se calcula de los fichajes guardados, no hay nada escrito a mano. */
+/* El resumen lo calcula Postgres (resumen_horas_trabajador). Da igual que el
+   trabajador tenga 10 fichajes o 100.000: siempre devuelve una línea por obra. */
 function historialTrabajador(w) {
-  const suyos = timeLogs.filter(l => l.workerId === w.dbId && l.checkOutISO);
-  if (suyos.length === 0) {
-    return `<div style="font-size:13px;color:var(--steel);padding:8px 0;">Todavía no ha fichado ninguna jornada.</div>`;
-  }
+  cargarResumenTrabajador(w.dbId);
+  return `<div id="hist-w-${w.dbId}" style="font-size:13px;color:var(--steel);padding:8px 0;">
+            <i class="fa-solid fa-circle-notch fa-spin"></i> Calculando horas...
+          </div>`;
+}
 
-  const mesActual = new Date().toISOString().slice(0,7);
-  const horasMes = suyos.filter(l => l.date.startsWith(mesActual)).reduce((s,l) => s + l.hours, 0);
-  const horasTotal = suyos.reduce((s,l) => s + l.hours, 0);
+async function cargarResumenTrabajador(workerDbId) {
+  const pinta = (html) => {
+    const el = document.getElementById('hist-w-' + workerDbId);
+    if (el) el.innerHTML = html;
+  };
+  try {
+    const { data, error } = await getSupabase().rpc('resumen_horas_trabajador', { p_worker_id: workerDbId });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      pinta('Todavía no ha fichado ninguna jornada.'); return;
+    }
+    const horasTotal = data.reduce((s,r) => s + Number(r.horas || 0), 0);
+    const jornadas = data.reduce((s,r) => s + Number(r.jornadas || 0), 0);
+    const mesActual = new Date().toISOString().slice(0,7);
+    const horasMes = timeLogs
+      .filter(l => l.workerId === workerDbId && l.checkOutISO && l.date.startsWith(mesActual))
+      .reduce((s,l) => s + l.hours, 0);
 
-  // Agrupar por obra
-  const porObra = {};
-  suyos.forEach(l => {
-    const clave = l.project || 'Sin asignar';
-    if (!porObra[clave]) porObra[clave] = { horas: 0, jornadas: 0, maquinas: new Set() };
-    porObra[clave].horas += l.hours;
-    porObra[clave].jornadas += 1;
-    if (l.machine && l.machine !== '—') porObra[clave].maquinas.add(l.machine);
-  });
-  const lista = Object.entries(porObra).sort((a,b) => b[1].horas - a[1].horas);
-
-  return `
-    <div style="display:flex;gap:10px;margin-bottom:10px;">
-      <div class="plate" style="flex:1;padding:12px;text-align:center;">
-        <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Este mes</div>
-        <div class="f-display" style="font-size:20px;margin-top:2px;">${horasMes.toLocaleString('es-ES',{maximumFractionDigits:1})} h</div>
+    pinta(`
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <div class="plate" style="flex:1;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Este mes</div>
+          <div class="f-display" style="font-size:20px;margin-top:2px;">${horasMes.toLocaleString('es-ES',{maximumFractionDigits:1})} h</div>
+        </div>
+        <div class="plate" style="flex:1;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Total</div>
+          <div class="f-display" style="font-size:20px;margin-top:2px;">${horasTotal.toLocaleString('es-ES',{maximumFractionDigits:1})} h</div>
+        </div>
+        <div class="plate" style="flex:1;padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Jornadas</div>
+          <div class="f-display" style="font-size:20px;margin-top:2px;">${jornadas}</div>
+        </div>
       </div>
-      <div class="plate" style="flex:1;padding:12px;text-align:center;">
-        <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Total</div>
-        <div class="f-display" style="font-size:20px;margin-top:2px;">${horasTotal.toLocaleString('es-ES',{maximumFractionDigits:1})} h</div>
-      </div>
-      <div class="plate" style="flex:1;padding:12px;text-align:center;">
-        <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Jornadas</div>
-        <div class="f-display" style="font-size:20px;margin-top:2px;">${suyos.length}</div>
-      </div>
-    </div>
-    <div class="doc-list">
-      ${lista.map(([obra, d]) => `
-        <div class="doc-row">
-          <div style="min-width:0;">
-            <div class="doc-name">${obra}</div>
-            <div class="doc-expiry f-mono">
-              ${d.jornadas} jornada${d.jornadas!==1?'s':''}
-              ${d.maquinas.size > 0 ? ' · ' + Array.from(d.maquinas).join(', ') : ' · sin máquina'}
+      <div class="doc-list">
+        ${data.map(r => `
+          <div class="doc-row">
+            <div style="min-width:0;">
+              <div class="doc-name">${r.proyecto}</div>
+              <div class="doc-expiry f-mono">${r.jornadas} jornada${r.jornadas!=1?'s':''}${r.maquinas ? ' · ' + r.maquinas : ' · sin máquina'}</div>
             </div>
-          </div>
-          <span class="f-mono" style="font-weight:600;white-space:nowrap;">${d.horas.toLocaleString('es-ES',{maximumFractionDigits:1})} h</span>
-        </div>`).join('')}
-    </div>
-    <button class="add-doc-btn" onclick="verHorasDe('${w.dbId}')"><i class="fa-solid fa-table-list"></i> Ver todos sus fichajes</button>
-  `;
+            <span class="f-mono" style="font-weight:600;white-space:nowrap;">${Number(r.horas).toLocaleString('es-ES',{maximumFractionDigits:1})} h</span>
+          </div>`).join('')}
+      </div>
+      <button class="add-doc-btn" onclick="verHorasDe('${workerDbId}')"><i class="fa-solid fa-table-list"></i> Ver todos sus fichajes</button>
+    `);
+  } catch (e) {
+    pinta('No se pudieron calcular las horas.');
+  }
 }
 
 /* Lleva al registro de horas ya filtrado por ese trabajador */
@@ -3193,6 +3250,9 @@ function verHorasDe(workerDbId) {
   fichajeSubTab = 'registro';
   switchTab('fichaje');
   renderFichaje();
+  // El desplegable ya existe: lo seleccionamos y lanzamos la búsqueda real
+  const sel = document.getElementById('ff-trabajador');
+  if (sel) { sel.value = workerDbId; aplicarFiltroFichaje(); }
 }
 
 function openWorkerDrawer(id) {
@@ -3597,7 +3657,13 @@ async function cargarIncidencias() {
       const ficha = miFichaTrabajador();
       ({ data, error } = await sb.rpc('worker_incidencias', { p_worker_id: ficha.dbId, p_pin: ficha.pin }));
     } else {
-      ({ data, error } = await sb.from('incidents').select('*').order('created_at', { ascending: false }));
+      // Todas las abiertas siempre, y solo las 30 resueltas más recientes
+      const [abiertas, resueltas] = await Promise.all([
+        sb.from('incidents').select('*').eq('resolved', false).order('created_at', { ascending: false }),
+        sb.from('incidents').select('*').eq('resolved', true).order('resolved_at', { ascending: false }).limit(30),
+      ]);
+      error = abiertas.error || resueltas.error;
+      data = [...(abiertas.data || []), ...(resueltas.data || [])];
     }
     if (error) throw error;
     incidents = (data || []).map(i => {
@@ -3989,7 +4055,13 @@ function exportarCobros() {
 
 async function cargarCobros() {
   try {
-    const { data, error } = await getSupabase().from('invoices').select('*').order('due_date', { ascending: false });
+    const sb = getSupabase();
+    const [pend, pag] = await Promise.all([
+      sb.from('invoices').select('*').neq('status', 'paid').order('due_date', { ascending: false }),
+      sb.from('invoices').select('*').eq('status', 'paid').order('paid_at', { ascending: false }).limit(50),
+    ]);
+    const error = pend.error || pag.error;
+    const data = [...(pend.data || []), ...(pag.data || [])];
     if (error) throw error;
     invoices = (data || []).map(i => {
       const p = projects.find(x => x.dbId === i.project_id);
