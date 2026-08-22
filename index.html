@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Opertra · Prototipo</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1C2126">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Opertra">
+<meta name="description" content="Fichaje, maquinaria, obras e incidencias para empresas de construcción, transporte y mantenimiento.">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -34,7 +41,12 @@
     --idle-bg: #EEEFEF;
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* En iPhone, evita que la página rebote al hacer scroll dentro de la app */
+  html { -webkit-text-size-adjust: 100%; }
+  /* Los campos de formulario en iOS necesitan 16px o el navegador hace zoom solo */
+  input, select, textarea { font-size: 16px; }
+  @media (min-width: 769px) { input, select, textarea { font-size: 14px; } }
   .hidden { display: none !important; }
   body { margin: 0; font-family: 'Manrope', sans-serif; background: var(--surface); color: var(--ink); line-height: 1.45; }
   .f-display { font-family: 'Oswald', sans-serif; letter-spacing: 0.015em; }
@@ -380,6 +392,11 @@
   .maps-btn { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; text-align: center; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink); text-decoration: none; }
   .maps-btn:hover { background: var(--surface); }
 
+  /* ============ INSTALAR APP ============ */
+  #install-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 190; background: var(--graphite); border-top: 1px solid var(--graphite-line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 20px rgba(0,0,0,0.3); }
+  #install-banner-inner { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  @media (max-width: 768px) { #main { padding-bottom: 72px; } }
+
   /* ============ BANNER DE COOKIES ============ */
   #cookie-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; background: var(--graphite); border-top: 2px solid var(--amber); padding: 16px 6vw calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 20px rgba(0,0,0,0.3); }
   #cookie-banner-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; color: white; }
@@ -553,7 +570,7 @@
   <section class="land-hero">
     <span class="land-eyebrow">Software para constructoras, excavaciones y flotas de maquinaria</span>
     <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde un solo sitio</h1>
-    <p class="land-sub">Fichaje por QR/NFC, ubicación de cada máquina, incidencias al momento y facturación por obra. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
+    <p class="land-sub">Fichaje escaneando el código de la máquina, ubicación de cada una, incidencias al momento y facturación por obra. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
     <div class="land-cta-row">
       <button class="btn btn-amber" style="padding:14px 24px;font-size:15px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
       <button class="btn btn-outline" style="padding:14px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
@@ -581,7 +598,7 @@
     <div class="land-feature-grid">
       <div class="land-feature-card"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y facturas de cada obra en una ficha.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-truck"></i><b>Maquinaria + GPS</b><span>Ubicación real de cada máquina en un mapa, documentación e ITV con avisos automáticos.</span></div>
-      <div class="land-feature-card"><i class="fa-solid fa-tower-broadcast"></i><b>Fichaje QR/NFC</b><span>El trabajador ficha tocando la etiqueta de su máquina. Sin geolocalizar a las personas.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-tower-broadcast"></i><b>Fichaje con QR</b><span>El trabajador escanea el código pegado en su máquina y ficha. Funciona en cualquier móvil, sin geolocalizar a las personas.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-bullhorn"></i><b>Incidencias con foto</b><span>Cualquier trabajador reporta una avería en segundos, con prioridad y foto.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-umbrella-beach"></i><b>Vacaciones</b><span>Vacaciones del equipo de un vistazo, para no solapar bajas en la misma obra.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-file-invoice-dollar"></i><b>Facturación</b><span>Facturas ligadas a la obra y al cliente, con pendientes y vencidas siempre a la vista.</span></div>
@@ -592,7 +609,7 @@
     <h2 class="land-h2">Cómo funciona</h2>
     <div class="land-steps">
       <div class="land-step"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
-      <div class="land-step"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina tiene su etiqueta única para fichar y su dispositivo GPS.</span></div>
+      <div class="land-step"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina lleva su etiqueta única. El trabajador la escanea para fichar.</span></div>
       <div class="land-step"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Sin formación: tocar el código y ya está fichado.</span></div>
       <div class="land-step"><span class="land-step-num">4</span><b>Tú ves todo desde el panel</b><span>Quién trabaja, dónde está cada máquina, qué incidencias hay abiertas.</span></div>
     </div>
@@ -607,7 +624,7 @@
         <div class="land-price-amount">99€<span>/mes</span></div>
         <span class="land-price-desc">Hasta 5 máquinas y 10 trabajadores</span>
         <ul class="land-price-list">
-          <li><i class="fa-solid fa-check"></i> Fichaje QR/NFC</li>
+          <li><i class="fa-solid fa-check"></i> Fichaje con QR</li>
           <li><i class="fa-solid fa-check"></i> Maquinaria + GPS</li>
           <li><i class="fa-solid fa-check"></i> Incidencias</li>
           <li><i class="fa-solid fa-check"></i> 1 obra activa</li>
@@ -906,6 +923,20 @@
 
 <div id="modal-overlay">
   <div id="add-machine-modal"></div>
+</div>
+
+<div id="install-banner" class="hidden">
+  <div id="install-banner-inner">
+    <div class="brand-icon" style="width:38px;height:38px;flex-shrink:0;"><i class="fa-solid fa-truck"></i></div>
+    <div style="flex:1;min-width:180px;">
+      <div style="font-size:13.5px;font-weight:700;color:white;">Instala Opertra en tu móvil</div>
+      <div id="install-texto" style="font-size:12px;color:#C7CBD0;margin-top:2px;line-height:1.45;"></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-amber" id="btn-instalar" style="padding:9px 14px;font-size:13px;">Instalar</button>
+      <button class="btn-ghost" style="color:#8A9199;" onclick="cerrarInstalacion()">Ahora no</button>
+    </div>
+  </div>
 </div>
 
 <div id="cookie-banner" class="hidden">
@@ -1360,7 +1391,7 @@ const NAV = [
 const VIEW_META = {
   dashboard: ["Panel general", "Vista de hoy, 5 de agosto"],
   obras: [null, null],
-  fichaje: ["Fichaje", "Verificación por NFC/QR en la máquina"],
+  fichaje: ["Fichaje", "Escanea el código de tu máquina para fichar"],
   maquinaria: ["Maquinaria", machines.length + " máquinas registradas"],
   trabajadores: ["Trabajadores", workers.length + " trabajadores registrados"],
   avisos: ["Avisos", "Incidencias reportadas por el equipo"],
@@ -1943,28 +1974,16 @@ async function submitAddObra() {
 }
 
 /* ============ FICHAJE ============ */
-let fichajeMode = 'qr';
-let fichajeScanning = false;
-let fichajeError = '';
 let fichajeSubTab = 'fichar'; // 'fichar' | 'registro'
-let fichajeWantsCheckout = false;
-let qrActive = false;
 let timeLogVisible = 8;
-let qrStream = null;
-let qrAnimFrame = null;
-let nfcAbortController = null;
 
 function showFichajeTab(tab) {
   stopQRScan(); stopNFCScan();
-  fichajeSubTab = tab; fichajeError = ''; fichajeWantsCheckout = false; qrActive = false;
+  fichajeSubTab = tab;
   renderFichaje();
 }
 
-function myAssignedMachine() {
-  const w = workers.find(x => x.id === currentUser.id);
-  if (!w || w.machine === '—') return null;
-  return machines.find(m => m.id === w.machine) || null;
-}
+
 
 /* ======================================================================
    FICHAJE REAL
@@ -2174,8 +2193,8 @@ function renderFicharCard() {
               ${(() => { const p = projects.find(x => x.dbId === abierto.projectId); return p ? `<i class="fa-solid fa-diagram-project"></i> ${p.name}` : ''; })()}
               ${machine ? ` · <span class="f-mono">${machine.id}</span>` : ''}
             </div>
-            <button class="btn btn-dark" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="ficharAhora()">
-              <i class="fa-solid fa-right-from-bracket"></i> Fichar salida
+            <button class="btn btn-dark" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
+              <i class="fa-solid fa-${machine ? 'qrcode' : 'right-from-bracket'}"></i> ${machine ? 'Escanear y fichar salida' : 'Fichar salida'}
             </button>
             <div style="font-size:12px;color:var(--steel);margin-top:10px;line-height:1.5;">
               Si cambias de ${t('s')}, ficha salida y vuelve a fichar entrada eligiendo la nueva. Así las horas quedan bien repartidas.
@@ -2196,16 +2215,17 @@ function renderFicharCard() {
               ${machine
                 ? `<div style="font-size:13px;color:var(--steel);margin-top:10px;"><i class="fa-solid fa-truck"></i> Con <span class="f-mono">${machine.id}</span> · ${machine.type}</div>`
                 : `<div style="font-size:12.5px;color:var(--steel);margin-top:10px;">Sin máquina asignada — puedes fichar igualmente.</div>`}
-              <button class="btn btn-amber" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="ficharAhora()">
-                <i class="fa-solid fa-right-to-bracket"></i> Fichar entrada
+              <button class="btn btn-amber" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
+                <i class="fa-solid fa-${machine ? 'qrcode' : 'right-to-bracket'}"></i> ${machine ? 'Escanear y fichar' : 'Fichar entrada'}
               </button>
+              ${machine ? `<div style="font-size:11.5px;color:var(--steel);margin-top:8px;">Escanea el código de la máquina para confirmar que estás con ella.</div>` : ''}
             `}
           `}
         </div>
 
         <div class="plate privacy-note" style="margin-top:16px;">${rivets}
           <i class="fa-solid fa-shield" style="color:var(--blue);margin-top:1px;"></i>
-          <div>No se recoge tu ubicación en ningún momento. Solo se guarda la hora de entrada y salida y en qué ${t('s')} has trabajado.</div>
+          <div>No se recoge tu ubicación en ningún momento. Solo se guarda la hora de entrada y salida y en qué ${t('s')} has trabajado.${nfcDisponible() ? ' La cámara solo lee el código: la imagen no se guarda ni se envía a ningún sitio.' : ''}</div>
         </div>
       </div>
     </div>
@@ -2258,6 +2278,189 @@ async function ficharAhora() {
   } finally {
     fichajeCargando = false;
   }
+}
+
+/* ======================================================================
+   ESCANEO DE QR Y NFC
+   El QR funciona en Android y en iPhone. El NFC solo en Chrome para
+   Android: Apple no permite leer NFC desde una web, así que en iPhone
+   ni siquiera se ofrece la opción para no confundir al trabajador.
+   ====================================================================== */
+let qrStream = null;
+let qrAnimFrame = null;
+let nfcAbortController = null;
+let escaneando = false;
+let escanearError = '';
+let modoEscaneo = 'qr';
+
+function nfcDisponible() {
+  return 'NDEFReader' in window;
+}
+
+function stopQRScan() {
+  if (qrAnimFrame) { cancelAnimationFrame(qrAnimFrame); qrAnimFrame = null; }
+  if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+}
+
+function stopNFCScan() {
+  if (nfcAbortController) { try { nfcAbortController.abort(); } catch(e) {} nfcAbortController = null; }
+}
+
+function cerrarEscaneo() {
+  stopQRScan(); stopNFCScan();
+  escaneando = false; escanearError = '';
+  document.getElementById('modal-overlay').classList.remove('active');
+  renderFichaje();
+}
+
+/* Abre el escáner para confirmar el fichaje con la máquina */
+function abrirEscaneo() {
+  const machine = myAssignedMachine();
+  if (!machine) { ficharAhora(); return; } // sin máquina, se ficha directo
+
+  escanearError = '';
+  modoEscaneo = 'qr';
+  pintarEscaneo();
+  document.getElementById('modal-overlay').classList.add('active');
+  iniciarQR();
+}
+
+function pintarEscaneo() {
+  const machine = myAssignedMachine();
+  const conNFC = nfcDisponible();
+
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Confirma tu máquina</span>
+      <button class="drawer-close" onclick="cerrarEscaneo()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">
+      Escanea el código pegado en <span class="f-mono">${machine.id}</span> para confirmar que estás con ella.
+    </div>
+
+    ${conNFC ? `
+    <div class="mode-toggle" style="margin-top:14px;display:flex;">
+      <button class="mode-btn ${modoEscaneo==='qr'?'active':''}" style="flex:1;justify-content:center;" onclick="cambiarModoEscaneo('qr')"><i class="fa-solid fa-qrcode"></i> Cámara</button>
+      <button class="mode-btn ${modoEscaneo==='nfc'?'active':''}" style="flex:1;justify-content:center;" onclick="cambiarModoEscaneo('nfc')"><i class="fa-solid fa-wifi"></i> NFC</button>
+    </div>` : ''}
+
+    ${modoEscaneo === 'qr' ? `
+      <div class="qr-scan-box">
+        <video id="qr-video" autoplay playsinline muted></video>
+        <div class="qr-scan-frame"></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--steel);margin-top:10px;text-align:center;">
+        Apunta con la cámara al código QR de la máquina
+      </div>
+    ` : `
+      <div class="scan-ring ${escaneando ? 'scanning' : ''}" style="margin-top:20px;">
+        <div class="scan-inner"><i class="fa-solid fa-wifi"></i></div>
+      </div>
+      <div style="font-size:13px;margin-top:16px;text-align:center;">
+        ${escaneando ? 'Acerca el móvil a la etiqueta NFC...' : 'Pulsa el botón y acerca el móvil a la etiqueta'}
+      </div>
+      <button class="btn btn-amber" style="width:100%;justify-content:center;margin-top:14px;padding:12px;" onclick="iniciarNFC()" ${escaneando?'disabled':''}>
+        <i class="fa-solid fa-wifi"></i> ${escaneando ? 'Leyendo...' : 'Leer etiqueta NFC'}
+      </button>
+    `}
+
+    ${escanearError ? `<div class="login-error" style="display:flex;margin-top:14px;"><i class="fa-solid fa-circle-exclamation"></i> <span>${escanearError}</span></div>` : ''}
+
+    <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:14px;padding:11px;" onclick="cerrarEscaneo()">Cancelar</button>
+  `;
+}
+
+function cambiarModoEscaneo(m) {
+  stopQRScan(); stopNFCScan();
+  escaneando = false; escanearError = '';
+  modoEscaneo = m;
+  pintarEscaneo();
+  if (m === 'qr') iniciarQR();
+}
+
+async function iniciarQR() {
+  const video = document.getElementById('qr-video');
+  if (!video) return;
+
+  if (!window.isSecureContext) {
+    escanearError = 'La cámara necesita una conexión segura (https). Abre la app desde su dirección web, no como archivo local.';
+    pintarEscaneo(); return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    escanearError = 'Este navegador no permite usar la cámara.';
+    pintarEscaneo(); return;
+  }
+
+  try {
+    qrStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }, audio: false,
+    });
+    video.srcObject = qrStream;
+    // En iPhone hace falta esperar a que el vídeo esté listo antes de reproducir
+    video.setAttribute('playsinline', 'true');
+    await video.play();
+
+    const lienzo = document.createElement('canvas');
+    const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+
+    const mirar = () => {
+      if (!qrStream) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+        lienzo.width = video.videoWidth;
+        lienzo.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, lienzo.width, lienzo.height);
+        try {
+          const datos = ctx.getImageData(0, 0, lienzo.width, lienzo.height);
+          const codigo = window.jsQR ? jsQR(datos.data, datos.width, datos.height) : null;
+          if (codigo && codigo.data) { comprobarCodigo(codigo.data); return; }
+        } catch (e) { /* seguimos mirando */ }
+      }
+      qrAnimFrame = requestAnimationFrame(mirar);
+    };
+    qrAnimFrame = requestAnimationFrame(mirar);
+  } catch (err) {
+    escanearError = err.name === 'NotAllowedError'
+      ? 'Has denegado el permiso de cámara. Actívalo en los ajustes del navegador para este sitio.'
+      : 'No se pudo abrir la cámara: ' + (err.message || 'inténtalo de nuevo.');
+    pintarEscaneo();
+  }
+}
+
+async function iniciarNFC() {
+  if (!nfcDisponible()) return;
+  try {
+    escaneando = true; escanearError = '';
+    pintarEscaneo();
+    const ndef = new NDEFReader();
+    nfcAbortController = new AbortController();
+    await ndef.scan({ signal: nfcAbortController.signal });
+    ndef.onreading = (evento) => {
+      let texto = '';
+      try {
+        const registro = evento.message.records[0];
+        texto = new TextDecoder(registro.encoding || 'utf-8').decode(registro.data);
+      } catch (e) { texto = evento.serialNumber || ''; }
+      comprobarCodigo(texto);
+    };
+  } catch (err) {
+    escaneando = false;
+    escanearError = 'No se pudo leer NFC. Comprueba que esté activado en los ajustes del móvil.';
+    pintarEscaneo();
+  }
+}
+
+/* Valida que el código escaneado sea el de su máquina y ficha */
+function comprobarCodigo(texto) {
+  stopQRScan(); stopNFCScan();
+  escaneando = false;
+  const machine = myAssignedMachine();
+  if (!machine || String(texto).trim() !== machine.qrCode) {
+    escanearError = `Ese código no es el de tu máquina (${machine ? machine.id : '—'}). Comprueba que escaneas la etiqueta correcta.`;
+    pintarEscaneo();
+    return;
+  }
+  document.getElementById('modal-overlay').classList.remove('active');
+  ficharAhora();
 }
 
 /* ============ REGISTRO DE HORAS (admin) ============ */
@@ -4918,6 +5121,72 @@ const LEGAL_CONTENT = {
   },
 };
 
+/* ======================================================================
+   INSTALAR COMO APP (PWA)
+   Opertra se instala en el móvil sin pasar por App Store ni Play Store:
+   el trabajador la añade a su pantalla de inicio y se abre como una app
+   normal, a pantalla completa. En Android el navegador ofrece un botón;
+   en iPhone hay que explicarle el gesto porque Safari no lo permite.
+   ====================================================================== */
+let promptInstalacion = null;
+const INSTALL_KEY = 'opertra_install_v1';
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  promptInstalacion = e;
+  mostrarBannerInstalacion();
+});
+
+function yaInstalada() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function esIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function mostrarBannerInstalacion() {
+  if (yaInstalada()) return;
+  try { if (localStorage.getItem(INSTALL_KEY) === 'no') return; } catch (e) {}
+  if (window.innerWidth > 900) return; // solo tiene sentido en móvil o tablet
+
+  const banner = document.getElementById('install-banner');
+  const texto = document.getElementById('install-texto');
+  const boton = document.getElementById('btn-instalar');
+  if (!banner) return;
+
+  if (esIOS()) {
+    texto.textContent = 'Pulsa Compartir y luego "Añadir a pantalla de inicio".';
+    boton.style.display = 'none';
+  } else if (promptInstalacion) {
+    texto.textContent = 'Tenla a mano como cualquier otra app, sin buscar el enlace.';
+    boton.style.display = '';
+    boton.onclick = instalarApp;
+  } else {
+    return; // el navegador no lo permite todavía
+  }
+  banner.classList.remove('hidden');
+}
+
+async function instalarApp() {
+  if (!promptInstalacion) return;
+  promptInstalacion.prompt();
+  try { await promptInstalacion.userChoice; } catch (e) {}
+  promptInstalacion = null;
+  cerrarInstalacion();
+}
+
+function cerrarInstalacion() {
+  try { localStorage.setItem(INSTALL_KEY, 'no'); } catch (e) {}
+  const b = document.getElementById('install-banner');
+  if (b) b.classList.add('hidden');
+}
+
+/* En iPhone no hay evento: lo comprobamos al entrar */
+function comprobarInstalacion() {
+  if (esIOS()) setTimeout(mostrarBannerInstalacion, 3000);
+}
+
 /* ============ CONSENTIMIENTO DE COOKIES ============
    Hoy solo usamos cookies técnicas, que no requieren consentimiento, pero
    informar es obligatorio (art. 22.2 LSSI). Si algún día se añaden cookies
@@ -4976,6 +5245,7 @@ renderClientes();
 renderFacturacion();
 renderInformes();
 comprobarCookies();
+comprobarInstalacion();
 handleAuthRedirect().then(checkExistingSession); // procesa el enlace del correo (si lo hay) y luego decide qué pantalla mostrar
 
 document.addEventListener('click', (e) => {
