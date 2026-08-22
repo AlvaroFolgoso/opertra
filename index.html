@@ -1195,8 +1195,9 @@ async function loadCompanyData() {
     await cargarFichajes();
     await cargarEstadoFichaje();
     await cargarIncidencias();
+    await cargarCobros();
 
-    renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje(); renderAvisos(); renderNav();
+    renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje(); renderAvisos(); renderNav(); renderFacturacion(); renderClientes();
     arrancarContador();
     suscribirCambios();
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
@@ -1262,8 +1263,8 @@ function obraSchedule(p) {
 /* Todo esto sale de las asignaciones reales — nada hardcodeado por obra */
 function projectWorkers(id) { return workers.filter(w => w.project === id); }
 function projectMachines(id) { return machines.filter(m => m.project === id); }
-function projectInvoices(id) { return invoices.filter(i => i.project === id); }
-function projectOpenIncidents(id) { return incidents.filter(i => !i.resolved && i.project === id); }
+function projectInvoices(id) { const p = projects.find(x => x.id === id); return p ? invoices.filter(i => i.projectDbId === p.dbId) : []; }
+function projectOpenIncidents(id) { const p = projects.find(x => x.id === id); return p ? incidents.filter(i => !i.resolved && i.project === p.name) : []; }
 function projectHoursThisMonth(id) {
   const p = projects.find(x => x.id === id);
   if (!p) return 0;
@@ -1274,12 +1275,7 @@ function projectHoursThisMonth(id) {
 }
 
 /* Facturas — base mínima real que alimenta los KPIs y la alerta de vencidas (nada hardcodeado) */
-const invoices = [
-  { id: "2026-0142", client: "Promociones del Sur S.A.", project: "OBR-01", amount: 3344.20, dueDate: "2026-08-20", status: "pending" },
-  { id: "2026-0139", client: "Grupo Edinca", project: "OBR-02", amount: 1980.00, dueDate: "2026-08-04", status: "overdue" },
-  { id: "2026-0135", client: "Interno", project: "OBR-03", amount: 610.00, dueDate: "2026-07-30", status: "paid" },
-  { id: "2026-0128", client: "Promociones del Sur S.A.", project: "OBR-01", amount: 2200.00, dueDate: "2026-08-25", status: "pending" },
-];
+let invoices = [];
 
 /* ======================================================================
    PERSISTENCIA REAL (localStorage) — los datos sobreviven a cerrar la
@@ -1293,16 +1289,9 @@ const STORAGE_KEY = 'opertra_demo_v1';
    Supabase de verdad (ver loadCompanyData). Lo que queda aquí (trabajadores,
    incidencias, facturas, fichajes) sigue siendo de ejemplo hasta que se
    migre también, y por eso de momento se sigue guardando en este navegador. */
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      invoices,
-      savedAt: Date.now(),
-    }));
-  } catch (e) {
-    console.warn('No se pudo guardar en localStorage', e);
-  }
-}
+/* Ya no se guarda nada en el navegador: todo vive en Supabase.
+   Se mantiene la función vacía por si algún punto antiguo la llama. */
+function saveState() {}
 
 function loadState() {
   let raw;
@@ -1336,7 +1325,7 @@ const NAV = [
   { key: "trabajadores", label: "Trabajadores", icon: "fa-users" },
   { key: "avisos", label: "Avisos", icon: "fa-bullhorn" },
   { key: "clientes", label: "Clientes", icon: "fa-address-book" },
-  { key: "facturacion", label: "Facturación", icon: "fa-file-invoice" },
+  { key: "facturacion", label: "Cobros", icon: "fa-file-invoice-dollar" },
   { key: "informes", label: "Informes", icon: "fa-chart-simple" },
 ];
 
@@ -1348,7 +1337,7 @@ const VIEW_META = {
   trabajadores: ["Trabajadores", workers.length + " trabajadores registrados"],
   avisos: ["Avisos", "Incidencias reportadas por el equipo"],
   clientes: ["Clientes", null],
-  facturacion: ["Facturación", "Todas las facturas emitidas"],
+  facturacion: ["Cobros", "Control de lo facturado y pendiente de cobrar"],
   informes: ["Informes", "Datos reales de la actividad de la empresa"],
 };
 
@@ -1529,9 +1518,9 @@ function buildCriticalAlerts() {
   urgentIncidents.forEach(inc => {
     alerts.push({ sev: 'red', icon: 'fa-triangle-exclamation', text: `Incidencia de prioridad alta sin resolver: ${inc.title} (${inc.project||'sin obra'})`, tab: 'avisos' });
   });
-  invoices.filter(i => i.status === 'overdue').forEach(inv => {
-    const daysOverdue = Math.round((TODAY - new Date(inv.dueDate)) / 86400000);
-    alerts.push({ sev: 'red', icon: 'fa-file-invoice-dollar', text: `Factura ${inv.id} vencida hace ${daysOverdue} días — ${inv.client}`, tab: 'facturacion' });
+  invoices.filter(i => estadoCobro(i) === 'overdue').forEach(inv => {
+    const daysOverdue = Math.round((new Date() - new Date(inv.dueDate)) / 86400000);
+    alerts.push({ sev: 'red', icon: 'fa-file-invoice-dollar', text: `Cobro de ${inv.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} € vencido hace ${daysOverdue} días — ${inv.client || 'sin cliente'}`, tab: 'facturacion' });
   });
 
   const sevOrder = { red: 0, orange: 1, yellow: 2 };
@@ -1549,8 +1538,8 @@ function renderDashboard() {
   const openToday = todayLogs.filter(l => l.checkOut === '—').length;
   const closedToday = todayLogs.length - openToday;
   const facturacionMes = invoices.reduce((s,i) => s + i.amount, 0);
-  const pendientes = invoices.filter(i => i.status !== 'paid');
-  const vencidas = invoices.filter(i => i.status === 'overdue').length;
+  const pendientes = invoices.filter(i => estadoCobro(i) !== 'paid');
+  const vencidas = invoices.filter(i => estadoCobro(i) === 'overdue').length;
   const alerts = buildCriticalAlerts();
 
   document.getElementById('view-dashboard').innerHTML = `
@@ -1604,13 +1593,13 @@ function renderDashboard() {
       ${canAccess('facturacion') ? `
       <div class="plate kpi-card" onclick="switchTab('facturacion')">${rivets}
         <div class="stat-top">
-          <div><div class="stat-label">Facturación (facturas emitidas)</div><div class="stat-value">${facturacionMes.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div><div class="stat-sub">${invoices.length} facturas emitidas</div></div>
+          <div><div class="stat-label">Total facturado</div><div class="stat-value">${facturacionMes.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div><div class="stat-sub">${invoices.length} apunte(s) registrados</div></div>
           <div class="stat-icon" style="background:#5B657018;color:var(--steel)"><i class="fa-solid fa-sack-dollar"></i></div>
         </div>
       </div>
       <div class="plate kpi-card" onclick="switchTab('facturacion')">${rivets}
         <div class="stat-top">
-          <div><div class="stat-label">Facturas pendientes</div><div class="stat-value">${pendientes.length}</div><div class="stat-sub">${vencidas>0?vencidas+' vencida'+(vencidas>1?'s':''):'ninguna vencida'}</div></div>
+          <div><div class="stat-label">Pendiente de cobro</div><div class="stat-value">${pendientes.length}</div><div class="stat-sub">${vencidas>0?vencidas+' vencida'+(vencidas>1?'s':''):'ninguna vencida'}</div></div>
           <div class="stat-icon" style="background:#C87F0018;color:var(--amber-deep)"><i class="fa-solid fa-file-invoice"></i></div>
         </div>
       </div>` : ''}
@@ -1711,7 +1700,7 @@ function openObraDrawer(id) {
   const pWorkers = projectWorkers(id);
   const pMachines = projectMachines(id);
   const pInvoices = projectInvoices(id);
-  const pIncidents = incidents.filter(i => i.project === id).sort((a,b) => b.time - a.time);
+  const pIncidents = incidents.filter(i => i.project === p.name).sort((a,b) => b.time - a.time);
   const hours = projectHoursThisMonth(id);
 
   const freeWorkers = workers.filter(w => w.project !== id);
@@ -1987,6 +1976,7 @@ function suscribirCambios() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'workers', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents', filter: filtro }, recargarEnBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: filtro }, recargarEnBreve)
     .subscribe();
 }
 
@@ -3520,11 +3510,11 @@ function clientList() {
   const names = [...new Set(projects.map(p => p.client))];
   return names.map(name => {
     const clientProjects = projects.filter(p => p.client === name);
-    const projectIds = clientProjects.map(p => p.id);
-    const clientInvoices = invoices.filter(i => projectIds.includes(i.project));
+    const projectDbIds = clientProjects.map(p => p.dbId);
+    const clientInvoices = invoices.filter(i => projectDbIds.includes(i.projectDbId));
     const total = clientInvoices.reduce((s,i) => s + i.amount, 0);
-    const pending = clientInvoices.filter(i => i.status !== 'paid').reduce((s,i) => s + i.amount, 0);
-    const overdue = clientInvoices.filter(i => i.status === 'overdue').length;
+    const pending = clientInvoices.filter(i => estadoCobro(i) !== 'paid').reduce((s,i) => s + i.amount, 0);
+    const overdue = clientInvoices.filter(i => estadoCobro(i) === 'overdue').length;
     return { name, projects: clientProjects, invoices: clientInvoices, total, pending, overdue };
   });
 }
@@ -3603,209 +3593,303 @@ function openClientDrawer(name) {
 }
 
 /* ============ FACTURACION ============ */
-let facturaSeleccionada = null;
+
+/* ======================================================================
+   COBROS — control interno, NO facturación legal
+   Opertra no emite facturas fiscales (eso exige software certificado
+   Verifactu). Aquí se lleva el control de qué se ha facturado a cada obra,
+   qué está pendiente y qué está vencido, ligado a las horas reales.
+   ====================================================================== */
+function estadoCobro(inv) {
+  if (inv.status === 'paid') return 'paid';
+  const hoy = new Date().toISOString().slice(0,10);
+  return inv.dueDate < hoy ? 'overdue' : 'pending';
+}
 
 function invStatusChip(status) {
-  const map = { paid: ['vigente','Pagada'], overdue: ['caducado','Vencida'], pending: ['proximo','Pendiente'] };
-  const [cls,label] = map[status];
-  return `<span class="chip status-${cls}"><span class="dot"></span>${label}</span>`;
+  const map = { paid: ['vigente','Cobrado'], overdue: ['caducado','Vencido'], pending: ['proximo','Pendiente'] };
+  const par = map[status] || map.pending;
+  return `<span class="chip status-${par[0]}"><span class="dot"></span>${par[1]}</span>`;
 }
+
+let filtroCobros = 'todos';
+
+function cobrosFiltrados() {
+  return invoices.filter(i => {
+    const e = estadoCobro(i);
+    if (filtroCobros === 'pendientes') return e !== 'paid';
+    if (filtroCobros === 'vencidos') return e === 'overdue';
+    if (filtroCobros === 'cobrados') return e === 'paid';
+    return true;
+  }).sort((a,b) => b.dueDate.localeCompare(a.dueDate));
+}
+
+function filtrarCobros(f) { filtroCobros = f; renderFacturacion(); }
 
 function renderFacturacion() {
-  if (!facturaSeleccionada && invoices.length > 0) facturaSeleccionada = invoices[0].id;
-  const sorted = invoices.slice().sort((a,b) => b.dueDate.localeCompare(a.dueDate));
+  const lista = cobrosFiltrados();
+  const pendiente = invoices.filter(i => estadoCobro(i) !== 'paid').reduce((s,i) => s + i.amount, 0);
+  const vencido = invoices.filter(i => estadoCobro(i) === 'overdue').reduce((s,i) => s + i.amount, 0);
+  const cobrado = invoices.filter(i => estadoCobro(i) === 'paid').reduce((s,i) => s + i.amount, 0);
+
+  const filtros = [
+    { k: 'todos', l: 'Todos' }, { k: 'pendientes', l: 'Pendientes' },
+    { k: 'vencidos', l: 'Vencidos' }, { k: 'cobrados', l: 'Cobrados' },
+  ];
 
   document.getElementById('view-facturacion').innerHTML = `
-    <div class="fact-wrap">
-      <div class="template-col" style="width:260px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span class="f-display" style="font-size:13px;color:var(--steel);">FACTURAS (${invoices.length})</span>
-          <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="openAddInvoiceModal()"><i class="fa-solid fa-plus"></i></button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
-          ${sorted.map(i => `
-            <div class="plate ${i.id===facturaSeleccionada?'template-active':''}" style="padding:10px 12px;cursor:pointer;" onclick="facturaSeleccionada='${i.id}';renderFacturacion();">
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="f-mono" style="font-size:12.5px;font-weight:600;">${i.id}</span>
-                ${invStatusChip(i.status)}
-              </div>
-              <div style="font-size:12px;color:var(--steel);margin-top:3px;">${i.client}</div>
-              <div style="font-size:12px;font-weight:600;margin-top:2px;">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} €</div>
-            </div>`).join('')}
+    <div class="plate" style="padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start;">${rivets}
+      <i class="fa-solid fa-circle-info" style="color:var(--blue);margin-top:2px;"></i>
+      <div style="font-size:12.5px;color:var(--steel);line-height:1.55;">
+        Esto es un <b>control de cobros</b>, no un programa de facturación: Opertra no emite facturas con validez fiscal.
+        Emite tus facturas con tu programa habitual o tu gestoría, y anótalas aquí con su referencia para saber
+        en todo momento qué está cobrado y qué no, ligado a cada ${t('s')}.
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:18px;">
+      <div class="plate kpi-card" onclick="filtrarCobros('pendientes')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Pendiente de cobro</div><div class="stat-value">${pendiente.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div><div class="stat-sub">${invoices.filter(i=>estadoCobro(i)!=='paid').length} apunte(s)</div></div>
+          <div class="stat-icon" style="background:#C87F0018;color:var(--amber-deep)"><i class="fa-solid fa-hourglass-half"></i></div>
         </div>
       </div>
+      <div class="plate kpi-card" onclick="filtrarCobros('vencidos')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Vencido</div><div class="stat-value" style="color:${vencido>0?'var(--danger)':'var(--ink)'};">${vencido.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div><div class="stat-sub">${invoices.filter(i=>estadoCobro(i)==='overdue').length} sin cobrar a tiempo</div></div>
+          <div class="stat-icon" style="background:#C0392B18;color:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        </div>
+      </div>
+      <div class="plate kpi-card" onclick="filtrarCobros('cobrados')">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Cobrado</div><div class="stat-value">${cobrado.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div><div class="stat-sub">${invoices.filter(i=>estadoCobro(i)==='paid').length} apunte(s)</div></div>
+          <div class="stat-icon" style="background:#2F8F5B18;color:var(--success)"><i class="fa-solid fa-circle-check"></i></div>
+        </div>
+      </div>
+    </div>
 
-      ${renderInvoicePreview(invoices.find(i => i.id === facturaSeleccionada))}
+    <div class="toolbar">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${filtros.map(f => `<button class="mode-btn ${filtroCobros===f.k?'active':''}" style="background:${filtroCobros===f.k?'var(--card)':'var(--surface)'};border:1px solid var(--border);border-radius:99px;" onclick="filtrarCobros('${f.k}')">${f.l}</button>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline" onclick="exportarCobros()"><i class="fa-solid fa-file-arrow-down"></i> Exportar</button>
+        <button class="btn btn-amber" onclick="openAddInvoiceModal()"><i class="fa-solid fa-plus"></i> Anotar cobro</button>
+      </div>
+    </div>
+
+    <div class="plate" style="padding:0;overflow:hidden;">${rivets}
+      ${lista.length === 0 ? `
+        <div class="empty-state" style="padding:40px 20px;">
+          <i class="fa-solid fa-file-invoice-dollar"></i>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);">${invoices.length === 0 ? 'Todavía no hay cobros anotados' : 'Sin resultados con este filtro'}</div>
+          <div style="font-size:13px;margin-top:3px;">${invoices.length === 0 ? 'Anota lo que factures a cada cliente para llevar el control.' : 'Prueba con otro filtro.'}</div>
+        </div>` : `
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Referencia</th><th>Cliente</th><th>${t('S')}</th><th>Concepto</th><th>Importe</th><th>Vence</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(i => {
+              const e = estadoCobro(i);
+              return `
+              <tr>
+                <td class="f-mono" style="font-size:12.5px;">${i.reference || '—'}</td>
+                <td style="font-weight:500;">${i.client || '—'}</td>
+                <td style="font-size:12.5px;color:var(--steel);">${i.projectName || '—'}</td>
+                <td style="font-size:12.5px;color:var(--steel);">${i.concept || '—'}</td>
+                <td class="f-mono" style="font-weight:600;">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</td>
+                <td class="f-mono" style="font-size:12.5px;color:${e==='overdue'?'var(--danger)':'var(--steel)'};">${fmtDate(i.dueDate)}</td>
+                <td>${invStatusChip(e)}</td>
+                <td style="white-space:nowrap;">
+                  ${e !== 'paid'
+                    ? `<button class="resolve-btn" style="padding:5px 10px;font-size:12px;" onclick="markInvoicePaid('${i.dbId}')"><i class="fa-solid fa-check"></i> Cobrado</button>`
+                    : `<button class="btn-ghost" onclick="markInvoicePending('${i.dbId}')">deshacer</button>`}
+                  <button class="vac-delete" onclick="borrarCobro('${i.dbId}')" title="Borrar"><i class="fa-solid fa-trash-can"></i></button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`}
     </div>
   `;
 }
 
-function renderInvoicePreview(inv) {
-  if (!inv) return `<div class="plate empty-state invoice-doc">${rivets}<i class="fa-solid fa-file-invoice"></i><div style="font-size:13px;">No hay facturas todavía. Crea la primera con el botón +.</div></div>`;
-  const iva = inv.amount * 0.21 / 1.21;
-  const base = inv.amount - iva;
-
-  return `
-    <div class="plate invoice-doc">${rivets}
-      <div class="inv-header">
-        <div>
-          <div class="inv-logo"><i class="fa-solid fa-truck"></i></div>
-          <div class="f-display" style="font-size:15px;">CONSTRUCCIONES IBARRA S.L.</div>
-          <div style="font-size:12px;color:var(--steel);margin-top:4px;">CIF B-12345678 · Pol. Ind. Las Cañadas, Nave 4</div>
-        </div>
-        <div style="text-align:right;">
-          <div class="f-mono" style="font-size:12px;color:var(--steel);">FACTURA</div>
-          <div class="f-mono" style="font-size:18px;font-weight:500;">${inv.id}</div>
-          <div style="font-size:12px;color:var(--steel);margin-top:4px;">Vence: ${fmtDate(inv.dueDate)}</div>
-          <div style="margin-top:6px;">${invStatusChip(inv.status)}</div>
-        </div>
-      </div>
-
-      <div style="padding:20px 0;display:flex;justify-content:space-between;">
-        <div>
-          <div style="font-size:11px;text-transform:uppercase;color:var(--steel);">Cliente</div>
-          <div style="font-size:14px;margin-top:4px;">${inv.client}</div>
-        </div>
-        ${inv.project ? `<div><div style="font-size:11px;text-transform:uppercase;color:var(--steel);">${t('S')}</div><div style="font-size:14px;margin-top:4px;" class="f-mono">${inv.project}</div></div>` : ''}
-      </div>
-
-      <table class="inv-table">
-        <thead><tr style="border-bottom:1px solid var(--border);">
-          <th style="text-align:left;color:var(--steel);">Concepto</th>
-          <th style="text-align:right;color:var(--steel);">Importe</th>
-        </tr></thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td>${inv.concept || 'Servicios prestados'}</td>
-            <td class="f-mono" style="text-align:right;">${base.toLocaleString('es-ES',{minimumFractionDigits:2})} €</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="inv-totals">
-        <div class="inv-totals-box">
-          <div class="inv-total-row"><span style="color:var(--steel);">Base imponible</span><span class="f-mono">${base.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
-          <div class="inv-total-row"><span style="color:var(--steel);">IVA (21%)</span><span class="f-mono">${iva.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
-          <div class="inv-total-row inv-grand"><span>TOTAL</span><span class="f-mono">${inv.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} €</span></div>
-        </div>
-      </div>
-
-      ${inv.status !== 'paid' ? `<button class="btn btn-dark" style="margin-top:16px;justify-content:center;" onclick="markInvoicePaid('${inv.id}')"><i class="fa-solid fa-check"></i> Marcar como pagada</button>` : ''}
-    </div>
-  `;
-}
-
-function markInvoicePaid(id) {
-  const inv = invoices.find(i => i.id === id);
-  inv.status = 'paid';
-  saveState();
-  renderFacturacion();
-  renderDashboard();
-}
-
-/* ============ NUEVA FACTURA (modal) ============ */
-/* ============ VINCULAR DISPOSITIVO GPS (modal) ============ */
-function openLinkDeviceModal(machineId) {
-  const m = machines.find(x => x.id === machineId);
-  document.getElementById('add-machine-modal').innerHTML = `
-    <div class="modal-top">
-      <span class="f-display" style="font-size:18px;">${m.device.linked ? 'Cambiar' : 'Vincular'} dispositivo GPS</span>
-      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div style="font-size:13px;color:var(--steel);margin-top:4px;">Para ${m.id} · ${m.type} ${m.model}</div>
-
-    <div class="form-group">
-      <label class="form-label">Código del dispositivo</label>
-      <input class="form-input" id="ld-id" placeholder="Ej. TRK-2301" value="${m.device.id || ''}">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Modelo del dispositivo</label>
-      <select class="form-select" id="ld-model">
-        <option ${m.device.model==='Queclink GV75'?'selected':''}>Queclink GV75</option>
-        <option ${m.device.model==='Ruptela ECO4'?'selected':''}>Ruptela ECO4</option>
-        <option ${m.device.model==='Teltonika FMB920'?'selected':''}>Teltonika FMB920</option>
-        <option>Otro</option>
-      </select>
-    </div>
-    <div class="form-hint">
-      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-      <span>Guarda aquí el código de serie del dispositivo GPS. <b>Importante:</b> esto solo lo deja registrado — para que la máquina envíe su ubicación de verdad hace falta tener el dispositivo instalado y configurado por el instalador o el fabricante.</span>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
-      <button class="btn btn-amber" onclick="submitLinkDevice('${m.id}')">${m.device.linked ? 'Guardar cambios' : 'Vincular'}</button>
-    </div>
-  `;
-  document.getElementById('modal-overlay').classList.add('active');
-}
-
-async function submitLinkDevice(machineId) {
-  const id = document.getElementById('ld-id').value.trim();
-  const model = document.getElementById('ld-model').value;
-  if (!id) { document.getElementById('ld-id').focus(); return; }
-  const m = machines.find(x => x.id === machineId);
+async function markInvoicePaid(dbId) {
   try {
-    const { error } = await getSupabase().from('machines').update({
-      device_id: id, device_model: model, device_linked: true,
-    }).eq('id', m.dbId);
+    const { error } = await getSupabase().from('invoices')
+      .update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', dbId);
     if (error) throw error;
-    m.device = { id, model, linked: true };
-    m.gpsAge = 'esperando señal';
-    closeAddMachineModal();
-    openDrawer(machineId);
-    renderMaquinaria();
+    const inv = invoices.find(i => i.dbId === dbId);
+    if (inv) { inv.status = 'paid'; inv.paidAt = new Date().toISOString(); }
+    renderFacturacion(); renderDashboard(); renderClientes();
   } catch (err) {
-    alert('No se pudo vincular el dispositivo: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo marcar como cobrado: ' + (err.message || 'inténtalo de nuevo.'));
   }
 }
 
+async function markInvoicePending(dbId) {
+  try {
+    const { error } = await getSupabase().from('invoices')
+      .update({ status: 'pending', paid_at: null }).eq('id', dbId);
+    if (error) throw error;
+    const inv = invoices.find(i => i.dbId === dbId);
+    if (inv) { inv.status = 'pending'; inv.paidAt = null; }
+    renderFacturacion(); renderDashboard(); renderClientes();
+  } catch (err) {
+    alert('No se pudo deshacer: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+async function borrarCobro(dbId) {
+  const inv = invoices.find(i => i.dbId === dbId);
+  if (!inv) return;
+  if (!confirm('¿Borrar este apunte de cobro? Esta acción no se puede deshacer.')) return;
+  try {
+    const { error } = await getSupabase().from('invoices').delete().eq('id', dbId);
+    if (error) throw error;
+    invoices = invoices.filter(i => i.dbId !== dbId);
+    renderFacturacion(); renderDashboard(); renderClientes();
+  } catch (err) {
+    alert('No se pudo borrar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+function autoRellenarCliente() {
+  const sel = document.getElementById('ni-project');
+  const opt = sel.options[sel.selectedIndex];
+  const cliente = (opt && opt.dataset.cliente) || '';
+  const campo = document.getElementById('ni-client');
+  if (cliente && !campo.value.trim()) campo.value = cliente;
+}
+
 function openAddInvoiceModal() {
+  const en30 = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
-      <span class="f-display" style="font-size:18px;">Nueva factura</span>
+      <span class="f-display" style="font-size:18px;">Anotar cobro</span>
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="form-group" style="margin-top:16px;">
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">Apunta lo que has facturado para llevar el control de cobros.</div>
+
+    <div class="form-group">
       <label class="form-label">${t('S')}</label>
-      <select class="form-select" id="ni-project">
-        ${projects.map(p => `<option value="${p.id}">${p.id} · ${p.name} (${p.client})</option>`).join('')}
+      <select class="form-select" id="ni-project" onchange="autoRellenarCliente()">
+        <option value="">Sin ${t('s')} asociada</option>
+        ${projects.map(p => `<option value="${p.dbId}" data-cliente="${(p.client||'').replace(/"/g,'&quot;')}">${p.id} · ${p.name}</option>`).join('')}
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cliente</label>
+      <input class="form-input" id="ni-client" placeholder="Nombre del cliente">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Referencia de tu factura (opcional)</label>
+      <input class="form-input f-mono" id="ni-reference" placeholder="Ej. F-2026/0142">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>El número de la factura que emitiste con tu programa, para poder cruzarlas.</span>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">Concepto</label>
       <input class="form-input" id="ni-concept" placeholder="Ej. Alquiler de maquinaria — agosto">
     </div>
     <div class="form-group">
-      <label class="form-label">Importe total (IVA incluido)</label>
-      <input class="form-input" type="number" step="0.01" id="ni-amount" placeholder="0.00">
+      <label class="form-label">Importe total (€)</label>
+      <input class="form-input" type="number" step="0.01" min="0" id="ni-amount" placeholder="0.00">
     </div>
     <div class="form-group">
       <label class="form-label">Fecha de vencimiento</label>
-      <input class="form-input" type="date" id="ni-due">
+      <input class="form-input" type="date" id="ni-due" value="${en30}">
     </div>
+    <div id="ni-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="ni-error-text"></span></div>
+
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
-      <button class="btn btn-amber" onclick="submitAddInvoice()">Guardar factura</button>
+      <button class="btn btn-amber" id="ni-submit" onclick="submitAddInvoice()">Guardar</button>
     </div>
   `;
   document.getElementById('modal-overlay').classList.add('active');
 }
 
-function submitAddInvoice() {
-  const projectId = document.getElementById('ni-project').value;
+async function submitAddInvoice() {
+  const projectId = document.getElementById('ni-project').value || null;
+  const client = document.getElementById('ni-client').value.trim();
+  const reference = document.getElementById('ni-reference').value.trim();
   const concept = document.getElementById('ni-concept').value.trim();
   const amount = parseFloat(document.getElementById('ni-amount').value);
   const dueDate = document.getElementById('ni-due').value;
-  if (!amount || !dueDate) return;
-  const p = projects.find(x => x.id === projectId);
-  const newId = '2026-' + String(200 + invoices.length).padStart(4,'0');
-  invoices.push({ id: newId, client: p.client, project: projectId, concept, amount, dueDate, status: 'pending' });
-  facturaSeleccionada = newId;
-  saveState();
-  closeAddMachineModal();
-  renderFacturacion();
-  renderDashboard();
+  const errBox = document.getElementById('ni-error');
+  errBox.style.display = 'none';
+
+  if (!amount || amount <= 0) {
+    document.getElementById('ni-error-text').textContent = 'Pon un importe válido.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (!dueDate) {
+    document.getElementById('ni-error-text').textContent = 'Pon una fecha de vencimiento.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  setButtonLoading('ni-submit', true, 'Guardando...', 'Guardar');
+  try {
+    const { data, error } = await getSupabase().from('invoices').insert({
+      company_id: currentUser.companyId, project_id: projectId,
+      client: client || null, reference: reference || null, concept: concept || null,
+      amount, due_date: dueDate, status: 'pending',
+    }).select().single();
+    if (error) throw error;
+
+    const p = projects.find(x => x.dbId === projectId);
+    invoices.push({
+      dbId: data.id, client: data.client, reference: data.reference, concept: data.concept,
+      projectDbId: data.project_id, projectName: p ? p.name : null, projectCode: p ? p.id : null,
+      amount: Number(data.amount), dueDate: data.due_date, status: data.status, paidAt: null,
+    });
+    closeAddMachineModal();
+    renderFacturacion(); renderDashboard(); renderClientes();
+  } catch (err) {
+    document.getElementById('ni-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('ni-submit', false, '', 'Guardar');
+  }
+}
+
+function exportarCobros() {
+  const lista = cobrosFiltrados();
+  if (lista.length === 0) { alert('No hay cobros que exportar con este filtro.'); return; }
+  const cab = ['Referencia', 'Cliente', t('S'), 'Concepto', 'Importe', 'Vencimiento', 'Estado'];
+  const estadoTexto = { paid: 'Cobrado', overdue: 'Vencido', pending: 'Pendiente' };
+  const filas = lista.map(i => [
+    i.reference || '', i.client || '', i.projectName || '', i.concept || '',
+    i.amount.toFixed(2).replace('.', ','), i.dueDate, estadoTexto[estadoCobro(i)],
+  ]);
+  const csv = [cab, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cobros-${currentUser.company.replace(/[^a-zA-Z0-9]/g,'-')}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function cargarCobros() {
+  try {
+    const { data, error } = await getSupabase().from('invoices').select('*').order('due_date', { ascending: false });
+    if (error) throw error;
+    invoices = (data || []).map(i => {
+      const p = projects.find(x => x.dbId === i.project_id);
+      return {
+        dbId: i.id, client: i.client, reference: i.reference, concept: i.concept,
+        projectDbId: i.project_id, projectName: p ? p.name : null, projectCode: p ? p.id : null,
+        amount: Number(i.amount), dueDate: i.due_date, status: i.status, paidAt: i.paid_at,
+      };
+    });
+  } catch (e) { console.error('Error cargando cobros:', e); }
 }
 
 /* ============ INFORMES ============ */
@@ -3832,15 +3916,15 @@ function renderInformes() {
   // Facturación por obra
   const billingByProject = projects.map(p => ({
     name: p.id,
-    amount: invoices.filter(i => i.project === p.id).reduce((s,i) => s + i.amount, 0),
+    amount: invoices.filter(i => i.projectDbId === p.dbId).reduce((s,i) => s + i.amount, 0),
   })).sort((a,b) => b.amount - a.amount);
   const maxBilling = Math.max(1, ...billingByProject.map(b => b.amount));
 
   // Incidencias por obra (abiertas + resueltas, total histórico)
   const incByProject = projects.map(p => ({
     name: p.id,
-    count: incidents.filter(i => i.project === p.id).length,
-    open: incidents.filter(i => i.project === p.id && !i.resolved).length,
+    count: incidents.filter(i => i.project === p.name).length,
+    open: incidents.filter(i => i.project === p.name && !i.resolved).length,
   })).sort((a,b) => b.count - a.count);
   const maxInc = Math.max(1, ...incByProject.map(i => i.count));
 
