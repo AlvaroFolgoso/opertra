@@ -380,6 +380,15 @@
   .maps-btn { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; text-align: center; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink); text-decoration: none; }
   .maps-btn:hover { background: var(--surface); }
 
+  /* ============ BANNER DE COOKIES ============ */
+  #cookie-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; background: var(--graphite); border-top: 2px solid var(--amber); padding: 16px 6vw calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 20px rgba(0,0,0,0.3); }
+  #cookie-banner-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; color: white; }
+  @media (max-width: 768px) {
+    #cookie-banner { padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+    #cookie-banner-inner { gap: 12px; }
+    #cookie-banner-inner button { flex: 1; justify-content: center; }
+  }
+
   /* ============ LEGAL ============ */
   #legal-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: center; justify-content: center; z-index: 70; }
   #legal-overlay.active { display: flex; }
@@ -659,6 +668,7 @@
       <button onclick="openLegal('aviso')">Aviso legal</button>
       <button onclick="openLegal('privacidad')">Privacidad</button>
       <button onclick="openLegal('cookies')">Cookies</button>
+      <button onclick="openLegal('terminos')">Términos de uso</button>
       <button onclick="showLogin()">Iniciar sesión</button>
     </div>
     <span class="land-footer-copy">© 2026 Opertra. Todos los derechos reservados.</span>
@@ -844,6 +854,7 @@
         <button onclick="openLegal('aviso')">Aviso legal</button>
         <button onclick="openLegal('privacidad')">Política de privacidad</button>
         <button onclick="openLegal('cookies')">Política de cookies</button>
+        <button onclick="openLegal('terminos')">Términos de uso</button>
       </div>
     </div>
   </nav>
@@ -895,6 +906,22 @@
 
 <div id="modal-overlay">
   <div id="add-machine-modal"></div>
+</div>
+
+<div id="cookie-banner" class="hidden">
+  <div id="cookie-banner-inner">
+    <div style="flex:1;min-width:240px;">
+      <div style="font-size:14px;font-weight:700;margin-bottom:5px;">Cookies en Opertra</div>
+      <div style="font-size:12.5px;color:#C7CBD0;line-height:1.55;">
+        Usamos solo cookies técnicas necesarias para mantener tu sesión iniciada. No usamos cookies
+        publicitarias ni de seguimiento. <a onclick="openLegal('cookies')" style="color:var(--amber);text-decoration:underline;cursor:pointer;">Más información</a>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline" style="background:transparent;color:white;border-color:#4A5158;padding:10px 16px;" onclick="decidirCookies(false)">Solo necesarias</button>
+      <button class="btn btn-amber" style="padding:10px 18px;" onclick="decidirCookies(true)">Entendido</button>
+    </div>
+  </div>
 </div>
 
 <div id="legal-overlay">
@@ -4645,6 +4672,17 @@ function openUserSettings() {
     </div>` : ''}
 
     <div class="form-group">
+      <label class="form-label">Cookies</label>
+      <div class="form-hint" style="margin-top:0;">
+        <i class="fa-solid fa-cookie-bite" style="margin-top:1px;"></i>
+        <span>Opertra solo usa cookies técnicas para mantener tu sesión. No hay seguimiento ni publicidad.</span>
+      </div>
+      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="reabrirCookies()">
+        <i class="fa-solid fa-rotate-left"></i> Revisar preferencias de cookies
+      </button>
+    </div>
+
+    <div class="form-group">
       <label class="form-label">Tus datos</label>
       <div class="form-hint" style="margin-top:0;">
         <i class="fa-solid fa-database" style="margin-top:1px;"></i>
@@ -4724,53 +4762,193 @@ async function guardarAjustesCuenta() {
 }
 
 /* ============ LEGAL ============ */
+/* ======================================================================
+   TEXTOS LEGALES
+   Los datos entre [corchetes] deben rellenarse antes de dar acceso a
+   ningún cliente real. Estos textos están redactados conforme a la LSSI,
+   el RGPD y la LOPDGDD, pero conviene que un asesor legal los revise
+   antes de la puesta en producción.
+   ====================================================================== */
+const DATOS_TITULAR = {
+  nombre: '[NOMBRE DEL TITULAR]',
+  nif: '[NIF]',
+  domicilio: '[DOMICILIO A EFECTOS DE NOTIFICACIONES]',
+  email: '[CORREO DE CONTACTO]',
+  web: 'opertra.vercel.app',
+};
+
+function bloqueTitular() {
+  return `<p>
+    <b>Titular:</b> ${DATOS_TITULAR.nombre}<br>
+    <b>NIF:</b> ${DATOS_TITULAR.nif}<br>
+    <b>Domicilio:</b> ${DATOS_TITULAR.domicilio}<br>
+    <b>Correo de contacto:</b> ${DATOS_TITULAR.email}<br>
+    <b>Sitio web:</b> ${DATOS_TITULAR.web}
+  </p>`;
+}
+
 const LEGAL_CONTENT = {
   aviso: {
     title: "Aviso legal",
     body: `
-      <p>Este apartado identifica al titular del sitio web y las condiciones generales de uso de la aplicación Opertra, en cumplimiento de la Ley 34/2002 de Servicios de la Sociedad de la Información (LSSI-CE).</p>
-      <h3>Titular</h3>
-      <p>[Razón social] · [CIF] · [Domicilio social] · [Correo de contacto]</p>
-      <h3>Condiciones de uso</h3>
-      <p>El acceso a Opertra atribuye la condición de usuario e implica la aceptación de las condiciones aquí recogidas. El uso indebido de la plataforma, incluyendo el acceso no autorizado a datos de máquinas, trabajadores o facturación de otras empresas, podrá dar lugar a la suspensión de la cuenta.</p>
-      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado y completado por un asesor legal antes de publicarse.</p>
+      <p>Este aviso regula el acceso y uso de Opertra (en adelante, "la aplicación"), en cumplimiento de la Ley 34/2002, de Servicios de la Sociedad de la Información y de Comercio Electrónico (LSSI-CE).</p>
+
+      <h3>1. Datos del titular</h3>
+      ${bloqueTitular()}
+
+      <h3>2. Objeto</h3>
+      <p>Opertra es una aplicación de gestión dirigida a empresas de construcción, transporte, mantenimiento y sectores afines. Permite gestionar personal, maquinaria, trabajos, registro de jornada, incidencias y control de cobros.</p>
+      <p>Opertra <b>no es un programa de facturación</b> ni emite facturas con validez fiscal. El módulo de cobros es una herramienta de control interno.</p>
+
+      <h3>3. Condiciones de acceso</h3>
+      <p>El acceso a la aplicación requiere el registro de una empresa y la creación de credenciales. La empresa contratante es responsable de custodiar sus claves y las de su personal, y de comunicar de inmediato cualquier uso no autorizado.</p>
+      <p>Queda prohibido el acceso no autorizado a datos de otras empresas, la ingeniería inversa, y cualquier uso que pueda dañar o sobrecargar el servicio.</p>
+
+      <h3>4. Responsabilidad</h3>
+      <p>El titular no responde de la veracidad de los datos introducidos por las empresas usuarias ni de las decisiones tomadas a partir de ellos. Se realizan esfuerzos razonables para mantener el servicio disponible, sin garantizar la ausencia de interrupciones por mantenimiento, causas técnicas o de fuerza mayor.</p>
+
+      <h3>5. Propiedad intelectual</h3>
+      <p>El código, diseño, marca y contenidos de la aplicación pertenecen a su titular. Los datos introducidos por cada empresa son propiedad de dicha empresa.</p>
+
+      <h3>6. Legislación aplicable</h3>
+      <p>Estas condiciones se rigen por la legislación española. Para cualquier controversia, las partes se someten a los juzgados y tribunales del domicilio del titular, salvo que la normativa de consumo disponga otro fuero.</p>
     `,
   },
+
   privacidad: {
     title: "Política de privacidad",
     body: `
-      <p>En Opertra tratamos los datos personales de trabajadores y usuarios conforme al Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.</p>
-      <h3>Datos que tratamos</h3>
-      <p>Datos de cuenta (nombre, correo, empresa), datos laborales necesarios para la gestión de fichajes y maquinaria, y las incidencias que reportes voluntariamente. No se recoge la ubicación del trabajador en ningún momento: la geolocalización se aplica exclusivamente a los dispositivos GPS instalados en la maquinaria.</p>
-      <h3>Finalidad y base legal</h3>
-      <p>Gestión de la relación laboral y control de flota, en base a la ejecución del contrato entre tu empresa y Opertra y al interés legítimo en la seguridad de los activos.</p>
-      <h3>Tus derechos</h3>
-      <p>Puedes ejercer tus derechos de acceso, rectificación, supresión, oposición, portabilidad y limitación escribiendo a [correo de contacto].</p>
-      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado por un asesor legal antes de publicarse.</p>
+      <p>Esta política explica cómo se tratan los datos personales en Opertra, conforme al Reglamento (UE) 2016/679 (RGPD) y a la Ley Orgánica 3/2018 (LOPDGDD).</p>
+
+      <h3>1. Responsable del tratamiento</h3>
+      ${bloqueTitular()}
+
+      <h3>2. Doble papel: responsable y encargado</h3>
+      <p>Es importante distinguir dos situaciones:</p>
+      <p><b>Como responsable</b>, se tratan los datos de la persona que registra la empresa (nombre, correo) para prestar el servicio y facturarlo.</p>
+      <p><b>Como encargado del tratamiento</b>, se alojan y procesan los datos que cada empresa introduce sobre su propio personal (nombre, puesto, PIN, documentación laboral, registro de jornada). En este caso, <b>la empresa contratante es la responsable</b> de esos datos: decide qué introduce, para qué, y debe informar a sus trabajadores. El titular de Opertra actúa únicamente siguiendo sus instrucciones.</p>
+
+      <h3>3. Datos que se tratan</h3>
+      <p><b>De la cuenta:</b> nombre, correo electrónico, empresa, contraseña cifrada.</p>
+      <p><b>Del personal de la empresa cliente:</b> nombre, puesto, PIN de acceso, fotografía (opcional), documentación laboral que la empresa decida subir (carnets, certificados, PRL), registro de entradas y salidas, vacaciones e incidencias reportadas.</p>
+      <p><b>De la maquinaria:</b> datos identificativos y, cuando la empresa instala dispositivos GPS, la ubicación de la máquina.</p>
+
+      <h3>4. Sobre la geolocalización</h3>
+      <p><b>Opertra no geolocaliza a las personas.</b> La ubicación se asocia exclusivamente a los dispositivos GPS instalados en la maquinaria, que son bienes de la empresa. El registro de jornada guarda la hora de entrada y salida y el trabajo asignado, pero no la posición del trabajador.</p>
+
+      <h3>5. Finalidad y base jurídica</h3>
+      <p>Prestación del servicio contratado (ejecución del contrato), cumplimiento del registro de jornada exigido por el artículo 34.9 del Estatuto de los Trabajadores (obligación legal de la empresa contratante), y seguridad de los activos de la empresa (interés legítimo).</p>
+
+      <h3>6. Conservación</h3>
+      <p>Los registros de jornada se conservan durante el plazo legalmente exigido a la empresa (cuatro años). El resto de datos se conservan mientras la cuenta esté activa y, tras su baja, durante los plazos de prescripción aplicables.</p>
+
+      <h3>7. Destinatarios y encargados</h3>
+      <p>Los datos se alojan en la infraestructura de Supabase Inc. y Vercel Inc., con servidores en la Unión Europea. No se ceden datos a terceros salvo obligación legal.</p>
+
+      <h3>8. Derechos</h3>
+      <p>Puedes ejercer los derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a ${DATOS_TITULAR.email}, adjuntando copia de un documento identificativo. Si eres trabajador de una empresa usuaria, dirígete en primer lugar a tu empresa, que es la responsable de tus datos.</p>
+      <p>Tienes derecho a reclamar ante la Agencia Española de Protección de Datos (www.aepd.es).</p>
+
+      <h3>9. Seguridad</h3>
+      <p>Se aplican medidas técnicas y organizativas: cifrado en tránsito y en reposo, aislamiento estricto entre empresas a nivel de base de datos, acceso a documentos mediante enlaces temporales y contraseñas almacenadas de forma irreversible.</p>
     `,
   },
+
   cookies: {
     title: "Política de cookies",
     body: `
-      <p>Opertra utiliza cookies técnicas estrictamente necesarias para mantener tu sesión iniciada y recordar tus preferencias dentro de la aplicación.</p>
-      <h3>Tipos de cookies</h3>
-      <p><strong>Técnicas (siempre activas):</strong> gestión de sesión y seguridad.<br><strong>Analíticas (opcionales):</strong> nos ayudan a entender el uso de la app para mejorarla.</p>
-      <p>Puedes gestionar tus preferencias de cookies en cualquier momento desde Ajustes de cuenta.</p>
-      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado por un asesor legal antes de publicarse.</p>
+      <p>Esta política explica qué cookies y tecnologías similares utiliza Opertra, conforme al artículo 22.2 de la LSSI-CE.</p>
+
+      <h3>1. Qué son</h3>
+      <p>Son pequeños archivos que se guardan en tu dispositivo al usar la aplicación y permiten recordar información entre visitas.</p>
+
+      <h3>2. Cookies que utilizamos</h3>
+      <p><b>Técnicas o necesarias (no requieren consentimiento):</b></p>
+      <p>
+        · <b>Sesión de acceso:</b> mantiene tu sesión iniciada para que no tengas que escribir la contraseña cada vez. Duración: hasta que cierras sesión.<br>
+        · <b>Sesión de trabajador:</b> recuerda al trabajador que ha entrado con PIN. Duración: hasta que cierra sesión.<br>
+        · <b>Preferencia de cookies:</b> guarda tu elección en este aviso. Duración: 12 meses.
+      </p>
+      <p><b>Analíticas (opcionales):</b></p>
+      <p>Actualmente <b>Opertra no utiliza cookies analíticas, publicitarias ni de terceros con fines de seguimiento</b>. Si en el futuro se incorporan, se solicitará tu consentimiento previo y esta política se actualizará.</p>
+
+      <h3>3. Cómo gestionarlas</h3>
+      <p>Puedes cambiar tu decisión en cualquier momento desde Ajustes de cuenta, o borrar las cookies desde la configuración de tu navegador. Ten en cuenta que desactivar las cookies técnicas impedirá el funcionamiento de la aplicación, ya que no será posible mantener la sesión iniciada.</p>
     `,
   },
+
   terminos: {
     title: "Términos de uso",
     body: `
-      <p>Estos términos regulan el acceso y uso de Opertra por parte de las empresas clientes y sus trabajadores autorizados.</p>
-      <h3>Licencia de uso</h3>
-      <p>Se concede a la empresa contratante una licencia no exclusiva para el uso de la plataforma durante la vigencia de su suscripción, incluyendo los módulos de maquinaria, fichaje, incidencias y facturación.</p>
-      <h3>Responsabilidad</h3>
-      <p>La empresa contratante es responsable de la veracidad de los datos introducidos y de garantizar que sus trabajadores han sido informados del tratamiento de sus datos conforme a la política de privacidad.</p>
-      <p style="font-style:italic;">Texto de ejemplo para el prototipo — deberá ser revisado por un asesor legal antes de publicarse.</p>
+      <p>Estos términos regulan la contratación y el uso de Opertra por parte de las empresas clientes.</p>
+
+      <h3>1. Objeto y contratación</h3>
+      <p>Opertra se presta como servicio en la nube mediante suscripción. El registro de una empresa implica la aceptación de estos términos por parte de quien lo realiza, que declara tener capacidad para obligar a la empresa.</p>
+
+      <h3>2. Periodo de prueba</h3>
+      <p>Las nuevas cuentas disponen de un periodo de prueba gratuito de 50 días con acceso completo. Al finalizar, será necesario activar una suscripción para seguir accediendo. Los datos introducidos durante la prueba se conservan y quedan disponibles al activar la suscripción.</p>
+
+      <h3>3. Precio y facturación</h3>
+      <p>Los precios vigentes son los publicados en la aplicación. La suscripción es mensual y sin permanencia: puede cancelarse en cualquier momento, surtiendo efecto al final del periodo ya abonado, sin derecho a devolución del periodo en curso.</p>
+
+      <h3>4. Obligaciones de la empresa cliente</h3>
+      <p>La empresa cliente se compromete a:</p>
+      <p>
+        · Introducir datos veraces y mantenerlos actualizados.<br>
+        · <b>Informar a sus trabajadores</b> del tratamiento de sus datos y del uso del sistema de registro de jornada, conforme al RGPD y al Estatuto de los Trabajadores.<br>
+        · Custodiar las credenciales de acceso y los PIN de su personal.<br>
+        · No utilizar la aplicación para finalidades ilícitas ni para vigilar a sus trabajadores más allá de lo permitido por la normativa laboral.
+      </p>
+
+      <h3>5. Naturaleza del servicio</h3>
+      <p>Opertra es una herramienta de gestión. <b>No sustituye a un programa de facturación</b> ni emite documentos con validez fiscal, ni constituye asesoramiento laboral, fiscal o jurídico. La responsabilidad del cumplimiento normativo corresponde a la empresa cliente.</p>
+
+      <h3>6. Disponibilidad y soporte</h3>
+      <p>Se realizarán esfuerzos razonables para mantener el servicio disponible de forma continuada, pudiendo interrumpirse por mantenimiento programado, incidencias técnicas o causas ajenas. El soporte se presta por correo electrónico en horario laboral.</p>
+
+      <h3>7. Tus datos son tuyos</h3>
+      <p>Los datos introducidos son propiedad de la empresa cliente. Puede exportarlos en cualquier momento desde la aplicación. En caso de baja, dispondrá de 30 días para descargarlos, transcurridos los cuales podrán ser eliminados definitivamente.</p>
+
+      <h3>8. Limitación de responsabilidad</h3>
+      <p>Salvo dolo o negligencia grave, la responsabilidad del titular queda limitada al importe abonado por la empresa cliente en los tres meses anteriores al hecho causante.</p>
+
+      <h3>9. Modificaciones</h3>
+      <p>Estos términos podrán actualizarse. Los cambios sustanciales se comunicarán con al menos 30 días de antelación, pudiendo la empresa cliente cancelar la suscripción si no los acepta.</p>
     `,
   },
 };
+
+/* ============ CONSENTIMIENTO DE COOKIES ============
+   Hoy solo usamos cookies técnicas, que no requieren consentimiento, pero
+   informar es obligatorio (art. 22.2 LSSI). Si algún día se añaden cookies
+   analíticas, aquí es donde se comprobaría la decisión del usuario antes
+   de activarlas. */
+const COOKIE_KEY = 'opertra_cookies_v1';
+
+function comprobarCookies() {
+  let decidido = null;
+  try { decidido = localStorage.getItem(COOKIE_KEY); } catch (e) { return; }
+  if (!decidido) document.getElementById('cookie-banner').classList.remove('hidden');
+}
+
+function decidirCookies(aceptaTodo) {
+  try {
+    localStorage.setItem(COOKIE_KEY, JSON.stringify({
+      necesarias: true, analiticas: !!aceptaTodo, fecha: new Date().toISOString(),
+    }));
+  } catch (e) {}
+  document.getElementById('cookie-banner').classList.add('hidden');
+}
+
+function preferenciasCookies() {
+  try { return JSON.parse(localStorage.getItem(COOKIE_KEY) || 'null'); } catch (e) { return null; }
+}
+
+/* Permite cambiar de opinión desde Ajustes */
+function reabrirCookies() {
+  closeAddMachineModal();
+  document.getElementById('cookie-banner').classList.remove('hidden');
+}
 
 function openLegal(type) {
   const c = LEGAL_CONTENT[type];
@@ -4797,6 +4975,7 @@ renderAvisos();
 renderClientes();
 renderFacturacion();
 renderInformes();
+comprobarCookies();
 handleAuthRedirect().then(checkExistingSession); // procesa el enlace del correo (si lo hay) y luego decide qué pantalla mostrar
 
 document.addEventListener('click', (e) => {
