@@ -1200,7 +1200,7 @@ async function loadCompanyData() {
   const sb = getSupabase();
   try {
     const [projRes, machRes, docRes, workRes, vacRes] = await Promise.all([
-      sb.from('projects').select('id,code,name,client,status,start_date,end_date').order('created_at'),
+      sb.from('projects').select('id,code,name,client,status,start_date,end_date,notes').order('created_at'),
       sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked').order('created_at'),
       sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
       sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
@@ -1215,7 +1215,7 @@ async function loadCompanyData() {
     const codeByProjectDbId = {};
     projects = (projRes.data || []).map(p => {
       codeByProjectDbId[p.id] = p.code;
-      return { dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status, start: p.start_date, end: p.end_date };
+      return { dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status, start: p.start_date, end: p.end_date, notes: p.notes };
     });
 
     const docsByMachine = {}, docsByWorker = {};
@@ -1818,6 +1818,375 @@ async function cargarResumenObra(projectDbId) {
   }
 }
 
+/* ============ EDITAR MÁQUINA ============ */
+function openEditMachineModal(code) {
+  const m = machines.find(x => x.id === code);
+  if (!m) return;
+  const tipos = MACHINE_TYPES.filter(x => x !== '__otro__');
+  const esTipoConocido = tipos.includes(m.type);
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Editar máquina</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;"><span class="f-mono">${m.id}</span></div>
+
+    <div class="form-group">
+      <label class="form-label">Tipo</label>
+      <select class="form-select" id="em-type" onchange="toggleEditTipo()">
+        ${tipos.map(x => `<option ${x===m.type?'selected':''}>${x}</option>`).join('')}
+        <option value="__otro__" ${!esTipoConocido?'selected':''}>Otro (escribir)</option>
+      </select>
+      <input class="form-input ${esTipoConocido?'hidden':''}" id="em-type-custom" style="margin-top:8px;" placeholder="Escribe el tipo" value="${esTipoConocido?'':(m.type||'').replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Modelo</label>
+      <input class="form-input" id="em-model" value="${(m.model||'').replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Matrícula / nº de serie</label>
+      <input class="form-input" id="em-plate" value="${m.plate === '—' ? '' : (m.plate||'')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Estado</label>
+      <select class="form-select" id="em-status">
+        <option value="active" ${m.status==='active'?'selected':''}>En marcha</option>
+        <option value="idle" ${m.status==='idle'?'selected':''}>Parada</option>
+        <option value="maintenance" ${m.status==='maintenance'?'selected':''}>En mantenimiento</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('S')} asignada</label>
+      <select class="form-select" id="em-project">
+        <option value="">Sin asignar</option>
+        ${projects.map(p => `<option value="${p.dbId}" ${m.projectDbId===p.dbId?'selected':''}>${p.id} · ${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Combustible (%)</label>
+      <input class="form-input" type="number" min="0" max="100" id="em-fuel" value="${m.fuel || 0}">
+    </div>
+    <div id="em-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="em-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="color:var(--danger);border-color:var(--danger-bg);" onclick="borrarMaquina('${m.id}')">Eliminar</button>
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="em-submit" onclick="guardarMaquina('${m.id}')">Guardar</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function toggleEditTipo() {
+  const esOtro = document.getElementById('em-type').value === '__otro__';
+  document.getElementById('em-type-custom').classList.toggle('hidden', !esOtro);
+}
+
+async function guardarMaquina(code) {
+  const m = machines.find(x => x.id === code);
+  const sel = document.getElementById('em-type').value;
+  const type = sel === '__otro__'
+    ? (document.getElementById('em-type-custom').value.trim() || 'Sin especificar') : sel;
+  const model = document.getElementById('em-model').value.trim() || 'Sin especificar';
+  const plate = document.getElementById('em-plate').value.trim();
+  const status = document.getElementById('em-status').value;
+  const projectId = document.getElementById('em-project').value || null;
+  const fuel = Math.max(0, Math.min(100, parseInt(document.getElementById('em-fuel').value) || 0));
+  const errBox = document.getElementById('em-error');
+  errBox.style.display = 'none';
+
+  setButtonLoading('em-submit', true, 'Guardando...', 'Guardar');
+  try {
+    const { error } = await getSupabase().from('machines').update({
+      type, model, plate: plate || null, status, project_id: projectId, fuel,
+    }).eq('id', m.dbId);
+    if (error) throw error;
+
+    if (m.status !== status) {
+      registrarEnHistorial('estado', 'Máquina', m.id, `${statusLabel[m.status]} → ${statusLabel[status]}`);
+    }
+    const proj = projects.find(p => p.dbId === projectId);
+    Object.assign(m, {
+      type, model, plate: plate || '—', status, fuel,
+      projectDbId: projectId, project: proj ? proj.id : null,
+      location: proj ? proj.name : 'Almacén / sin asignar',
+    });
+    closeAddMachineModal();
+    openDrawer(code);
+    pintarPestanaActual();
+  } catch (err) {
+    document.getElementById('em-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('em-submit', false, '', 'Guardar');
+  }
+}
+
+async function borrarMaquina(code) {
+  const m = machines.find(x => x.id === code);
+  if (!m) return;
+  if (!confirm(`¿Eliminar ${m.id} (${m.type})?\n\nSus documentos y su foto se borrarán también. Los fichajes hechos con ella se conservan.`)) return;
+  try {
+    const { error } = await getSupabase().from('machines').delete().eq('id', m.dbId);
+    if (error) throw error;
+    if (m.photoUrl) borrarArchivo(m.photoUrl);
+    registrarEnHistorial('eliminación', 'Máquina', `${m.id} · ${m.type}`, '');
+    machines = machines.filter(x => x.dbId !== m.dbId);
+    closeAddMachineModal(); closeDrawer();
+    pintarPestanaActual();
+  } catch (err) {
+    alert('No se pudo eliminar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+/* ============ EDITAR TRABAJADOR ============ */
+function openEditWorkerModal(code) {
+  const w = workers.find(x => x.id === code);
+  if (!w) return;
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Editar trabajador</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;"><span class="f-mono">${w.id}</span></div>
+
+    <div class="form-group">
+      <label class="form-label">Nombre y apellidos</label>
+      <input class="form-input" id="ew-name" value="${(w.name||'').replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Puesto</label>
+      <input class="form-input" id="ew-role" list="roles-sugeridos" value="${(w.role||'').replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN de acceso</label>
+      <input class="form-input f-mono" id="ew-pin" maxlength="4" inputmode="numeric" value="${w.pin || ''}" style="font-size:18px;letter-spacing:6px;">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Si lo cambias, avísale: el anterior dejará de funcionar.</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('S')} habitual</label>
+      <select class="form-select" id="ew-project">
+        <option value="">Sin asignar</option>
+        ${projects.map(p => `<option value="${p.dbId}" ${w.projectDbId===p.dbId?'selected':''}>${p.id} · ${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="ew-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="ew-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="color:var(--danger);border-color:var(--danger-bg);" onclick="darDeBajaTrabajador('${w.id}')">Dar de baja</button>
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="ew-submit" onclick="guardarTrabajador('${w.id}')">Guardar</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function guardarTrabajador(code) {
+  const w = workers.find(x => x.id === code);
+  const name = document.getElementById('ew-name').value.trim();
+  const role = document.getElementById('ew-role').value.trim() || 'Operario';
+  const pin = document.getElementById('ew-pin').value.trim();
+  const projectId = document.getElementById('ew-project').value || null;
+  const errBox = document.getElementById('ew-error');
+  errBox.style.display = 'none';
+
+  if (!name) {
+    document.getElementById('ew-error-text').textContent = 'El nombre no puede quedar vacío.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    document.getElementById('ew-error-text').textContent = 'El PIN debe ser de 4 dígitos.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (workers.some(x => x.pin === pin && x.dbId !== w.dbId)) {
+    document.getElementById('ew-error-text').textContent = 'Ese PIN ya lo tiene otro trabajador.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  setButtonLoading('ew-submit', true, 'Guardando...', 'Guardar');
+  try {
+    const { error } = await getSupabase().from('workers').update({
+      name, role, pin, project_id: projectId,
+    }).eq('id', w.dbId);
+    if (error) throw error;
+
+    if (w.pin !== pin) registrarEnHistorial('cambio de PIN', 'Trabajador', name, '');
+    const proj = projects.find(p => p.dbId === projectId);
+    Object.assign(w, { name, role, pin, projectDbId: projectId, project: proj ? proj.id : null });
+    closeAddMachineModal();
+    openWorkerDrawer(code);
+    pintarPestanaActual();
+  } catch (err) {
+    document.getElementById('ew-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('ew-submit', false, '', 'Guardar');
+  }
+}
+
+/* Los trabajadores no se borran: se dan de baja. Así sus fichajes y su
+   historial siguen disponibles, que es lo que exige la ley laboral. */
+async function darDeBajaTrabajador(code) {
+  const w = workers.find(x => x.id === code);
+  if (!w) return;
+  if (!confirm(`¿Dar de baja a ${w.name}?\n\nDejará de poder fichar y no aparecerá en las listas, pero sus horas y su historial se conservan.`)) return;
+  try {
+    const { error } = await getSupabase().from('workers')
+      .update({ active: false, machine_id: null }).eq('id', w.dbId);
+    if (error) throw error;
+    registrarEnHistorial('baja', 'Trabajador', w.name, '');
+    const maq = machines.find(m => m.dbId === w.machineDbId);
+    if (maq) maq.operator = '—';
+    workers = workers.filter(x => x.dbId !== w.dbId);
+    closeAddMachineModal(); closeDrawer();
+    pintarPestanaActual();
+  } catch (err) {
+    alert('No se pudo dar de baja: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+/* ============ EDITAR OBRA ============ */
+function openEditObraModal(code) {
+  const p = projects.find(x => x.id === code);
+  if (!p) return;
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Editar ${t('s')}</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">
+      Ajusta las fechas si el plazo cambia, o marca el estado según cómo vaya.
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Nombre</label>
+      <input class="form-input" id="eo-name" value="${(p.name||'').replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cliente</label>
+      <input class="form-input" id="eo-client" value="${(p.client||'').replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Estado</label>
+      <select class="form-select" id="eo-status">
+        <option value="active" ${p.status==='active'?'selected':''}>En curso</option>
+        <option value="paused" ${p.status==='paused'?'selected':''}>Pausada</option>
+        <option value="finished" ${p.status==='finished'?'selected':''}>Finalizada</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fecha de inicio</label>
+      <input class="form-input" type="date" id="eo-start" value="${p.start}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fecha de fin prevista</label>
+      <input class="form-input" type="date" id="eo-end" value="${p.end}">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Si el trabajo se alarga o termina antes, cambia esta fecha: el porcentaje de plazo se recalcula solo.</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notas (opcional)</label>
+      <textarea class="textarea" id="eo-notes" placeholder="Cambios de plazo, acuerdos, observaciones...">${p.notes || ''}</textarea>
+    </div>
+    <div id="eo-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="eo-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="color:var(--danger);border-color:var(--danger-bg);" onclick="borrarObra('${p.id}')">Eliminar</button>
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="eo-submit" onclick="guardarObra('${p.id}')">Guardar</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function guardarObra(code) {
+  const p = projects.find(x => x.id === code);
+  const name = document.getElementById('eo-name').value.trim();
+  const client = document.getElementById('eo-client').value.trim();
+  const status = document.getElementById('eo-status').value;
+  const start = document.getElementById('eo-start').value;
+  const end = document.getElementById('eo-end').value;
+  const notes = document.getElementById('eo-notes').value.trim();
+  const errBox = document.getElementById('eo-error');
+  errBox.style.display = 'none';
+
+  if (!name) {
+    document.getElementById('eo-error-text').textContent = 'El nombre no puede quedar vacío.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (!start || !end) {
+    document.getElementById('eo-error-text').textContent = 'Pon las dos fechas.';
+    errBox.style.display = 'flex'; return;
+  }
+  if (end < start) {
+    document.getElementById('eo-error-text').textContent = 'La fecha de fin no puede ser anterior a la de inicio.';
+    errBox.style.display = 'flex'; return;
+  }
+
+  setButtonLoading('eo-submit', true, 'Guardando...', 'Guardar');
+  try {
+    const cambios = { name, client: client || null, status, start_date: start, end_date: end, notes: notes || null };
+    if (status === 'finished' && p.status !== 'finished') cambios.finished_at = new Date().toISOString().slice(0,10);
+    if (status !== 'finished') cambios.finished_at = null;
+
+    const { error } = await getSupabase().from('projects').update(cambios).eq('id', p.dbId);
+    if (error) throw error;
+
+    // Dejar constancia del cambio de plazo, que es lo que más se discute con un cliente
+    if (p.end !== end) {
+      registrarEnHistorial('plazo', t('S'), name, `Fin previsto: ${fmtDate(p.end)} → ${fmtDate(end)}`);
+    }
+    if (p.status !== status) {
+      registrarEnHistorial('estado', t('S'), name, `${obraStatusLabel[p.status]} → ${obraStatusLabel[status]}`);
+    }
+
+    Object.assign(p, { name, client, status, start, end, notes });
+    closeAddMachineModal();
+    openObraDrawer(code);
+    pintarPestanaActual();
+  } catch (err) {
+    document.getElementById('eo-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('eo-submit', false, '', 'Guardar');
+  }
+}
+
+async function borrarObra(code) {
+  const p = projects.find(x => x.id === code);
+  if (!p) return;
+  const conFichajes = timeLogs.some(l => l.projectDbId === p.dbId);
+  const aviso = conFichajes
+    ? `"${p.name}" tiene fichajes registrados. Si la eliminas, esos fichajes se quedarán sin ${t('s')} asignada, pero las horas NO se pierden.\n\n¿Seguro que quieres eliminarla?`
+    : `¿Eliminar "${p.name}"? Esta acción no se puede deshacer.`;
+  if (!confirm(aviso)) return;
+  try {
+    const { error } = await getSupabase().from('projects').delete().eq('id', p.dbId);
+    if (error) throw error;
+    registrarEnHistorial('eliminación', t('S'), p.name, '');
+    projects = projects.filter(x => x.dbId !== p.dbId);
+    closeAddMachineModal();
+    closeDrawer();
+    pintarPestanaActual();
+  } catch (err) {
+    alert('No se pudo eliminar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+/* Registro de cambios importantes: quién, qué y cuándo.
+   En empresas grandes esto no es un extra, es lo que evita discusiones. */
+async function registrarEnHistorial(accion, entidad, nombre, detalle) {
+  try {
+    await getSupabase().from('audit_log').insert({
+      company_id: currentUser.companyId,
+      actor_name: currentUser.name,
+      action: accion, entity: entidad, entity_name: nombre, detail: detalle || null,
+    });
+  } catch (e) { /* el historial no debe bloquear la operación */ }
+}
+
 function openObraDrawer(id) {
   const p = projects.find(x => x.id === id);
   const { pct, daysLeft } = obraSchedule(p);
@@ -1835,7 +2204,12 @@ function openObraDrawer(id) {
       <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${p.id}</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div><div class="drawer-title">${p.name}</div><div class="drawer-model">${p.client}</div></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+      <div style="min-width:0;"><div class="drawer-title">${p.name}</div><div class="drawer-model">${p.client}</div></div>
+      ${currentUser.accessLevel !== 'trabajador'
+        ? `<button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;white-space:nowrap;" onclick="openEditObraModal('${p.id}')"><i class="fa-solid fa-pen"></i> Editar</button>`
+        : ''}
+    </div>
     <div style="display:flex;align-items:center;gap:8px;">${obraChip(p.status)}</div>
 
     <div class="drawer-rows">
@@ -2776,7 +3150,12 @@ function openDrawer(id) {
       <input type="file" accept="image/*" id="file-machine-${m.id}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoMaquina('${m.id}', event)">
       <label class="drawer-upload" for="file-machine-${m.id}"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar' : 'Subir'}</label>
     </div>
-    <div><div class="drawer-title">${m.type}</div><div class="drawer-model">${m.model}</div></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+      <div style="min-width:0;"><div class="drawer-title">${m.type}</div><div class="drawer-model">${m.model}</div></div>
+      ${currentUser.accessLevel !== 'trabajador'
+        ? `<button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;white-space:nowrap;" onclick="openEditMachineModal('${m.id}')"><i class="fa-solid fa-pen"></i> Editar</button>`
+        : ''}
+    </div>
     <div style="display:flex;gap:8px;align-items:center;">
       ${chip(m.status)}
       ${m.plate !== '—' ? `<span class="plate-badge" style="font-size:12px;">${m.plate}</span>` : ''}
@@ -3617,7 +3996,12 @@ function openWorkerDrawer(id) {
       <input type="file" accept="image/*" id="file-worker-${w.id}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoTrabajador('${w.id}', event)">
       <label class="drawer-upload" for="file-worker-${w.id}"><i class="fa-solid fa-camera"></i> ${w.photoPath ? 'Cambiar' : 'Subir'}</label>
     </div>
-    <div><div class="drawer-title">${w.name}</div><div class="drawer-model">${w.role}</div></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+      <div style="min-width:0;"><div class="drawer-title">${w.name}</div><div class="drawer-model">${w.role}</div></div>
+      ${currentUser.accessLevel !== 'trabajador'
+        ? `<button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;white-space:nowrap;" onclick="openEditWorkerModal('${w.id}')"><i class="fa-solid fa-pen"></i> Editar</button>`
+        : ''}
+    </div>
     <div style="display:flex;gap:8px;align-items:center;">${chip(w.status)}</div>
 
     <div class="drawer-rows">
