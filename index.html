@@ -1182,15 +1182,29 @@ const gpsDataProvider = (() => {
    Trabajadores, fichajes, incidencias y facturas todavía usan datos de
    ejemplo — es el siguiente paso pendiente.
    ====================================================================== */
+/* Pinta únicamente la pestaña que el usuario está viendo */
+function pintarPestanaActual() {
+  const pintores = {
+    dashboard: renderDashboard, obras: renderObras, fichaje: renderFichaje,
+    maquinaria: renderMaquinaria, trabajadores: renderTrabajadores,
+    avisos: renderAvisos, clientes: renderClientes,
+    facturacion: renderFacturacion, informes: renderInformes,
+  };
+  const pintar = pintores[currentTab];
+  if (pintar) pintar();
+  // El panel general muestra avisos y cobros, así que necesita esos datos al día
+  if (currentTab !== 'dashboard' && currentTab !== 'avisos') renderNav();
+}
+
 async function loadCompanyData() {
   const sb = getSupabase();
   try {
     const [projRes, machRes, docRes, workRes, vacRes] = await Promise.all([
-      sb.from('projects').select('*').order('created_at'),
-      sb.from('machines').select('*').order('created_at'),
-      sb.from('documents').select('*'),
-      sb.from('workers').select('*').eq('active', true).order('created_at'),
-      sb.from('vacations').select('*').order('start_date'),
+      sb.from('projects').select('id,code,name,client,status,start_date,end_date').order('created_at'),
+      sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked').order('created_at'),
+      sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
+      sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
+      sb.from('vacations').select('id,worker_id,start_date,end_date').order('start_date'),
     ]);
     if (projRes.error) throw projRes.error;
     if (machRes.error) throw machRes.error;
@@ -1256,7 +1270,10 @@ async function loadCompanyData() {
     await cargarIncidencias();
     await cargarCobros();
 
-    renderObras(); renderMaquinaria(); renderDashboard(); renderTrabajadores(); renderFichaje(); renderAvisos(); renderNav(); renderFacturacion(); renderClientes();
+    // Solo se pinta lo que se está viendo: el resto se pinta al abrir su pestaña.
+    // Con 9 módulos, repintarlos todos en cada recarga era trabajo tirado.
+    renderNav();
+    pintarPestanaActual();
     arrancarContador();
     suscribirCambios();
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
@@ -1504,10 +1521,8 @@ function switchTab(tab) {
     if (fleetMap) { fleetMap.remove(); fleetMap = null; }
   }
   currentTab = tab;
-  if (tab === 'clientes') renderClientes();
-  if (tab === 'facturacion') renderFacturacion();
-  if (tab === 'informes') renderInformes();
-  if (tab === 'obras') renderObras();
+  // Cada pestaña se pinta al entrar, con los datos más recientes
+  pintarPestanaActual();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + tab).classList.add('active');
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -1731,6 +1746,9 @@ function renderDashboard() {
 }
 
 /* ============ OBRAS ============ */
+let obrasVisibles = 24;
+function verMasObras() { obrasVisibles += 24; renderObras(); }
+
 function renderObras() {
   document.getElementById('view-obras').innerHTML = `
     <div class="toolbar">
@@ -1740,12 +1758,18 @@ function renderObras() {
       <button class="btn btn-amber" onclick="openAddObraModal()"><i class="fa-solid fa-plus"></i> Añadir obra</button>
     </div>
     <div class="obras-grid" id="obras-results">
-      ${projects.map(p => obraCardHTML(p, true)).join('')}
+      ${projects.length === 0
+        ? `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-diagram-project"></i><div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay ${t('p')}</div><div style="font-size:13px;margin-top:3px;">Dale a "Añadir ${t('s')}" para crear la primera.</div></div>`
+        : projects.slice(0, obrasVisibles).map(p => obraCardHTML(p, true)).join('')}
     </div>
+    ${projects.length > obrasVisibles
+      ? `<button class="load-more-btn" style="margin-top:14px;border-radius:8px;border:1px solid var(--border);" onclick="verMasObras()">Ver más (${projects.length - obrasVisibles} restantes)</button>`
+      : ''}
   `;
 }
 function filterObras(q) {
   q = q.trim().toLowerCase();
+  if (!q) { obrasVisibles = 24; renderObras(); return; }
   const results = projects.filter(p => !q || (p.name||'').toLowerCase().includes(q) || (p.client||'').toLowerCase().includes(q) || (p.id||'').toLowerCase().includes(q));
   document.getElementById('obras-results').innerHTML = results.length
     ? results.map(p => obraCardHTML(p, true)).join('')
@@ -1893,7 +1917,7 @@ async function assignWorkerToObra(projId) {
     w.project = projId;
     w.projectDbId = proj.dbId;
     openObraDrawer(projId);
-    renderDashboard(); renderTrabajadores();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo asignar: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -1910,8 +1934,7 @@ async function assignMachineToObra(projId) {
     m.project = projId;
     m.location = proj.name;
     openObraDrawer(projId);
-    renderDashboard();
-    renderMaquinaria();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo asignar la máquina: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -1965,8 +1988,7 @@ async function submitAddObra() {
     if (error) throw error;
     projects.push({ dbId: data.id, id: data.code, name: data.name, client: data.client, status: data.status, start: data.start_date, end: data.end_date });
     closeAddMachineModal();
-    renderObras();
-    renderDashboard();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo guardar la obra: ' + (err.message || 'inténtalo de nuevo.'));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar obra'; }
@@ -2100,7 +2122,7 @@ async function cargarFichajes() {
   try {
     const desde = new Date(Date.now() - DIAS_FICHAJES_EN_MEMORIA * 86400000).toISOString();
     const { data, error } = await getSupabase()
-      .from('time_logs').select('*')
+      .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out')
       .gte('check_in', desde)
       .order('check_in', { ascending: false })
       .limit(300);
@@ -2164,7 +2186,7 @@ async function darmeDeAltaComoTrabajador() {
       profileId: data.profile_id, status: 'off', since: '—',
       photoPath: null, documents: [], vacations: [],
     });
-    renderFichaje(); renderTrabajadores(); renderDashboard();
+    pintarPestanaActual();
     alert(`Listo. Ya puedes fichar.\n\nTu PIN es ${pin} — te sirve para entrar también desde el móvil con el código ${currentUser.accessCode}.`);
   } catch (err) {
     alert('No se pudo crear tu ficha: ' + (err.message || 'inténtalo de nuevo.'));
@@ -2496,7 +2518,7 @@ async function aplicarFiltroFichaje() {
   filtrando = true;
   renderFichaje();
   try {
-    let q = getSupabase().from('time_logs').select('*').order('check_in', { ascending: false }).limit(2000);
+    let q = getSupabase().from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out').order('check_in', { ascending: false }).limit(2000);
     if (filtroFichajeDesde) q = q.gte('check_in', filtroFichajeDesde + 'T00:00:00');
     if (filtroFichajeHasta) q = q.lte('check_in', filtroFichajeHasta + 'T23:59:59');
     if (filtroFichajeTrabajador) q = q.eq('worker_id', filtroFichajeTrabajador);
@@ -2626,6 +2648,10 @@ function loadMoreTimeLogs() { timeLogVisible += 8; renderFichaje(); }
 
 /* ============ MAQUINARIA ============ */
 let maquinariaView = 'lista'; // 'lista' | 'mapa'
+/* Con flotas grandes no tiene sentido pintar 200 tarjetas de golpe:
+   se muestran de 24 en 24, y el buscador filtra sobre el total. */
+let maquinasVisibles = 24;
+function verMasMaquinas() { maquinasVisibles += 24; renderMaquinaria(); }
 let fleetMap = null;
 let fleetMapUnsub = null;
 
@@ -2663,6 +2689,7 @@ function machineCardHTML(m) {
 }
 function filterMachines(q) {
   q = q.trim().toLowerCase();
+  if (!q) { maquinasVisibles = 24; renderMaquinaria(); return; }
   const results = machines.filter(m => !q || (m.id||'').toLowerCase().includes(q) || (m.type||'').toLowerCase().includes(q) || (m.model||'').toLowerCase().includes(q) || (m.plate||'').toLowerCase().includes(q));
   const el = document.getElementById('machine-results');
   if (!el) return;
@@ -2690,8 +2717,11 @@ function renderMaquinaria() {
     <div class="machine-grid" id="machine-results">
       ${machines.length === 0
         ? `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-truck"></i><div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay máquinas</div><div style="font-size:13px;margin-top:3px;">Dale a "Añadir máquina" para registrar la primera.</div></div>`
-        : machines.map(machineCardHTML).join('')}
+        : machines.slice(0, maquinasVisibles).map(machineCardHTML).join('')}
     </div>
+    ${machines.length > maquinasVisibles
+      ? `<button class="load-more-btn" style="margin-top:14px;border-radius:8px;border:1px solid var(--border);" onclick="verMasMaquinas()">Ver más máquinas (${machines.length - maquinasVisibles} restantes)</button>`
+      : ''}
     ` : `
     <div class="plate" style="padding:0;overflow:hidden;">${rivets}
       <div id="fleet-map" style="width:100%;height:420px;"></div>
@@ -2980,8 +3010,7 @@ async function submitAddMachine() {
       device: { id: data.device_id, model: data.device_model, linked: data.device_linked }, documents: [],
     });
     closeAddMachineModal();
-    renderMaquinaria();
-    document.getElementById('view-title').textContent = 'Maquinaria';
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo guardar la máquina: ' + (err.message || 'inténtalo de nuevo.'));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar máquina'; }
@@ -3008,7 +3037,7 @@ async function reasignarOperario(machineCode) {
       m.operator = '—';
     }
     openDrawer(machineCode);
-    renderMaquinaria(); renderTrabajadores(); renderDashboard();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -3165,7 +3194,7 @@ async function submitAddDoc(tipo, ownerDbId, ownerCode) {
 }
 
 async function recargarDocumentos() {
-  const { data, error } = await getSupabase().from('documents').select('*');
+  const { data, error } = await getSupabase().from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path');
   if (error) { console.error('Error recargando documentos:', error); return; }
   const porMaquina = {}, porTrabajador = {};
   (data || []).forEach(d => {
@@ -3182,6 +3211,92 @@ async function abrirDocumento(ruta) {
   const url = await urlArchivo(ruta);
   if (url) window.open(url, '_blank');
   else alert('No se pudo abrir el archivo.');
+}
+
+/* ============ VINCULAR DISPOSITIVO GPS ============ */
+function openLinkDeviceModal(machineCode) {
+  const m = machines.find(x => x.id === machineCode);
+  if (!m) return;
+  const modelos = ['Queclink GV75', 'Ruptela ECO4', 'Teltonika FMB920', 'Teltonika FMC130', 'Concox GT06N', 'Otro'];
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">${m.device.linked ? 'Cambiar' : 'Vincular'} dispositivo GPS</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">Para <span class="f-mono">${m.id}</span> · ${m.type} ${m.model}</div>
+
+    <div class="form-group">
+      <label class="form-label">Código del dispositivo</label>
+      <input class="form-input f-mono" id="ld-id" placeholder="Ej. TRK-2301" value="${m.device.id || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Modelo del dispositivo</label>
+      <select class="form-select" id="ld-model">
+        ${modelos.map(mo => `<option ${m.device.model === mo ? 'selected' : ''}>${mo}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-hint">
+      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+      <span>Guarda aquí el código de serie del dispositivo GPS. <b>Importante:</b> esto solo lo deja registrado — para que la máquina envíe su ubicación de verdad hace falta tener el dispositivo instalado y configurado por el instalador o el fabricante.</span>
+    </div>
+    <div id="ld-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="ld-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      ${m.device.linked ? `<button class="btn btn-outline" style="color:var(--danger);border-color:var(--danger-bg);" onclick="desvincularDispositivo('${m.id}')">Desvincular</button>` : ''}
+      <button class="btn btn-amber" id="ld-submit" onclick="submitLinkDevice('${m.id}')">${m.device.linked ? 'Guardar' : 'Vincular'}</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function submitLinkDevice(machineCode) {
+  const id = document.getElementById('ld-id').value.trim();
+  const model = document.getElementById('ld-model').value;
+  const errBox = document.getElementById('ld-error');
+  errBox.style.display = 'none';
+
+  if (!id) {
+    document.getElementById('ld-error-text').textContent = 'Escribe el código del dispositivo.';
+    errBox.style.display = 'flex';
+    document.getElementById('ld-id').focus();
+    return;
+  }
+  const m = machines.find(x => x.id === machineCode);
+  setButtonLoading('ld-submit', true, 'Guardando...', m.device.linked ? 'Guardar' : 'Vincular');
+  try {
+    const { error } = await getSupabase().from('machines').update({
+      device_id: id, device_model: model, device_linked: true,
+    }).eq('id', m.dbId);
+    if (error) throw error;
+    m.device = { id, model, linked: true };
+    if (!m.lat) m.gpsAge = 'esperando señal';
+    closeAddMachineModal();
+    openDrawer(machineCode);
+    renderMaquinaria();
+  } catch (err) {
+    document.getElementById('ld-error-text').textContent = 'No se pudo vincular: ' + (err.message || 'inténtalo de nuevo.');
+    errBox.style.display = 'flex';
+    setButtonLoading('ld-submit', false, '', m.device.linked ? 'Guardar' : 'Vincular');
+  }
+}
+
+async function desvincularDispositivo(machineCode) {
+  const m = machines.find(x => x.id === machineCode);
+  if (!confirm(`¿Desvincular el dispositivo GPS de ${m.id}? Dejará de mostrarse en el mapa.`)) return;
+  try {
+    const { error } = await getSupabase().from('machines').update({
+      device_id: null, device_model: null, device_linked: false,
+    }).eq('id', m.dbId);
+    if (error) throw error;
+    m.device = { id: null, model: null, linked: false };
+    m.gpsAge = 'sin dispositivo';
+    closeAddMachineModal();
+    openDrawer(machineCode);
+    renderMaquinaria();
+  } catch (err) {
+    alert('No se pudo desvincular: ' + (err.message || 'inténtalo de nuevo.'));
+  }
 }
 
 /* ============ AÑADIR TRABAJADOR (modal) ============ */
@@ -3292,7 +3407,7 @@ async function submitAddWorker() {
       if (m) m.operator = data.name;
     }
     closeAddMachineModal();
-    renderTrabajadores(); renderDashboard(); renderMaquinaria();
+    pintarPestanaActual();
     switchTab('trabajadores');
   } catch (err) {
     document.getElementById('nw-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
@@ -3303,6 +3418,8 @@ async function submitAddWorker() {
 
 /* ============ TRABAJADORES ============ */
 let workerQuery = '';
+let trabajadoresVisibles = 50;
+function verMasTrabajadores() { trabajadoresVisibles += 50; renderTrabajadores(); }
 let workerFilter = 'all'; // all | working | off | docpending | onvacation
 
 function workerRowHTML(w) {
@@ -3336,7 +3453,7 @@ function applyWorkerFilters() {
   tbody.innerHTML = results.length ? results.map(workerRowHTML).join('') :
     `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Sin resultados.</td></tr>`;
 }
-function setWorkerFilter(f) { workerFilter = f; renderTrabajadores(); }
+function setWorkerFilter(f) { workerFilter = f; trabajadoresVisibles = 50; renderTrabajadores(); }
 function searchWorkers(q) { workerQuery = q; applyWorkerFilters(); }
 
 function renderTrabajadores() {
@@ -3403,10 +3520,13 @@ function renderTrabajadores() {
                  <div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay trabajadores</div>
                  <div style="font-size:13px;margin-top:3px;">Dale a "Añadir trabajador" para dar de alta a tu equipo.</div>
                </td></tr>`
-            : workers.filter(workerMatchesFilter).map(workerRowHTML).join('')}
+            : workers.filter(workerMatchesFilter).slice(0, trabajadoresVisibles).map(workerRowHTML).join('')}
         </tbody>
       </table>
       </div>
+      ${workers.filter(workerMatchesFilter).length > trabajadoresVisibles
+        ? `<button class="load-more-btn" onclick="verMasTrabajadores()">Ver más trabajadores (${workers.filter(workerMatchesFilter).length - trabajadoresVisibles} restantes)</button>`
+        : ''}
     </div>
   `;
 }
@@ -3562,7 +3682,7 @@ async function reasignarMaquina(workerCode) {
     w.machine = nueva ? nueva.id : '—';
     if (nueva) nueva.operator = w.name;
     openWorkerDrawer(workerCode);
-    renderTrabajadores(); renderMaquinaria(); renderDashboard();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -3828,7 +3948,7 @@ async function submitIncident() {
     avisosJustSubmitted = true;
     avisosSubTab = 'incidencias';
     await cargarIncidencias();
-    renderAvisos(); renderNav(); renderDashboard();
+    pintarPestanaActual(); renderNav();
   } catch (err) {
     document.getElementById('inc-error-text').textContent = 'No se pudo enviar: ' + (err.message || 'inténtalo de nuevo.');
     errBox.style.display = 'flex';
@@ -3872,7 +3992,7 @@ async function resolveIncident(dbId) {
     if (error) throw error;
     closeAddMachineModal();
     await cargarIncidencias();
-    renderAvisos(); renderNav(); renderDashboard();
+    pintarPestanaActual(); renderNav();
   } catch (err) {
     alert('No se pudo marcar como resuelta: ' + (err.message || 'inténtalo de nuevo.'));
     setButtonLoading('res-submit', false, '', '<i class="fa-solid fa-check"></i> Sí, está resuelta');
@@ -3889,8 +4009,8 @@ async function cargarIncidencias() {
     } else {
       // Todas las abiertas siempre, y solo las 30 resueltas más recientes
       const [abiertas, resueltas] = await Promise.all([
-        sb.from('incidents').select('*').eq('resolved', false).order('created_at', { ascending: false }),
-        sb.from('incidents').select('*').eq('resolved', true).order('resolved_at', { ascending: false }).limit(30),
+        sb.from('incidents').select('id,worker_id,project_id,machine_id,title,description,priority,photo_path,resolved,created_at,resolved_at').eq('resolved', false).order('created_at', { ascending: false }),
+        sb.from('incidents').select('id,worker_id,project_id,machine_id,title,description,priority,photo_path,resolved,created_at,resolved_at').eq('resolved', true).order('resolved_at', { ascending: false }).limit(30),
       ]);
       error = abiertas.error || resueltas.error;
       data = [...(abiertas.data || []), ...(resueltas.data || [])];
@@ -4130,7 +4250,7 @@ async function markInvoicePaid(dbId) {
     if (error) throw error;
     const inv = invoices.find(i => i.dbId === dbId);
     if (inv) { inv.status = 'paid'; inv.paidAt = new Date().toISOString(); }
-    renderFacturacion(); renderDashboard(); renderClientes();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo marcar como cobrado: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -4143,7 +4263,7 @@ async function markInvoicePending(dbId) {
     if (error) throw error;
     const inv = invoices.find(i => i.dbId === dbId);
     if (inv) { inv.status = 'pending'; inv.paidAt = null; }
-    renderFacturacion(); renderDashboard(); renderClientes();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo deshacer: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -4157,7 +4277,7 @@ async function borrarCobro(dbId) {
     const { error } = await getSupabase().from('invoices').delete().eq('id', dbId);
     if (error) throw error;
     invoices = invoices.filter(i => i.dbId !== dbId);
-    renderFacturacion(); renderDashboard(); renderClientes();
+    pintarPestanaActual();
   } catch (err) {
     alert('No se pudo borrar: ' + (err.message || 'inténtalo de nuevo.'));
   }
@@ -4256,7 +4376,7 @@ async function submitAddInvoice() {
       amount: Number(data.amount), dueDate: data.due_date, status: data.status, paidAt: null,
     });
     closeAddMachineModal();
-    renderFacturacion(); renderDashboard(); renderClientes();
+    pintarPestanaActual();
   } catch (err) {
     document.getElementById('ni-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
     errBox.style.display = 'flex';
@@ -4287,8 +4407,8 @@ async function cargarCobros() {
   try {
     const sb = getSupabase();
     const [pend, pag] = await Promise.all([
-      sb.from('invoices').select('*').neq('status', 'paid').order('due_date', { ascending: false }),
-      sb.from('invoices').select('*').eq('status', 'paid').order('paid_at', { ascending: false }).limit(50),
+      sb.from('invoices').select('id,project_id,client,reference,concept,amount,due_date,status,paid_at').neq('status', 'paid').order('due_date', { ascending: false }),
+      sb.from('invoices').select('id,project_id,client,reference,concept,amount,due_date,status,paid_at').eq('status', 'paid').order('paid_at', { ascending: false }).limit(50),
     ]);
     const error = pend.error || pag.error;
     const data = [...(pend.data || []), ...(pag.data || [])];
