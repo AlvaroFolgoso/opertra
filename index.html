@@ -776,7 +776,7 @@
 
       <div class="form-group" style="margin-top:0;">
         <label class="form-label">Nombre de la empresa</label>
-        <input class="form-input" id="signup-company" placeholder="Construcciones Ejemplo S.L.">
+        <input class="form-input" id="signup-company" maxlength="120" placeholder="Construcciones Ejemplo S.L.">
       </div>
       <div class="form-group">
         <label class="form-label">¿A qué se dedica tu empresa?</label>
@@ -792,11 +792,11 @@
       </div>
       <div class="form-group">
         <label class="form-label">CIF (opcional)</label>
-        <input class="form-input" id="signup-cif" placeholder="B12345678">
+        <input class="form-input" id="signup-cif" maxlength="20" placeholder="B12345678">
       </div>
       <div class="form-group">
         <label class="form-label">Tu nombre y apellidos</label>
-        <input class="form-input" id="signup-name" placeholder="Tu nombre">
+        <input class="form-input" id="signup-name" maxlength="120" placeholder="Tu nombre">
       </div>
       <div class="form-group">
         <label class="form-label">Correo electrónico</label>
@@ -1379,22 +1379,12 @@ const STORAGE_KEY = 'opertra_demo_v1';
    Se mantiene la función vacía por si algún punto antiguo la llama. */
 function saveState() {}
 
+/* Ya nada se guarda en el navegador: todo vive en Supabase. Esta función
+   solo limpia los restos de versiones antiguas, que si no sobrescribían
+   los datos reales con datos de ejemplo sin identificador. */
 function loadState() {
-  let raw;
-  try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return false; }
-  if (!raw) return false;
-  try {
-    const data = JSON.parse(raw);
-
-
-    if (data.invoices) { invoices.length = 0; invoices.push(...data.invoices); }
-
-
-    return true;
-  } catch (e) {
-    console.warn('Datos guardados corruptos, se ignoran', e);
-    return false;
-  }
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  return false;
 }
 
 function resetDemoData() {
@@ -1416,7 +1406,7 @@ const NAV = [
 ];
 
 const VIEW_META = {
-  dashboard: ["Panel general", "Vista de hoy, 5 de agosto"],
+  dashboard: ["Panel general", null],
   obras: [null, null],
   fichaje: ["Fichaje", "Escanea el código de tu máquina para fichar"],
   maquinaria: ["Maquinaria", machines.length + " máquinas registradas"],
@@ -1538,6 +1528,7 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('view-title').textContent = VIEW_META[tab][0] || t('P');
   document.getElementById('view-subtitle').textContent =
+    tab === 'dashboard' ? 'Vista de hoy, ' + new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) :
     tab === 'obras' ? projects.length + ' ' + (projects.length===1?t('s'):t('p')) + ' registrada' + (projects.length===1?'':'s') :
     tab === 'maquinaria' ? machines.length + ' máquinas registradas' :
     tab === 'trabajadores' ? workers.length + ' trabajadores registrados' :
@@ -2102,7 +2093,7 @@ function openNuevoUsuarioModal() {
 
     <div class="form-group">
       <label class="form-label">Nombre y apellidos</label>
-      <input class="form-input" id="nu-name" placeholder="Ej. Marta Ibáñez">
+      <input class="form-input" id="nu-name" maxlength="120" placeholder="Ej. Marta Ibáñez">
     </div>
     <div class="form-group">
       <label class="form-label">Puesto</label>
@@ -2476,7 +2467,7 @@ function openEditObraModal(code) {
     </div>
     <div class="form-group">
       <label class="form-label">Notas (opcional)</label>
-      <textarea class="textarea" id="eo-notes" placeholder="Cambios de plazo, acuerdos, observaciones...">${p.notes || ''}</textarea>
+      <textarea class="textarea" id="eo-notes" maxlength="2000" placeholder="Cambios de plazo, acuerdos, observaciones...">${p.notes || ''}</textarea>
     </div>
     <div id="eo-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="eo-error-text"></span></div>
 
@@ -2500,8 +2491,13 @@ async function guardarObra(code) {
   const errBox = document.getElementById('eo-error');
   errBox.style.display = 'none';
 
-  if (!name) {
-    document.getElementById('eo-error-text').textContent = 'El nombre no puede quedar vacío.';
+  const errT = validarTexto(name, 'El nombre', LIMITES.nombre, true)
+    || validarTexto(client, 'El cliente', LIMITES.nombre, false)
+    || validarTexto(notes, 'Las notas', LIMITES.descripcion, false)
+    || validarFecha(start, 'la fecha de inicio', { obligatoria: true })
+    || validarFecha(end, 'la fecha de fin', { obligatoria: true });
+  if (errT) {
+    document.getElementById('eo-error-text').textContent = errT;
     errBox.style.display = 'flex'; return;
   }
   if (!start || !end) {
@@ -2710,11 +2706,11 @@ function openAddObraModal() {
     </div>
     <div class="form-group" style="margin-top:16px;">
       <label class="form-label">Nombre de la obra</label>
-      <input class="form-input" id="no-name" placeholder="${t('ej')}">
+      <input class="form-input" id="no-name" maxlength="120" placeholder="${t('ej')}">
     </div>
     <div class="form-group">
       <label class="form-label">Cliente</label>
-      <input class="form-input" id="no-client" placeholder="Nombre del cliente">
+      <input class="form-input" id="no-client" maxlength="120" placeholder="Nombre del cliente">
     </div>
     <div class="form-group">
       <label class="form-label">Fecha de inicio</label>
@@ -2737,7 +2733,12 @@ async function submitAddObra() {
   const client = document.getElementById('no-client').value.trim() || 'Sin especificar';
   const start = document.getElementById('no-start').value;
   const end = document.getElementById('no-end').value;
-  if (!name || !start || !end) return;
+  const errObra = validarTexto(name, 'El nombre', LIMITES.nombre, true)
+    || validarTexto(client, 'El cliente', LIMITES.nombre, false)
+    || validarFecha(start, 'la fecha de inicio', { obligatoria: true })
+    || validarFecha(end, 'la fecha de fin', { obligatoria: true });
+  if (errObra) { alert(errObra); return; }
+  if (end < start) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
   const btn = event ? event.target.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
   try {
@@ -3415,7 +3416,7 @@ function openEditFichajeModal(dbId) {
     </div>
     <div class="form-group">
       <label class="form-label">Motivo de la corrección</label>
-      <input class="form-input" id="ef-reason" list="motivos-correccion" placeholder="Ej. Olvidó fichar salida">
+      <input class="form-input" id="ef-reason" maxlength="200" list="motivos-correccion" placeholder="Ej. Olvidó fichar salida">
       <datalist id="motivos-correccion">
         <option>Olvidó fichar salida</option>
         <option>Olvidó fichar entrada</option>
@@ -4007,11 +4008,11 @@ function openAddMachineModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Modelo</label>
-      <input class="form-input" id="nm-model" placeholder="Ej. CAT 320, Volvo FMX...">
+      <input class="form-input" id="nm-model" maxlength="120" placeholder="Ej. CAT 320, Volvo FMX...">
     </div>
     <div class="form-group">
       <label class="form-label">Matrícula / nº de serie</label>
-      <input class="form-input" id="nm-plate" placeholder="Ej. 4392-KBL">
+      <input class="form-input" id="nm-plate" maxlength="40" placeholder="Ej. 4392-KBL">
     </div>
     <div class="form-group">
       <label class="form-label">Foto de la máquina</label>
@@ -4127,6 +4128,47 @@ async function reasignarOperario(machineCode) {
 }
 
 /* ======================================================================
+   VALIDACIONES
+   Un dato mal metido hoy es una cuenta mal hecha dentro de seis meses.
+   Todo lo que escribe un usuario pasa por aquí antes de guardarse.
+   ====================================================================== */
+const LIMITES = { nombre: 120, texto: 500, descripcion: 2000, importe: 99999999 };
+
+function validarTexto(valor, campo, max, obligatorio) {
+  const v = String(valor || '').trim();
+  if (obligatorio && !v) return `${campo} no puede quedar vacío.`;
+  if (v.length > max) return `${campo} es demasiado largo (máximo ${max} caracteres).`;
+  return null;
+}
+
+function validarFecha(iso, campo, opciones) {
+  const o = opciones || {};
+  if (!iso) return o.obligatoria ? `Pon ${campo}.` : null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return `${campo} no es una fecha válida.`;
+  const anio = d.getFullYear();
+  if (anio < 2000 || anio > 2100) return `${campo} tiene un año fuera de rango (${anio}).`;
+  if (o.noFuturo && d > new Date()) return `${campo} no puede estar en el futuro.`;
+  return null;
+}
+
+function validarImporte(valor) {
+  const n = parseFloat(valor);
+  if (isNaN(n) || n <= 0) return 'Pon un importe mayor que cero.';
+  if (n > LIMITES.importe) return 'El importe es demasiado alto. Revísalo.';
+  if (!/^\d+([.,]\d{1,2})?$/.test(String(valor).trim())) return 'El importe solo puede tener dos decimales.';
+  return null;
+}
+
+/* Dos periodos de vacaciones no pueden pisarse */
+function vacacionesSolapan(w, inicio, fin, excluirId) {
+  return (w.vacations || []).some(v => {
+    if (excluirId && v.dbId === excluirId) return false;
+    return inicio <= v.end && fin >= v.start;
+  });
+}
+
+/* ======================================================================
    CÓDIGOS ÚNICOS
    Los códigos (OBR-01, T-005, EX-114) los da la base de datos con un
    contador por empresa. Antes se calculaban contando cuántos había, y eso
@@ -4199,7 +4241,7 @@ function openAddDocModal(tipo, ownerDbId, ownerCode) {
 
     <div class="form-group">
       <label class="form-label">Tipo de documento</label>
-      <input class="form-input" id="nd-name" list="docs-sugeridos" placeholder="Escribe el que sea, o elige de la lista">
+      <input class="form-input" id="nd-name" maxlength="120" list="docs-sugeridos" placeholder="Escribe el que sea, o elige de la lista">
       <div class="form-hint">
         <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
         <span>Puedes escribir cualquier documento aunque no salga en la lista — las opciones son solo sugerencias.</span>
@@ -4256,8 +4298,10 @@ async function submitAddDoc(tipo, ownerDbId, ownerCode) {
   const errBox = document.getElementById('nd-error');
   errBox.style.display = 'none';
 
-  if (!name) {
-    document.getElementById('nd-error-text').textContent = 'Escribe qué documento es.';
+  const errD = validarTexto(name, 'El nombre del documento', LIMITES.nombre, true)
+    || validarFecha(expiry, 'la fecha de caducidad', {});
+  if (errD) {
+    document.getElementById('nd-error-text').textContent = errD;
     errBox.style.display = 'flex'; return;
   }
 
@@ -4415,7 +4459,7 @@ function openAddWorkerModal() {
 
     <div class="form-group">
       <label class="form-label">Nombre y apellidos</label>
-      <input class="form-input" id="nw-name" placeholder="Ej. Marcos Ruiz">
+      <input class="form-input" id="nw-name" maxlength="120" placeholder="Ej. Marcos Ruiz">
     </div>
     <div class="form-group">
       <label class="form-label">Puesto</label>
@@ -4471,8 +4515,10 @@ async function submitAddWorker() {
   const errBox = document.getElementById('nw-error');
   errBox.style.display = 'none';
 
-  if (!name) {
-    document.getElementById('nw-error-text').textContent = 'Escribe el nombre del trabajador.';
+  const errW = validarTexto(name, 'El nombre', LIMITES.nombre, true)
+    || validarTexto(role, 'El puesto', LIMITES.nombre, false);
+  if (errW) {
+    document.getElementById('nw-error-text').textContent = errW;
     errBox.style.display = 'flex'; return;
   }
   if (!/^\d{4}$/.test(pin)) {
@@ -4521,6 +4567,19 @@ let trabajadoresVisibles = 50;
 function verMasTrabajadores() { trabajadoresVisibles += 50; renderTrabajadores(); }
 let workerFilter = 'all'; // all | working | off | docpending | onvacation
 
+/* Dónde está trabajando ahora: si tiene jornada abierta, la obra de ese
+   fichaje; si no, su obra habitual. Antes solo miraba la habitual, así que
+   un trabajador fichado en otra obra salía como "sin asignar". */
+function obraActualDe(w) {
+  const abierto = timeLogs.find(l => l.workerId === w.dbId && !l.checkOutISO);
+  if (abierto && abierto.project && abierto.project !== '—') return abierto.project;
+  if (w.projectDbId) {
+    const p = projects.find(x => x.dbId === w.projectDbId);
+    if (p) return p.name;
+  }
+  return null;
+}
+
 function workerRowHTML(w) {
   const esAdmin = currentUser.accessLevel !== 'trabajador';
   return `
@@ -4529,7 +4588,7 @@ function workerRowHTML(w) {
       <td style="font-weight:500;">${esc(w.name)}</td>
       <td style="color:var(--steel);">${esc(w.role)}</td>
       ${esAdmin ? `<td class="f-mono" style="font-size:13px;letter-spacing:2px;color:var(--amber-deep);font-weight:600;">${w.pin || '—'}</td>` : ''}
-      <td class="f-mono" style="font-size:12px;color:${w.project ? 'var(--amber-deep)' : 'var(--steel)'};">${w.project || 'Sin asignar'}</td>
+      <td class="f-mono" style="font-size:12px;color:${obraActualDe(w) ? 'var(--amber-deep)' : 'var(--steel)'};">${esc(obraActualDe(w) || 'Sin asignar')}</td>
       <td class="f-mono" style="font-size:12px;color:${w.machine !== '—' ? 'var(--blue)' : 'var(--steel)'};">${esc(w.machine)}</td>
       <td>${chip(w.status)}</td>
       <td><i class="fa-solid fa-chevron-right" style="color:var(--steel);font-size:12px;"></i></td>
@@ -4817,7 +4876,14 @@ async function addVacation(workerId) {
   const start = document.getElementById('vac-start').value;
   const end = document.getElementById('vac-end').value;
   if (!start || !end) return;
+  const errV = validarFecha(start, 'la fecha de inicio', { obligatoria: true })
+    || validarFecha(end, 'la fecha de fin', { obligatoria: true });
+  if (errV) { alert(errV); return; }
   if (end < start) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
+  if (vacacionesSolapan(w, start, end)) {
+    alert('Ese periodo se solapa con otras vacaciones ya registradas de ' + w.name + '.');
+    return;
+  }
   const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
   try {
     const { data, error } = await getSupabase().from('vacations').insert({
@@ -4893,11 +4959,11 @@ function renderReportarForm() {
       ${avisosJustSubmitted ? `<div class="success-banner"><i class="fa-solid fa-circle-check"></i> Incidencia enviada. Ya la ve todo el equipo.</div>` : ''}
       <div class="form-group" style="margin-top:0;">
         <label class="form-label">¿Qué pasa?</label>
-        <input class="form-input" id="inc-title" placeholder="Ej. Rueda pinchada, falta cemento...">
+        <input class="form-input" id="inc-title" maxlength="120" placeholder="Ej. Rueda pinchada, falta cemento...">
       </div>
       <div class="form-group">
         <label class="form-label">Detalle</label>
-        <textarea class="textarea" id="inc-desc" placeholder="Cuenta qué pasa, dónde y desde cuándo"></textarea>
+        <textarea class="textarea" id="inc-desc" maxlength="2000" placeholder="Cuenta qué pasa, dónde y desde cuándo"></textarea>
       </div>
       <div class="form-group">
         <label class="form-label">Prioridad</label>
@@ -5013,8 +5079,10 @@ async function submitIncident() {
   const errBox = document.getElementById('inc-error');
   errBox.style.display = 'none';
 
-  if (!title) {
-    document.getElementById('inc-error-text').textContent = 'Escribe qué ha pasado.';
+  const errI = validarTexto(title, 'El título', LIMITES.nombre, true)
+    || validarTexto(desc, 'La descripción', LIMITES.descripcion, false);
+  if (errI) {
+    document.getElementById('inc-error-text').textContent = errI;
     errBox.style.display = 'flex';
     document.getElementById('inc-title').focus();
     return;
@@ -5414,11 +5482,11 @@ function openAddInvoiceModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Cliente</label>
-      <input class="form-input" id="ni-client" placeholder="Nombre del cliente">
+      <input class="form-input" id="ni-client" maxlength="120" placeholder="Nombre del cliente">
     </div>
     <div class="form-group">
       <label class="form-label">Referencia de tu factura (opcional)</label>
-      <input class="form-input f-mono" id="ni-reference" placeholder="Ej. F-2026/0142">
+      <input class="form-input f-mono" id="ni-reference" maxlength="60" placeholder="Ej. F-2026/0142">
       <div class="form-hint">
         <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
         <span>El número de la factura que emitiste con tu programa, para poder cruzarlas.</span>
@@ -5426,11 +5494,11 @@ function openAddInvoiceModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Concepto</label>
-      <input class="form-input" id="ni-concept" placeholder="Ej. Alquiler de maquinaria — agosto">
+      <input class="form-input" id="ni-concept" maxlength="500" placeholder="Ej. Alquiler de maquinaria — agosto">
     </div>
     <div class="form-group">
       <label class="form-label">Importe total (€)</label>
-      <input class="form-input" type="number" step="0.01" min="0" id="ni-amount" placeholder="0.00">
+      <input class="form-input" type="number" step="0.01" min="0" max="99999999" id="ni-amount" placeholder="0.00">
     </div>
     <div class="form-group">
       <label class="form-label">Fecha de vencimiento</label>
@@ -5457,12 +5525,13 @@ async function submitAddInvoice() {
   const errBox = document.getElementById('ni-error');
   errBox.style.display = 'none';
 
-  if (!amount || amount <= 0) {
-    document.getElementById('ni-error-text').textContent = 'Pon un importe válido.';
-    errBox.style.display = 'flex'; return;
-  }
-  if (!dueDate) {
-    document.getElementById('ni-error-text').textContent = 'Pon una fecha de vencimiento.';
+  const errC = validarImporte(document.getElementById('ni-amount').value)
+    || validarTexto(client, 'El cliente', LIMITES.nombre, false)
+    || validarTexto(reference, 'La referencia', LIMITES.nombre, false)
+    || validarTexto(concept, 'El concepto', LIMITES.texto, false)
+    || validarFecha(dueDate, 'la fecha de vencimiento', { obligatoria: true });
+  if (errC) {
+    document.getElementById('ni-error-text').textContent = errC;
     errBox.style.display = 'flex'; return;
   }
 
