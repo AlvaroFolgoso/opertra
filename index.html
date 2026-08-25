@@ -1818,6 +1818,187 @@ async function cargarResumenObra(projectDbId) {
   }
 }
 
+/* ======================================================================
+   USUARIOS DE LA EMPRESA
+   Un jefe de obra, una administrativa y el de RRHH no deben compartir la
+   misma contraseña. Aquí el administrador crea una cuenta para cada uno.
+   ====================================================================== */
+let usuariosEmpresa = [];
+
+async function cargarUsuarios() {
+  if (currentUser.isWorker) return;
+  try {
+    const { data, error } = await getSupabase()
+      .from('profiles').select('id,name,role,access_level,active,photo_url,created_at')
+      .order('created_at');
+    if (error) throw error;
+    usuariosEmpresa = data || [];
+  } catch (e) { console.error('Error cargando usuarios:', e); }
+}
+
+function openUsuariosModal() {
+  closeUserDropdown();
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Usuarios con acceso</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;line-height:1.5;">
+      Personas que entran con correo y contraseña para gestionar ${currentUser.company}.
+      El personal de obra no necesita cuenta: entra con el código de empresa y su PIN.
+    </div>
+
+    <div class="doc-list" style="margin-top:16px;" id="lista-usuarios">
+      <div style="font-size:13px;color:var(--steel);padding:8px 0;"><i class="fa-solid fa-circle-notch fa-spin"></i> Cargando...</div>
+    </div>
+
+    <button class="add-doc-btn" onclick="openNuevoUsuarioModal()"><i class="fa-solid fa-user-plus"></i> Dar acceso a otra persona</button>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+  pintarListaUsuarios();
+}
+
+async function pintarListaUsuarios() {
+  await cargarUsuarios();
+  const el = document.getElementById('lista-usuarios');
+  if (!el) return;
+  if (usuariosEmpresa.length === 0) {
+    el.innerHTML = `<div style="font-size:13px;color:var(--steel);padding:8px 0;">No se pudieron cargar los usuarios.</div>`;
+    return;
+  }
+  el.innerHTML = usuariosEmpresa.map(u => {
+    const soyYo = u.id === currentUser.id;
+    const activo = u.active !== false;
+    return `
+      <div class="doc-row" style="${activo ? '' : 'opacity:.55;'}">
+        <div style="min-width:0;">
+          <div class="doc-name">${u.name}${soyYo ? ' <span style="font-size:11px;color:var(--steel);font-weight:400;">(tú)</span>' : ''}</div>
+          <div class="doc-expiry">${u.role || 'Administrador'}${activo ? '' : ' · acceso revocado'}</div>
+        </div>
+        ${soyYo
+          ? `<span class="chip status-vigente"><span class="dot"></span>Activo</span>`
+          : activo
+            ? `<button class="btn-ghost" style="color:var(--danger);" onclick="revocarAcceso('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">revocar</button>`
+            : `<button class="btn-ghost" onclick="restaurarAcceso('${u.id}')">restaurar</button>`}
+      </div>`;
+  }).join('');
+}
+
+function openNuevoUsuarioModal() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Dar acceso</span>
+      <button class="drawer-close" onclick="openUsuariosModal()"><i class="fa-solid fa-arrow-left"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;line-height:1.5;">
+      Crea la cuenta y pásale el correo y la contraseña. Podrá cambiarla después desde Ajustes.
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Nombre y apellidos</label>
+      <input class="form-input" id="nu-name" placeholder="Ej. Marta Ibáñez">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Puesto</label>
+      <input class="form-input" id="nu-role" list="roles-admin" placeholder="Ej. Jefa de obra" value="Administrador">
+      <datalist id="roles-admin">
+        <option>Administrador</option><option>Jefe de obra</option><option>Jefa de obra</option>
+        <option>Encargado</option><option>Administración</option><option>Recursos Humanos</option>
+        <option>Gerencia</option><option>Responsable de flota</option>
+      </datalist>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Correo electrónico</label>
+      <input class="form-input" id="nu-email" type="email" placeholder="persona@empresa.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña temporal</label>
+      <input class="form-input f-mono" id="nu-pass" value="${generarPassword()}">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Apúntala antes de guardar: no se volverá a mostrar. Dile que la cambie al entrar.</span>
+      </div>
+    </div>
+    <div id="nu-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="nu-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="openUsuariosModal()">Cancelar</button>
+      <button class="btn btn-amber" id="nu-submit" onclick="crearUsuario()">Crear acceso</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function generarPassword() {
+  const letras = 'abcdefghijkmnopqrstuvwxyz';
+  const mayus = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const nums = '23456789';
+  let p = '';
+  for (let i = 0; i < 4; i++) p += letras[Math.floor(Math.random()*letras.length)];
+  p += mayus[Math.floor(Math.random()*mayus.length)];
+  for (let i = 0; i < 3; i++) p += nums[Math.floor(Math.random()*nums.length)];
+  return p;
+}
+
+async function crearUsuario() {
+  const name = document.getElementById('nu-name').value.trim();
+  const role = document.getElementById('nu-role').value.trim() || 'Administrador';
+  const email = document.getElementById('nu-email').value.trim();
+  const pass = document.getElementById('nu-pass').value.trim();
+  const errBox = document.getElementById('nu-error');
+  errBox.style.display = 'none';
+  const fallo = (t) => { document.getElementById('nu-error-text').textContent = t; errBox.style.display = 'flex'; };
+
+  if (!name) return fallo('Escribe el nombre.');
+  if (!email || !email.includes('@')) return fallo('Escribe un correo válido.');
+  if (pass.length < 8) return fallo('La contraseña debe tener al menos 8 caracteres.');
+
+  setButtonLoading('nu-submit', true, 'Creando...', 'Crear acceso');
+  try {
+    // Se crea la cuenta con los datos de la empresa actual como metadatos.
+    // El disparador de la base de datos NO crea empresa nueva porque no
+    // enviamos pending_company_name: solo el perfil, ligado a esta empresa.
+    const { data, error } = await getSupabase().auth.signUp({
+      email, password: pass,
+      options: { data: { pending_admin_name: name, join_company_id: currentUser.companyId, join_role: role } },
+    });
+    if (error) throw error;
+    if (!data.user) throw new Error('No se pudo crear la cuenta.');
+
+    registrarEnHistorial('alta de usuario', 'Usuario', name, email);
+
+    alert(`Acceso creado para ${name}.\n\nCorreo: ${email}\nContraseña: ${pass}\n\nApunta estos datos y pásaselos. La contraseña no se volverá a mostrar.`);
+    openUsuariosModal();
+  } catch (err) {
+    const msg = (err.message || '');
+    if (msg.includes('already registered')) return fallo('Ya existe una cuenta con ese correo.'), setButtonLoading('nu-submit', false, '', 'Crear acceso');
+    fallo('No se pudo crear: ' + (msg || 'inténtalo de nuevo.'));
+    setButtonLoading('nu-submit', false, '', 'Crear acceso');
+  }
+}
+
+async function revocarAcceso(userId, nombre) {
+  if (!confirm(`¿Revocar el acceso de ${nombre}?\n\nNo podrá entrar hasta que lo restaures. Sus datos y su actividad se conservan.`)) return;
+  try {
+    const { error } = await getSupabase().from('profiles').update({ active: false }).eq('id', userId);
+    if (error) throw error;
+    registrarEnHistorial('revocación de acceso', 'Usuario', nombre, '');
+    pintarListaUsuarios();
+  } catch (err) {
+    alert('No se pudo revocar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
+async function restaurarAcceso(userId) {
+  try {
+    const { error } = await getSupabase().from('profiles').update({ active: true }).eq('id', userId);
+    if (error) throw error;
+    pintarListaUsuarios();
+  } catch (err) {
+    alert('No se pudo restaurar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
 /* ============ EDITAR MÁQUINA ============ */
 function openEditMachineModal(code) {
   const m = machines.find(x => x.id === code);
@@ -5242,7 +5423,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
   for (let i = 0; i < intentos; i++) {
     const res = await getSupabase()
       .from('profiles')
-      .select('id, name, role, access_level, has_photo, photo_url, company_id, companies(name, trial_ends_at, access_code, business_type)')
+      .select('id, name, role, access_level, has_photo, photo_url, company_id, active, companies(name, trial_ends_at, access_code, business_type)')
       .eq('id', authUser.id)
       .maybeSingle();
     profile = res.data; error = res.error;
@@ -5250,6 +5431,10 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     await new Promise(r => setTimeout(r, 600));
   }
   if (error || !profile) throw error || new Error('No se encontró el perfil de este usuario.');
+  if (profile.active === false) {
+    try { await getSupabase().auth.signOut(); } catch(e) {}
+    throw new Error('Tu acceso a esta empresa ha sido revocado. Habla con el administrador.');
+  }
   currentUser = {
     id: profile.id,
     name: profile.name,
@@ -5571,6 +5756,7 @@ function renderUserDropdown() {
 
     <div class="dropdown-divider"></div>
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-gear"></i> Ajustes de cuenta</button>
+    ${!currentUser.isWorker ? `<button class="dropdown-item" onclick="openUsuariosModal()"><i class="fa-solid fa-users-gear"></i> Usuarios con acceso</button>` : ''}
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-building"></i> Ajustes de empresa</button>
     <button class="dropdown-item" onclick="openLegal('privacidad'); closeUserDropdown();"><i class="fa-solid fa-shield-halved"></i> Privacidad y legal</button>
     <div class="dropdown-divider"></div>
