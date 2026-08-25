@@ -2387,7 +2387,28 @@ function showFichajeTab(tab) {
    entra con PIN (no tiene sesión), así que ficha a través de una función de
    la base de datos que valida su PIN en cada operación.
    ====================================================================== */
-let fichajeAbierto = null;   // { logId, entrada, projectId, machineId }
+let fichajeAbierto = null;
+/* Jornada prevista: sirve solo para avisar al trabajador si se le olvida
+   fichar la salida. NUNCA cierra el fichaje solo — la hora que se guarda
+   es siempre la real, que es lo que exige el registro de jornada. */
+let horasPrevistas = 8;
+let avisoJornadaMostrado = false;
+
+function setHorasPrevistas(h) { horasPrevistas = h; renderFichaje(); }
+
+function pedirHorasPersonalizadas() {
+  const v = prompt('¿Cuántas horas tienes previsto trabajar?\n\nPuedes poner decimales (ej. 7.5)', horasPrevistas || 8);
+  if (v === null) return;
+  const n = parseFloat(String(v).replace(',', '.'));
+  if (isNaN(n) || n <= 0 || n > 16) { alert('Pon un número entre 0 y 16.'); return; }
+  horasPrevistas = n;
+  renderFichaje();
+}
+
+function horaFin(horas) {
+  const d = new Date(Date.now() + horas * 3600000);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}   // { logId, entrada, projectId, machineId }
 let fichajeCargando = false;
 
 function nowHHMM() {
@@ -2439,7 +2460,7 @@ async function cargarEstadoFichaje() {
     });
     if (error) throw error;
     fichajeAbierto = (data && data.length)
-      ? { logId: data[0].log_abierto, entrada: data[0].entrada, projectId: data[0].project_id, machineId: data[0].machine_id }
+      ? { logId: data[0].log_abierto, entrada: data[0].entrada, projectId: data[0].project_id, machineId: data[0].machine_id, previstaFin: data[0].expected_end }
       : null;
   } catch (e) { fichajeAbierto = null; }
   renderFichaje();
@@ -2496,7 +2517,7 @@ async function cargarFichajes() {
   try {
     const desde = new Date(Date.now() - DIAS_FICHAJES_EN_MEMORIA * 86400000).toISOString();
     const { data, error } = await getSupabase()
-      .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out')
+      .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed')
       .gte('check_in', desde)
       .order('check_in', { ascending: false })
       .limit(300);
@@ -2589,6 +2610,15 @@ function renderFicharCard() {
               ${(() => { const p = projects.find(x => x.dbId === abierto.projectId); return p ? `<i class="fa-solid fa-diagram-project"></i> ${p.name}` : ''; })()}
               ${machine ? ` · <span class="f-mono">${machine.id}</span>` : ''}
             </div>
+            ${abierto.previstaFin ? (() => {
+              const pasada = new Date(abierto.previstaFin) < new Date();
+              return `<div style="margin-top:12px;padding:12px;border-radius:8px;background:${pasada?'var(--amber-bg)':'var(--surface)'};border:1px solid ${pasada?'#F0D9A6':'var(--border)'};font-size:12.5px;color:${pasada?'var(--amber-deep)':'var(--steel)'};line-height:1.5;">
+                <i class="fa-solid fa-${pasada?'bell':'clock'}"></i>
+                ${pasada
+                  ? `<b>Tenías previsto terminar a las ${horaDe(abierto.previstaFin)}.</b> Si ya has acabado, ficha la salida. Si sigues trabajando, no pasa nada: se guardará la hora real.`
+                  : `Previsto terminar sobre las ${horaDe(abierto.previstaFin)}. Te avisaremos.`}
+              </div>`;
+            })() : ''}
             <button class="btn btn-dark" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
               <i class="fa-solid fa-${machine ? 'qrcode' : 'right-from-bracket'}"></i> ${machine ? 'Escanear y fichar salida' : 'Fichar salida'}
             </button>
@@ -2611,6 +2641,21 @@ function renderFicharCard() {
               ${machine
                 ? `<div style="font-size:13px;color:var(--steel);margin-top:10px;"><i class="fa-solid fa-truck"></i> Con <span class="f-mono">${machine.id}</span> · ${machine.type}</div>`
                 : `<div style="font-size:12.5px;color:var(--steel);margin-top:10px;">Sin máquina asignada — puedes fichar igualmente.</div>`}
+
+              <div style="margin-top:18px;text-align:left;">
+                <div class="form-label" style="text-align:center;">¿Cuántas horas tienes previsto trabajar?</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px;">
+                  ${[4,6,8].map(h => `
+                    <button class="mode-btn ${horasPrevistas===h?'active':''}" style="flex:1;min-width:64px;justify-content:center;background:${horasPrevistas===h?'var(--card)':'var(--surface)'};border:1px solid ${horasPrevistas===h?'var(--amber)':'var(--border)'};border-radius:8px;padding:10px;" onclick="setHorasPrevistas(${h})">${h}h</button>`).join('')}
+                  <button class="mode-btn ${horasPrevistas!==null && ![4,6,8].includes(horasPrevistas)?'active':''}" style="flex:1;min-width:64px;justify-content:center;background:${horasPrevistas!==null && ![4,6,8].includes(horasPrevistas)?'var(--card)':'var(--surface)'};border:1px solid ${horasPrevistas!==null && ![4,6,8].includes(horasPrevistas)?'var(--amber)':'var(--border)'};border-radius:8px;padding:10px;" onclick="pedirHorasPersonalizadas()">Otras</button>
+                  <button class="mode-btn ${horasPrevistas===null?'active':''}" style="flex:1;min-width:74px;justify-content:center;background:${horasPrevistas===null?'var(--card)':'var(--surface)'};border:1px solid ${horasPrevistas===null?'var(--amber)':'var(--border)'};border-radius:8px;padding:10px;" onclick="setHorasPrevistas(null)">Sin fijar</button>
+                </div>
+                <div style="font-size:11.5px;color:var(--steel);margin-top:8px;text-align:center;line-height:1.45;">
+                  ${horasPrevistas
+                    ? `Te avisaremos sobre las ${horaFin(horasPrevistas)} por si se te olvida fichar la salida. Puedes salir antes o después: se guarda la hora real.`
+                    : 'Sin aviso. Recuerda fichar la salida al terminar.'}
+                </div>
+              </div>
               <button class="btn btn-amber" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
                 <i class="fa-solid fa-${machine ? 'qrcode' : 'right-to-bracket'}"></i> ${machine ? 'Escanear y fichar' : 'Fichar entrada'}
               </button>
@@ -2634,9 +2679,39 @@ function arrancarContador() {
   if (!fichajeAbierto) return;
   contadorHandle = setInterval(() => {
     const el = document.getElementById('contador-jornada');
-    if (el && fichajeAbierto) el.textContent = duracionTexto(fichajeAbierto.entrada);
-    else clearInterval(contadorHandle);
+    if (!fichajeAbierto) { clearInterval(contadorHandle); return; }
+    if (el) el.textContent = duracionTexto(fichajeAbierto.entrada);
+    comprobarAvisoJornada();
   }, 30000);
+  comprobarAvisoJornada();
+}
+
+/* Cuando llega la hora prevista, se avisa una sola vez. El fichaje NO se
+   cierra: el trabajador decide, y se guarda la hora real a la que salga. */
+function comprobarAvisoJornada() {
+  if (!fichajeAbierto || !fichajeAbierto.previstaFin || avisoJornadaMostrado) return;
+  if (new Date(fichajeAbierto.previstaFin) > new Date()) return;
+
+  avisoJornadaMostrado = true;
+  if (currentTab === 'fichaje') renderFichaje();
+
+  // Aviso del sistema, para que le llegue aunque tenga el móvil guardado
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('Opertra · ¿Has terminado?', {
+        body: 'Tenías previsto terminar sobre ahora. No olvides fichar la salida.',
+        icon: '/icon-192.png', tag: 'fin-jornada',
+      });
+    } catch (e) {}
+  }
+}
+
+/* Se pide permiso solo al fichar entrada, no al abrir la app */
+function pedirPermisoAvisos() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch (e) {}
+  }
 }
 
 async function ficharAhora() {
@@ -2656,13 +2731,17 @@ async function ficharAhora() {
     const { data, error } = await getSupabase().rpc('worker_fichar', {
       p_worker_id: ficha.dbId, p_pin: ficha.pin,
       p_project_id: projectId || null, p_machine_id: machine ? machine.dbId : null,
+      p_horas_previstas: fichajeAbierto ? null : horasPrevistas,
     });
     if (error) throw error;
 
     const accion = data && data[0] ? data[0].accion : null;
     fichajeAbierto = accion === 'entrada'
-      ? { logId: data[0].log_id, entrada: data[0].hora, projectId, machineId: machine ? machine.dbId : null }
+      ? { logId: data[0].log_id, entrada: data[0].hora, projectId, machineId: machine ? machine.dbId : null,
+          previstaFin: horasPrevistas ? new Date(Date.now() + horasPrevistas*3600000).toISOString() : null }
       : null;
+    avisoJornadaMostrado = false;
+    if (accion === 'entrada' && horasPrevistas) pedirPermisoAvisos();
 
     await cargarFichajes();
     renderFichaje();
@@ -2859,6 +2938,151 @@ function comprobarCodigo(texto) {
   ficharAhora();
 }
 
+/* ======================================================================
+   CORRECCIÓN DE FICHAJES
+   Un operario se va sin fichar salida, o ficha en la obra equivocada.
+   Pasa a diario. El responsable puede corregirlo, pero queda registrado
+   quién lo cambió, cuándo y por qué — y se guardan los valores originales.
+   Sin eso, un registro de jornada no vale ante una inspección.
+   ====================================================================== */
+function openEditFichajeModal(dbId) {
+  const l = (resultadosFiltro !== null ? resultadosFiltro : timeLogs).find(x => x.dbId === dbId);
+  if (!l) return;
+
+  const fechaHora = (iso) => iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Corregir fichaje</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;">
+      <b>${l.worker}</b> · ${fmtDate(l.date)}
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Entrada</label>
+      <input class="form-input" type="datetime-local" id="ef-in" value="${fechaHora(l.checkInISO)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Salida</label>
+      <input class="form-input" type="datetime-local" id="ef-out" value="${fechaHora(l.checkOutISO)}">
+      ${!l.checkOutISO ? `<div class="form-hint"><i class="fa-solid fa-triangle-exclamation" style="margin-top:1px;color:var(--amber-deep);"></i><span>Esta jornada sigue abierta. Pon la hora real a la que terminó.</span></div>` : ''}
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('S')}</label>
+      <select class="form-select" id="ef-project">
+        <option value="">Sin asignar</option>
+        ${projects.map(p => `<option value="${p.dbId}" ${l.projectDbId===p.dbId?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Motivo de la corrección</label>
+      <input class="form-input" id="ef-reason" list="motivos-correccion" placeholder="Ej. Olvidó fichar salida">
+      <datalist id="motivos-correccion">
+        <option>Olvidó fichar salida</option>
+        <option>Olvidó fichar entrada</option>
+        <option>Fichó en la ${t('s')} equivocada</option>
+        <option>Error al escanear</option>
+        <option>Corrección acordada con el trabajador</option>
+      </datalist>
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Obligatorio. Queda registrado quién hace la corrección y se conservan los valores originales, como exige la normativa de registro de jornada.</span>
+      </div>
+    </div>
+    <div id="ef-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="ef-error-text"></span></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
+      <button class="btn btn-amber" id="ef-submit" onclick="guardarCorreccionFichaje('${dbId}')">Guardar corrección</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function guardarCorreccionFichaje(dbId) {
+  const l = (resultadosFiltro !== null ? resultadosFiltro : timeLogs).find(x => x.dbId === dbId);
+  const entrada = document.getElementById('ef-in').value;
+  const salida = document.getElementById('ef-out').value;
+  const projectId = document.getElementById('ef-project').value || null;
+  const motivo = document.getElementById('ef-reason').value.trim();
+  const errBox = document.getElementById('ef-error');
+  errBox.style.display = 'none';
+
+  const fallo = (txt) => {
+    document.getElementById('ef-error-text').textContent = txt;
+    errBox.style.display = 'flex';
+  };
+
+  if (!entrada) return fallo('La hora de entrada es obligatoria.');
+  if (!motivo) return fallo('Explica el motivo de la corrección.');
+  if (salida && new Date(salida) <= new Date(entrada)) {
+    return fallo('La salida debe ser posterior a la entrada.');
+  }
+  if (salida && (new Date(salida) - new Date(entrada)) > 24*3600000) {
+    return fallo('La jornada no puede durar más de 24 horas. Revisa las fechas.');
+  }
+  if (new Date(entrada) > new Date()) return fallo('La entrada no puede estar en el futuro.');
+
+  setButtonLoading('ef-submit', true, 'Guardando...', 'Guardar corrección');
+  try {
+    const cambios = {
+      check_in: new Date(entrada).toISOString(),
+      check_out: salida ? new Date(salida).toISOString() : null,
+      project_id: projectId,
+      edited_by: currentUser.name,
+      edited_at: new Date().toISOString(),
+      edit_reason: motivo,
+      auto_closed: false,
+    };
+    // Guardamos los valores originales solo la primera vez que se corrige
+    if (!l.editedAt) {
+      cambios.original_check_in = l.checkInISO;
+      cambios.original_check_out = l.checkOutISO;
+    }
+
+    const { error } = await getSupabase().from('time_logs').update(cambios).eq('id', dbId);
+    if (error) throw error;
+
+    registrarEnHistorial('corrección de fichaje', 'Fichaje', l.worker,
+      `${fmtDate(l.date)} · ${motivo}`);
+
+    closeAddMachineModal();
+    resultadosFiltro = null;
+    await cargarFichajes();
+    renderFichaje();
+  } catch (err) {
+    fallo('No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.'));
+    setButtonLoading('ef-submit', false, '', 'Guardar corrección');
+  }
+}
+
+/* Jornadas que llevan demasiadas horas abiertas: casi siempre es que alguien
+   olvidó fichar la salida. Se avisa al responsable en vez de dejar que el
+   contador siga corriendo días. */
+function jornadasOlvidadas() {
+  const limite = 14 * 3600000;
+  return timeLogs.filter(l => !l.checkOutISO && (Date.now() - new Date(l.checkInISO)) > limite);
+}
+
+async function cerrarOlvidadas() {
+  const olvidadas = jornadasOlvidadas();
+  if (olvidadas.length === 0) return;
+  if (!confirm(`Se van a cerrar ${olvidadas.length} jornada(s) que llevan más de 14 horas abiertas.\n\nQuedarán marcadas como "cerradas automáticamente" para que las revises y pongas la hora real.\n\n¿Continuar?`)) return;
+  try {
+    const { data, error } = await getSupabase().rpc('cerrar_jornadas_olvidadas', {
+      p_company_id: currentUser.companyId, p_horas: 16,
+    });
+    if (error) throw error;
+    registrarEnHistorial('cierre automático', 'Fichajes', `${data} jornada(s)`, 'Superaban las 16 horas abiertas');
+    await cargarFichajes();
+    renderFichaje();
+  } catch (err) {
+    alert('No se pudieron cerrar: ' + (err.message || 'inténtalo de nuevo.'));
+  }
+}
+
 /* ============ REGISTRO DE HORAS (admin) ============ */
 let filtroFichajeDesde = '', filtroFichajeHasta = '', filtroFichajeTrabajador = '';
 
@@ -2892,7 +3116,7 @@ async function aplicarFiltroFichaje() {
   filtrando = true;
   renderFichaje();
   try {
-    let q = getSupabase().from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out').order('check_in', { ascending: false }).limit(2000);
+    let q = getSupabase().from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed').order('check_in', { ascending: false }).limit(2000);
     if (filtroFichajeDesde) q = q.gte('check_in', filtroFichajeDesde + 'T00:00:00');
     if (filtroFichajeHasta) q = q.lte('check_in', filtroFichajeHasta + 'T23:59:59');
     if (filtroFichajeTrabajador) q = q.eq('worker_id', filtroFichajeTrabajador);
@@ -2921,6 +3145,8 @@ function mapearFichaje(l) {
     date: l.check_in.slice(0,10),
     checkIn: horaDe(l.check_in), checkOut: l.check_out ? horaDe(l.check_out) : '—',
     hours: l.check_out ? horasDecimales(l.check_in, l.check_out) : 0,
+    editedBy: l.edited_by, editedAt: l.edited_at, editReason: l.edit_reason,
+    autoClosed: l.auto_closed,
   };
 }
 
@@ -2931,6 +3157,19 @@ function renderRegistroHoras() {
   const esAdmin = !currentUser.isWorker;
 
   return `
+    ${esAdmin && jornadasOlvidadas().length > 0 ? `
+    <div class="plate" style="padding:14px 16px;margin-bottom:14px;border-left:3px solid var(--amber-deep);display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;">${rivets}
+      <i class="fa-solid fa-triangle-exclamation" style="color:var(--amber-deep);margin-top:2px;font-size:18px;"></i>
+      <div style="flex:1;min-width:220px;">
+        <div style="font-size:14px;font-weight:700;">${jornadasOlvidadas().length} jornada(s) llevan más de 14 horas abiertas</div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">
+          Seguramente alguien olvidó fichar la salida: ${jornadasOlvidadas().slice(0,3).map(l => l.worker).join(', ')}${jornadasOlvidadas().length>3?'...':''}.
+          Corrígelas una a una, o ciérralas todas y ajusta las horas después.
+        </div>
+      </div>
+      <button class="btn btn-outline" style="white-space:nowrap;" onclick="cerrarOlvidadas()">Cerrar todas</button>
+    </div>` : ''}
+
     ${esAdmin ? `
     <div class="plate" style="padding:14px 16px;margin-bottom:14px;">${rivets}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
@@ -2975,7 +3214,7 @@ function renderRegistroHoras() {
       <div class="table-scroll">
         <table>
           <thead><tr>
-            ${esAdmin ? '<th>Trabajador</th>' : ''}<th>Fecha</th><th>${t('S')}</th><th>Entrada</th><th>Salida</th><th>Horas</th>
+            ${esAdmin ? '<th>Trabajador</th>' : ''}<th>Fecha</th><th>${t('S')}</th><th>Entrada</th><th>Salida</th><th>Horas</th>${esAdmin ? '<th></th>' : ''}
           </tr></thead>
           <tbody>
             ${visible.map(l => `
@@ -2985,7 +3224,12 @@ function renderRegistroHoras() {
                 <td style="font-size:12.5px;">${l.project}</td>
                 <td class="f-mono" style="font-size:12.5px;color:var(--success);">${l.checkIn}</td>
                 <td class="f-mono" style="font-size:12.5px;color:${l.checkOut === '—' ? 'var(--idle)' : 'var(--ink)'};">${l.checkOut}</td>
-                <td class="f-mono" style="font-size:12.5px;font-weight:600;">${l.checkOut === '—' ? 'en curso' : l.hours.toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' h'}</td>
+                <td class="f-mono" style="font-size:12.5px;font-weight:600;">
+                  ${l.checkOut === '—' ? 'en curso' : l.hours.toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' h'}
+                  ${l.editedBy ? `<i class="fa-solid fa-pen" style="font-size:9px;color:var(--amber-deep);margin-left:4px;" title="Corregido por ${l.editedBy}: ${l.editReason || ''}"></i>` : ''}
+                  ${l.autoClosed ? `<i class="fa-solid fa-robot" style="font-size:9px;color:var(--danger);margin-left:4px;" title="Cerrada automáticamente — revisa la hora real"></i>` : ''}
+                </td>
+                ${esAdmin ? `<td><button class="btn-ghost" onclick="openEditFichajeModal('${l.dbId}')" title="Corregir">corregir</button></td>` : ''}
               </tr>`).join('')}
           </tbody>
         </table>
@@ -3000,10 +3244,11 @@ function renderRegistroHoras() {
 function exportarFichajes() {
   const lista = fichajesFiltrados();
   if (lista.length === 0) { alert('No hay fichajes que exportar con estos filtros.'); return; }
-  const cab = ['Trabajador', t('S'), 'Máquina', 'Fecha', 'Entrada', 'Salida', 'Horas'];
+  const cab = ['Trabajador', t('S'), 'Máquina', 'Fecha', 'Entrada', 'Salida', 'Horas', 'Corregido por', 'Motivo'];
   const filas = lista.map(l => [
     l.worker, l.project, l.machine, l.date, l.checkIn, l.checkOut,
     l.checkOut === '—' ? '' : l.hours.toFixed(2).replace('.', ','),
+    l.editedBy || '', l.editReason || '',
   ]);
   const csv = [cab, ...filas]
     .map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';'))
