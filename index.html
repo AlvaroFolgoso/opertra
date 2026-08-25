@@ -969,9 +969,20 @@
    Hasta entonces queda vacío — no hay usuario de mentira precargado. */
 let currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
 /* Módulos con información de empresa (facturación, clientes, informes, ficha de compañeros) — solo encargado/admin */
-const RESTRICTED_KEYS = ['facturacion', 'clientes', 'informes', 'trabajadores', 'obras'];
+/* Lo que NO puede ver quien entra con PIN. Se comprueba con isWorker (que
+   se pone al validar el PIN contra la base de datos) y no solo con el rol,
+   para que no baste con manipular una variable del navegador.
+   Las obras sí las ve: las necesita para elegir dónde ficha. */
+const RESTRICTED_KEYS = ['facturacion', 'clientes', 'informes', 'trabajadores'];
 function canAccess(key) {
-  return currentUser.accessLevel !== 'trabajador' || !RESTRICTED_KEYS.includes(key);
+  const esTrabajador = currentUser.isWorker === true || currentUser.accessLevel === 'trabajador';
+  return !esTrabajador || !RESTRICTED_KEYS.includes(key);
+}
+
+/* Una sola función decide quién puede administrar. Si esto se comprueba de
+   formas distintas en cada sitio, tarde o temprano una se queda desfasada. */
+function esAdministrador() {
+  return currentUser.isWorker !== true && currentUser.accessLevel !== 'trabajador';
 }
 
 /* ======================================================================
@@ -1751,7 +1762,7 @@ function renderObras() {
       <div class="search-box">
         <input class="search-input" id="obras-search" placeholder="Buscar obra, cliente..." oninput="filterObras(this.value)">
       </div>
-      <button class="btn btn-amber" onclick="openAddObraModal()"><i class="fa-solid fa-plus"></i> Añadir obra</button>
+      ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddObraModal()"><i class="fa-solid fa-plus"></i> Añadir ${t('s')}</button>` : ''}
     </div>
     <div class="obras-grid" id="obras-results">
       ${projects.length === 0
@@ -2193,6 +2204,7 @@ async function restaurarAcceso(userId) {
 
 /* ============ EDITAR MÁQUINA ============ */
 function openEditMachineModal(code) {
+  if (!esAdministrador()) return;
   const m = machines.find(x => x.id === code);
   if (!m) return;
   const tipos = MACHINE_TYPES.filter(x => x !== '__otro__');
@@ -2313,6 +2325,7 @@ async function borrarMaquina(code) {
 
 /* ============ EDITAR TRABAJADOR ============ */
 function openEditWorkerModal(code) {
+  if (!esAdministrador()) return;
   const w = workers.find(x => x.id === code);
   if (!w) return;
   document.getElementById('add-machine-modal').innerHTML = `
@@ -2421,6 +2434,7 @@ async function darDeBajaTrabajador(code) {
 
 /* ============ EDITAR OBRA ============ */
 function openEditObraModal(code) {
+  if (!esAdministrador()) return;
   const p = projects.find(x => x.id === code);
   if (!p) return;
   document.getElementById('add-machine-modal').innerHTML = `
@@ -2584,7 +2598,7 @@ function openObraDrawer(id) {
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
       <div style="min-width:0;"><div class="drawer-title">${esc(p.name)}</div><div class="drawer-model">${esc(p.client)}</div></div>
-      ${currentUser.accessLevel !== 'trabajador'
+      ${esAdministrador()
         ? `<button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;white-space:nowrap;" onclick="openEditObraModal('${esc(p.id)}')"><i class="fa-solid fa-pen"></i> Editar</button>`
         : ''}
     </div>
@@ -2694,6 +2708,7 @@ async function assignMachineToObra(projId) {
 
 /* ============ AÑADIR OBRA (modal) ============ */
 function openAddObraModal() {
+  if (!esAdministrador()) return;
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
       <span class="f-display" style="font-size:18px;">Añadir obra</span>
@@ -3379,6 +3394,7 @@ function comprobarCodigo(texto) {
    Sin eso, un registro de jornada no vale ante una inspección.
    ====================================================================== */
 function openEditFichajeModal(dbId) {
+  if (!esAdministrador()) return;
   const l = (resultadosFiltro !== null ? resultadosFiltro : timeLogs).find(x => x.dbId === dbId);
   if (!l) return;
 
@@ -3784,7 +3800,7 @@ function renderMaquinaria() {
           <button class="mode-btn ${maquinariaView==='lista'?'active':''}" onclick="setMaquinariaView('lista')"><i class="fa-solid fa-list"></i> Lista</button>
           <button class="mode-btn ${maquinariaView==='mapa'?'active':''}" onclick="setMaquinariaView('mapa')"><i class="fa-solid fa-map"></i> Mapa</button>
         </div>
-        <button class="btn btn-amber" onclick="openAddMachineModal()"><i class="fa-solid fa-plus"></i> Añadir máquina</button>
+        ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddMachineModal()"><i class="fa-solid fa-plus"></i> Añadir máquina</button>` : ''}
       </div>
     </div>
     ${maquinariaView === 'lista' ? `
@@ -3852,7 +3868,7 @@ function openDrawer(id) {
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
       <div style="min-width:0;"><div class="drawer-title">${esc(m.type)}</div><div class="drawer-model">${esc(m.model)}</div></div>
-      ${currentUser.accessLevel !== 'trabajador'
+      ${esAdministrador()
         ? `<button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;white-space:nowrap;" onclick="openEditMachineModal('${esc(m.id)}')"><i class="fa-solid fa-pen"></i> Editar</button>`
         : ''}
     </div>
@@ -3985,6 +4001,7 @@ function closeDrawer() {
 
 /* ============ AÑADIR MÁQUINA (modal) ============ */
 function openAddMachineModal() {
+  if (!esAdministrador()) return;
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
       <span class="f-display" style="font-size:18px;">Añadir máquina</span>
@@ -4445,6 +4462,7 @@ function suggestPin() {
 }
 
 function openAddWorkerModal() {
+  if (!esAdministrador()) return;
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
       <span class="f-display" style="font-size:18px;">Añadir trabajador</span>
@@ -4576,7 +4594,7 @@ function obraActualDe(w) {
 }
 
 function workerRowHTML(w) {
-  const esAdmin = currentUser.accessLevel !== 'trabajador';
+  const esAdmin = esAdministrador();
   return `
     <tr style="cursor:pointer;" onclick="openWorkerDrawer('${esc(w.id)}')">
       <td class="f-mono" style="font-size:12px;color:var(--steel);">${esc(w.id)}</td>
@@ -4630,10 +4648,10 @@ function renderTrabajadores() {
       <div class="search-box">
         <input class="search-input" id="trabajadores-search" placeholder="Buscar trabajador..." value="${workerQuery}" oninput="searchWorkers(this.value)">
       </div>
-      <button class="btn btn-amber" onclick="openAddWorkerModal()"><i class="fa-solid fa-plus"></i> Añadir trabajador</button>
+      ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddWorkerModal()"><i class="fa-solid fa-plus"></i> Añadir trabajador</button>` : ''}
     </div>
 
-    ${currentUser.accessLevel !== 'trabajador' ? `
+    ${esAdministrador() ? `
     <div class="plate" style="padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">${rivets}
       <div style="flex:1;min-width:200px;">
         <div style="font-size:12px;font-weight:600;color:var(--steel);text-transform:uppercase;letter-spacing:0.02em;">Código de acceso de tu empresa</div>
@@ -4664,7 +4682,7 @@ function renderTrabajadores() {
       <div class="table-scroll">
       <table>
         <thead><tr>
-          <th>ID</th><th>Nombre</th><th>Puesto</th>${currentUser.accessLevel !== 'trabajador' ? '<th>PIN</th>' : ''}<th>${t('S')}</th><th>Máquina</th><th>Estado</th><th></th>
+          <th>ID</th><th>Nombre</th><th>Puesto</th>${esAdministrador() ? '<th>PIN</th>' : ''}<th>${t('S')}</th><th>Máquina</th><th>Estado</th><th></th>
         </tr></thead>
         <tbody id="workers-tbody">
           ${workers.length === 0
@@ -4772,7 +4790,7 @@ function openWorkerDrawer(id) {
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
       <div style="min-width:0;"><div class="drawer-title">${esc(w.name)}</div><div class="drawer-model">${esc(w.role)}</div></div>
-      ${currentUser.accessLevel !== 'trabajador'
+      ${esAdministrador()
         ? `<button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;white-space:nowrap;" onclick="openEditWorkerModal('${esc(w.id)}')"><i class="fa-solid fa-pen"></i> Editar</button>`
         : ''}
     </div>
@@ -5368,7 +5386,7 @@ function renderFacturacion() {
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-outline" onclick="exportarCobros()"><i class="fa-solid fa-file-arrow-down"></i> Exportar</button>
-        <button class="btn btn-amber" onclick="openAddInvoiceModal()"><i class="fa-solid fa-plus"></i> Anotar cobro</button>
+        ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddInvoiceModal()"><i class="fa-solid fa-plus"></i> Anotar cobro</button>` : ''}
       </div>
     </div>
 
@@ -5460,6 +5478,7 @@ function autoRellenarCliente() {
 }
 
 function openAddInvoiceModal() {
+  if (!esAdministrador()) return;
   const en30 = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
@@ -5855,12 +5874,12 @@ function renderTrialBanner() {
   if (d === null || d > 10 || d <= 0) { bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
   bar.innerHTML = `<i class="fa-solid fa-clock"></i> Te quedan ${d} día${d === 1 ? '' : 's'} de prueba gratuita.`
-    + (currentUser.accessLevel !== 'trabajador' ? ' <span style="text-decoration:underline;cursor:pointer;margin-left:6px;" onclick="alert(\'La gestión de pagos estará disponible próximamente.\')">Gestionar suscripción</span>' : '');
+    + (esAdministrador() ? ' <span style="text-decoration:underline;cursor:pointer;margin-left:6px;" onclick="alert(\'La gestión de pagos estará disponible próximamente.\')">Gestionar suscripción</span>' : '');
 }
 function enterAppOrShowTrialExpired() {
   if (isTrialExpired()) {
     showScreen('trial-expired');
-    document.getElementById('trial-expired-admin-msg').style.display = currentUser.accessLevel !== 'trabajador' ? 'block' : 'none';
+    document.getElementById('trial-expired-admin-msg').style.display = esAdministrador() ? 'block' : 'none';
     document.getElementById('trial-expired-worker-msg').style.display = currentUser.accessLevel === 'trabajador' ? 'block' : 'none';
   } else {
     showScreen('app');
