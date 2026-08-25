@@ -6026,20 +6026,40 @@ function reportBar(label, value, max, fmt, color) {
     </div>`;
 }
 
+/* Meses disponibles para consultar en los informes */
+let mesInforme = new Date().toISOString().slice(0,7);
+function cambiarMesInforme(m) { mesInforme = m; renderInformes(); }
+
+function nombreMes(iso) {
+  const [a, m] = iso.split('-');
+  return new Date(Number(a), Number(m) - 1, 1)
+    .toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+}
+
 function renderInformes() {
-  // Horas trabajadas por trabajador (agosto)
-  const mesActual = new Date().toISOString().slice(0,7);
+  // Solo se muestran trabajadores con horas: una lista de 200 nombres a cero
+  // no informa de nada y hace la pantalla ilegible.
   const hoursByWorker = workers.map(w => ({
     name: w.name,
-    hours: timeLogs.filter(l => l.workerId === w.dbId && l.date.startsWith(mesActual)).reduce((s,l) => s + l.hours, 0),
-  })).sort((a,b) => b.hours - a.hours);
+    hours: timeLogs.filter(l => l.workerId === w.dbId && l.date.startsWith(mesInforme)).reduce((s,l) => s + l.hours, 0),
+  })).filter(h => h.hours > 0).sort((a,b) => b.hours - a.hours).slice(0, 25);
   const maxHours = Math.max(1, ...hoursByWorker.map(h => h.hours));
+  const totalHoras = hoursByWorker.reduce((s,h) => s + h.hours, 0);
+
+  // Últimos 6 meses para el selector
+  const meses = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    meses.push(d.toISOString().slice(0,7));
+  }
 
   // Facturación por obra
   const billingByProject = projects.map(p => ({
-    name: p.id,
+    name: p.id, nombre: p.name,
     amount: invoices.filter(i => i.projectDbId === p.dbId).reduce((s,i) => s + i.amount, 0),
-  })).sort((a,b) => b.amount - a.amount);
+  })).filter(b => b.amount > 0).sort((a,b) => b.amount - a.amount).slice(0, 15);
   const maxBilling = Math.max(1, ...billingByProject.map(b => b.amount));
 
   // Incidencias por obra (abiertas + resueltas, total histórico)
@@ -6047,11 +6067,11 @@ function renderInformes() {
     name: p.id,
     count: incidents.filter(i => i.project === p.name).length,
     open: incidents.filter(i => i.project === p.name && !i.resolved).length,
-  })).sort((a,b) => b.count - a.count);
+  })).filter(i => i.count > 0).sort((a,b) => b.count - a.count).slice(0, 15);
   const maxInc = Math.max(1, ...incByProject.map(i => i.count));
 
   // Uso de maquinaria (activa vs total, por tipo)
-  const machineTypes = [...new Set(machines.map(m => m.type))];
+  const machineTypes = [...new Set(machines.map(m => m.type))].slice(0, 15);
   const machineUse = machineTypes.map(t => ({
     name: t,
     active: machines.filter(m => m.type === t && m.status === 'active').length,
@@ -6061,15 +6081,25 @@ function renderInformes() {
   document.getElementById('view-informes').innerHTML = `
     <div class="dash-cols">
       <div class="plate" style="flex:1;padding:20px;">${rivets}
-        <span class="f-display" style="font-size:15px;">HORAS TRABAJADAS ESTE MES</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="f-display" style="font-size:15px;">HORAS TRABAJADAS</span>
+          <select class="form-select" style="width:auto;padding:6px 10px;font-size:12.5px;" onchange="cambiarMesInforme(this.value)">
+            ${meses.map(m => `<option value="${m}" ${m===mesInforme?'selected':''}>${nombreMes(m)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:4px;">
+          ${totalHoras.toLocaleString('es-ES',{maximumFractionDigits:1})} h en total${hoursByWorker.length >= 25 ? ' · mostrando los 25 con más horas' : ''}
+        </div>
         <div style="margin-top:12px;">
-          ${hoursByWorker.map(h => reportBar(h.name, h.hours, maxHours, h.hours.toLocaleString('es-ES',{maximumFractionDigits:1})+' h')).join('')}
+          ${hoursByWorker.length === 0
+            ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Sin fichajes en ${nombreMes(mesInforme)}.</div>`
+            : hoursByWorker.map(h => reportBar(esc(h.name), h.hours, maxHours, h.hours.toLocaleString('es-ES',{maximumFractionDigits:1})+' h')).join('')}
         </div>
       </div>
       <div class="plate" style="width:340px;flex-shrink:0;padding:20px;">${rivets}
         <span class="f-display" style="font-size:15px;">USO DE MAQUINARIA</span>
         <div style="margin-top:12px;">
-          ${machineUse.map(m => reportBar(m.name, m.active, m.total || 1, `${m.active}/${m.total}`, 'var(--success)')).join('')}
+          ${machineUse.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Todavía no hay máquinas registradas.</div>` : machineUse.map(m => reportBar(esc(m.name), m.active, m.total || 1, `${m.active}/${m.total}`, 'var(--success)')).join('')}
         </div>
       </div>
     </div>
@@ -6078,13 +6108,13 @@ function renderInformes() {
       <div class="plate" style="flex:1;padding:20px;">${rivets}
         <span class="f-display" style="font-size:15px;">FACTURACIÓN POR OBRA</span>
         <div style="margin-top:12px;">
-          ${billingByProject.map(b => reportBar(b.name, b.amount, maxBilling, b.amount.toLocaleString('es-ES',{minimumFractionDigits:0})+' €', 'var(--amber-deep)')).join('')}
+          ${billingByProject.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Todavía no hay cobros anotados.</div>` : billingByProject.map(b => reportBar(esc(b.name), b.amount, maxBilling, b.amount.toLocaleString('es-ES',{maximumFractionDigits:0})+' €', 'var(--amber-deep)')).join('')}
         </div>
       </div>
       <div class="plate" style="width:340px;flex-shrink:0;padding:20px;">${rivets}
         <span class="f-display" style="font-size:15px;">INCIDENCIAS POR OBRA</span>
         <div style="margin-top:12px;">
-          ${incByProject.map(i => reportBar(i.name, i.count, maxInc, `${i.count} (${i.open} abiertas)`, i.open>0?'var(--danger)':'var(--idle)')).join('')}
+          ${incByProject.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Sin incidencias registradas.</div>` : incByProject.map(i => reportBar(esc(i.name), i.count, maxInc, `${i.count} (${i.open} abiertas)`, i.open>0?'var(--danger)':'var(--idle)')).join('')}
         </div>
       </div>
     </div>
