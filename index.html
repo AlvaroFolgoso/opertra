@@ -674,7 +674,8 @@
             <option>1-5</option><option>6-25</option><option>26-100</option><option>Más de 100</option>
           </select>
         </div>
-        <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:8px;" onclick="submitDemoRequest()"><i class="fa-solid fa-paper-plane"></i> Solicitar demo</button>
+        <div id="demo-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="demo-error-text"></span></div>
+        <button class="btn btn-amber" id="demo-submit" style="width:100%;justify-content:center;padding:12px;margin-top:8px;" onclick="submitDemoRequest()"><i class="fa-solid fa-paper-plane"></i> Solicitar demo</button>
       </div>
     </div>
   </section>
@@ -1385,12 +1386,6 @@ function saveState() {}
 function loadState() {
   try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
   return false;
-}
-
-function resetDemoData() {
-  if (!confirm('Esto borra todos los cambios guardados en este navegador (fichajes, incidencias, facturas...) y vuelve a los datos de ejemplo. ¿Continuar?')) return;
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
-  location.reload();
 }
 
 const NAV = [
@@ -5701,29 +5696,49 @@ function scrollLanding(id) {
   document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* Los leads de demo se guardan de verdad en este navegador (localStorage).
-   Para que lleguen por email a tu equipo comercial hace falta backend: aquí
-   dejamos el punto exacto donde engancharía esa llamada a la API real. */
-function submitDemoRequest() {
+/* Las solicitudes de demo se guardan en la tabla demo_leads de Supabase.
+   Antes se guardaban en el navegador del visitante, así que la solicitud
+   no llegaba nunca a nadie. */
+async function submitDemoRequest() {
   const name = document.getElementById('demo-name').value.trim();
   const company = document.getElementById('demo-company').value.trim();
   const email = document.getElementById('demo-email').value.trim();
   const phone = document.getElementById('demo-phone').value.trim();
   const fleet = document.getElementById('demo-fleet').value;
-  if (!name || !company || !email) {
+  const box = document.getElementById('demo-error');
+  if (box) box.style.display = 'none';
+  if (!name || !company || !email || !email.includes('@')) {
+    if (box) {
+      document.getElementById('demo-error-text').textContent = 'Rellena tu nombre, empresa y un correo válido.';
+      box.style.display = 'flex';
+    }
     (!name ? document.getElementById('demo-name') : !company ? document.getElementById('demo-company') : document.getElementById('demo-email')).focus();
     return;
   }
-  const lead = { name, company, email, phone, fleet, date: new Date().toISOString() };
-  let leads = [];
-  try { leads = JSON.parse(localStorage.getItem('opertra_demo_leads') || '[]'); } catch(e) {}
-  leads.push(lead);
-  try { localStorage.setItem('opertra_demo_leads', JSON.stringify(leads)); } catch(e) {}
+  const btn = document.getElementById('demo-submit');
+  const textoBtn = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...'; }
 
-  // TODO producción: sustituir por una llamada real, p.ej. fetch('/api/leads', {method:'POST', body: JSON.stringify(lead)})
+  try {
+    // Se guarda en la base de datos: antes se quedaba en el navegador del
+    // visitante y la solicitud no llegaba a ninguna parte.
+    const { error } = await getSupabase().from('demo_leads').insert({
+      name, company, email, phone: phone || null, fleet_size: fleet || null,
+    });
+    if (error) throw error;
 
-  document.getElementById('demo-success').style.display = 'flex';
-  ['demo-name','demo-company','demo-email','demo-phone'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('demo-success').style.display = 'flex';
+    ['demo-name','demo-company','demo-email','demo-phone'].forEach(id => document.getElementById(id).value = '');
+  } catch (err) {
+    const box = document.getElementById('demo-error');
+    if (box) {
+      document.getElementById('demo-error-text').textContent =
+        'No se pudo enviar la solicitud. Inténtalo de nuevo o escríbenos directamente.';
+      box.style.display = 'flex';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = textoBtn; }
+  }
 }
 
 /* ============ AUTENTICACIÓN REAL (Supabase Auth) ============ */
@@ -6543,7 +6558,7 @@ function openLegal(type) {
 function closeLegal() { document.getElementById('legal-overlay').classList.remove('active'); }
 
 /* ============ INIT ============ */
-const restoredFromStorage = loadState();
+loadState();  // limpia restos de versiones antiguas
 renderDashboard();
 renderObras();
 renderFichaje();
