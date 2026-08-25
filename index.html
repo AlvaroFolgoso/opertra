@@ -2266,6 +2266,174 @@ async function restaurarAcceso(userId) {
   }
 }
 
+/* ======================================================================
+   IMPRIMIR ETIQUETAS QR
+   El QR no sirve de nada en la pantalla: tiene que estar pegado en la
+   máquina. Esto genera una hoja lista para imprimir y plastificar.
+   ====================================================================== */
+function imprimirQR(machineCode) {
+  const m = machines.find(x => x.id === machineCode);
+  if (!m) return;
+
+  const lienzo = document.getElementById('qr-render-' + m.id);
+  const img = lienzo ? lienzo.querySelector('canvas, img') : null;
+  const datos = img && img.toDataURL ? img.toDataURL() : (img ? img.src : null);
+  if (!datos) { alert('El código QR aún se está generando. Espera un momento e inténtalo de nuevo.'); return; }
+
+  const v = window.open('', '_blank', 'width=800,height=1000');
+  if (!v) { alert('El navegador ha bloqueado la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
+
+  v.document.write(`
+    <!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+    <title>Etiqueta ${esc(m.id)} · Opertra</title>
+    <style>
+      @page { size: A4; margin: 20mm; }
+      body { font-family: system-ui, sans-serif; text-align: center; padding: 0; margin: 0; }
+      .etiqueta { border: 3px solid #1C2126; border-radius: 12px; padding: 28px; max-width: 420px; margin: 40px auto; }
+      .marca { font-size: 13px; letter-spacing: 3px; color: #6B7280; font-weight: 700; }
+      .codigo { font-size: 40px; font-weight: 800; margin: 6px 0 2px; font-family: ui-monospace, monospace; }
+      .tipo { font-size: 17px; color: #444; margin-bottom: 18px; }
+      img { width: 260px; height: 260px; }
+      .pie { font-size: 13px; color: #444; margin-top: 16px; line-height: 1.5; }
+      .empresa { font-size: 12px; color: #888; margin-top: 14px; }
+      @media print { .nota { display: none; } }
+    </style></head><body>
+      <div class="etiqueta">
+        <div class="marca">OPERTRA</div>
+        <div class="codigo">${esc(m.id)}</div>
+        <div class="tipo">${esc(m.type)}${m.plate && m.plate !== '—' ? ' · ' + esc(m.plate) : ''}</div>
+        <img src="${datos}" alt="Código QR">
+        <div class="pie"><b>Escanea para fichar</b><br>Abre Opertra y apunta con la cámara</div>
+        <div class="empresa">${esc(currentUser.company)}</div>
+      </div>
+      <p class="nota" style="color:#888;font-size:13px;">Imprime, recorta y pega en la máquina. Se recomienda plastificar.</p>
+      <script>window.onload = () => setTimeout(() => window.print(), 400);<\/script>
+    </body></html>`);
+  v.document.close();
+}
+
+/* Imprimir todas las etiquetas de golpe: montar una flota de 40 máquinas
+   una a una sería insufrible. */
+function imprimirTodasLasEtiquetas() {
+  if (machines.length === 0) { alert('Todavía no hay máquinas.'); return; }
+  if (!window.QRCode) { alert('El generador de códigos aún se está cargando. Espera un momento.'); return; }
+
+  const v = window.open('', '_blank', 'width=900,height=1000');
+  if (!v) { alert('El navegador ha bloqueado la ventana. Permite las ventanas emergentes para este sitio.'); return; }
+
+  v.document.write(`
+    <!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+    <title>Etiquetas QR · ${esc(currentUser.company)}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: system-ui, sans-serif; margin: 0; }
+      .hoja { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
+      .et { border: 2px solid #1C2126; border-radius: 10px; padding: 14px; text-align: center; break-inside: avoid; }
+      .marca { font-size: 10px; letter-spacing: 2px; color: #6B7280; font-weight: 700; }
+      .cod { font-size: 24px; font-weight: 800; margin: 3px 0; font-family: ui-monospace, monospace; }
+      .tip { font-size: 12px; color: #444; margin-bottom: 8px; }
+      .qr { display: flex; justify-content: center; }
+      .pie { font-size: 10.5px; color: #555; margin-top: 8px; }
+    </style></head><body>
+      <div class="hoja">
+        ${machines.map(m => `
+          <div class="et">
+            <div class="marca">OPERTRA</div>
+            <div class="cod">${esc(m.id)}</div>
+            <div class="tip">${esc(m.type)}${m.plate && m.plate !== '—' ? ' · ' + esc(m.plate) : ''}</div>
+            <div class="qr" id="q-${esc(m.id)}"></div>
+            <div class="pie"><b>Escanea para fichar</b></div>
+          </div>`).join('')}
+      </div>
+      <script>
+        const codigos = ${JSON.stringify(machines.map(m => ({ id: m.id, qr: m.qrCode })))};
+        codigos.forEach(c => {
+          new QRCode(document.getElementById('q-' + c.id), {
+            text: c.qr, width: 130, height: 130,
+            colorDark: '#1C2126', colorLight: '#ffffff',
+          });
+        });
+        setTimeout(() => window.print(), 900);
+      <\/script>
+    </body></html>`);
+  v.document.close();
+}
+
+/* ======================================================================
+   COMPARTIR ACCESO CON UN TRABAJADOR
+   Dictar por teléfono "el código es O-P-guion-A-tres-efe..." es una fuente
+   de errores. Esto prepara el mensaje listo para enviar por WhatsApp.
+   ====================================================================== */
+function compartirAcceso(workerCode) {
+  const w = workers.find(x => x.id === workerCode);
+  if (!w || !esAdministrador()) return;
+
+  const texto = `Hola ${w.name}, ya puedes fichar con Opertra:\n\n`
+    + `1. Entra en https://opertra.vercel.app desde el móvil\n`
+    + `2. Pulsa "Con PIN"\n`
+    + `3. Código de empresa: ${currentUser.accessCode}\n`
+    + `4. Tu PIN: ${w.pin}\n\n`
+    + `Puedes instalarla en la pantalla de inicio para tenerla a mano.`;
+
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Dar acceso a ${esc(w.name)}</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <div class="plate" style="flex:1;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Código empresa</div>
+        <div class="f-mono" style="font-size:19px;font-weight:600;letter-spacing:1px;color:var(--amber-deep);margin-top:4px;">${esc(currentUser.accessCode || '—')}</div>
+      </div>
+      <div class="plate" style="flex:1;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Su PIN</div>
+        <div class="f-mono" style="font-size:19px;font-weight:600;letter-spacing:4px;color:var(--amber-deep);margin-top:4px;">${esc(w.pin || '—')}</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Mensaje listo para enviar</label>
+      <textarea class="textarea" id="msg-acceso" style="height:150px;font-size:12.5px;" readonly>${esc(texto)}</textarea>
+    </div>
+
+    <div class="form-hint">
+      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+      <span>Dictar el código por teléfono se presta a errores. Copia el mensaje y mándaselo por WhatsApp o SMS.</span>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAddMachineModal()">Cerrar</button>
+      <button class="btn btn-amber" id="btn-copiar-acceso" onclick="copiarMensajeAcceso()"><i class="fa-solid fa-copy"></i> Copiar mensaje</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+  marcarNavegacion();
+}
+
+async function copiarMensajeAcceso() {
+  const campo = document.getElementById('msg-acceso');
+  const btn = document.getElementById('btn-copiar-acceso');
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(campo.value);
+    } else {
+      campo.removeAttribute('readonly');
+      campo.select();
+      document.execCommand('copy');
+      campo.setAttribute('readonly', '');
+    }
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+      setTimeout(() => { if (btn) btn.innerHTML = '<i class="fa-solid fa-copy"></i> Copiar mensaje'; }, 2000);
+    }
+  } catch (e) {
+    campo.select();
+    alert('Selecciona el texto y cópialo con Ctrl+C.');
+  }
+}
+
 /* ============ EDITAR MÁQUINA ============ */
 function openEditMachineModal(code) {
   if (!esAdministrador()) return;
@@ -3880,6 +4048,7 @@ function renderMaquinaria() {
           <button class="mode-btn ${maquinariaView==='lista'?'active':''}" onclick="setMaquinariaView('lista')"><i class="fa-solid fa-list"></i> Lista</button>
           <button class="mode-btn ${maquinariaView==='mapa'?'active':''}" onclick="setMaquinariaView('mapa')"><i class="fa-solid fa-map"></i> Mapa</button>
         </div>
+        ${esAdministrador() && machines.length > 0 ? `<button class="btn btn-outline" onclick="imprimirTodasLasEtiquetas()" title="Imprimir todas las etiquetas QR"><i class="fa-solid fa-print"></i></button>` : ''}
         ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddMachineModal()"><i class="fa-solid fa-plus"></i> Añadir máquina</button>` : ''}
       </div>
     </div>
@@ -3911,7 +4080,31 @@ function initFleetMap() {
   const el = document.getElementById('fleet-map');
   if (!el || !window.L) return;
   const linked = machines.filter(m => m.device.linked && typeof m.lat === 'number' && typeof m.lng === 'number');
-  if (linked.length === 0) return;
+
+  // Sin señal no hay mapa que pintar: se explica por qué en vez de dejar
+  // un rectángulo gris que parece que la app está rota.
+  if (linked.length === 0) {
+    const conDispositivo = machines.filter(m => m.device.linked).length;
+    el.innerHTML = `
+      <div class="empty-state" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px;">
+        <i class="fa-solid fa-map-location-dot"></i>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);">
+          ${machines.length === 0 ? 'Todavía no hay máquinas'
+            : conDispositivo === 0 ? 'Ninguna máquina tiene GPS vinculado'
+            : 'Esperando la primera señal'}
+        </div>
+        <div style="font-size:13px;margin-top:4px;max-width:340px;line-height:1.5;">
+          ${machines.length === 0
+            ? 'Añade máquinas y vincula sus dispositivos GPS para verlas aquí.'
+            : conDispositivo === 0
+              ? 'Abre una máquina y vincula su dispositivo GPS. Necesita estar instalado físicamente y configurado para enviar datos.'
+              : `${conDispositivo} máquina(s) tienen dispositivo registrado pero aún no han enviado su posición. Comprueba con el instalador que estén configuradas.`}
+        </div>
+      </div>`;
+    el.style.background = 'var(--surface)';
+    return;
+  }
+  el.style.background = '';
 
   fleetMap = L.map(el, { attributionControl: false }).setView([linked[0].lat, linked[0].lng], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(fleetMap);
@@ -3999,8 +4192,9 @@ function openDrawer(id) {
     </div>
     <div style="display:flex;gap:14px;align-items:center;padding:14px;border-radius:8px;background:var(--surface);border:1px solid var(--border);">
       <div id="qr-render-${esc(m.id)}" style="background:white;padding:6px;border-radius:4px;flex-shrink:0;"></div>
-      <div style="font-size:12.5px;color:var(--steel);">
+      <div style="font-size:12.5px;color:var(--steel);flex:1;">
         Pégalo en la máquina. Los trabajadores lo escanean con la cámara para fichar entrada/salida — el código solo es válido para <span class="f-mono">${esc(m.id)}</span>.
+        ${esAdministrador() ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 12px;margin-top:10px;" onclick="imprimirQR('${esc(m.id)}')"><i class="fa-solid fa-print"></i> Imprimir etiqueta</button>` : ''}
       </div>
     </div>
 
@@ -4916,6 +5110,17 @@ function openWorkerDrawer(id) {
       </div>
       <button class="btn btn-amber" style="padding:8px 12px;" onclick="addVacation('${esc(w.id)}')"><i class="fa-solid fa-plus"></i></button>
     </div>
+
+    ${esAdministrador() ? `
+    <div class="plate" style="padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+      <div style="flex:1;min-width:150px;">
+        <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Acceso a la app</div>
+        <div class="f-mono" style="font-size:15px;margin-top:2px;">PIN ${esc(w.pin || '—')}</div>
+      </div>
+      <button class="btn btn-outline" style="font-size:12.5px;padding:7px 12px;" onclick="compartirAcceso('${esc(w.id)}')">
+        <i class="fa-solid fa-share-nodes"></i> Enviar acceso
+      </button>
+    </div>` : ''}
 
     <div class="doc-section-title" style="margin-top:6px;">
       <span class="f-display" style="font-size:15px;">HORAS Y ${t('PP')}</span>
