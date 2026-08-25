@@ -2738,11 +2738,10 @@ async function submitAddObra() {
   const start = document.getElementById('no-start').value;
   const end = document.getElementById('no-end').value;
   if (!name || !start || !end) return;
-  const newCode = t('pref') + '-' + String(projects.length + 1).padStart(2,'0');
-
   const btn = event ? event.target.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
   try {
+    const newCode = await siguienteCodigo('project', t('pref'), 2);
     const { data, error } = await getSupabase().from('projects').insert({
       company_id: currentUser.companyId, code: newCode, name, client, status: 'active',
       start_date: start, end_date: end,
@@ -3005,7 +3004,7 @@ async function darmeDeAltaComoTrabajador() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...'; }
   try {
     const pin = suggestPin();
-    const code = 'T-' + String(workers.length + 1).padStart(3, '0');
+    const code = await siguienteCodigo('worker', 'T', 3);
     const { data, error } = await getSupabase().from('workers').insert({
       company_id: currentUser.companyId, code, name: currentUser.name,
       role: currentUser.role || 'Administrador', pin,
@@ -4067,13 +4066,12 @@ async function submitAddMachine() {
   const model = document.getElementById('nm-model').value || 'Modelo sin especificar';
   const plate = document.getElementById('nm-plate').value || '—';
   const deviceId = document.getElementById('nm-device').value;
-  const newCode = type.slice(0,2).toUpperCase() + '-' + Math.floor(100 + Math.random()*900);
-  const qrCode = 'OPERTRA-' + currentUser.companyId.slice(0,8) + '-' + newCode;
-
   const foto = document.getElementById('nm-photo').files[0];
   const btn = event ? event.target.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
   try {
+    const newCode = await siguienteCodigo('machine', type.slice(0,2).toUpperCase(), 3);
+    const qrCode = 'OPERTRA-' + currentUser.companyId.slice(0,8) + '-' + newCode;
     let rutaFoto = null;
     if (foto) {
       if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Subiendo foto...';
@@ -4126,6 +4124,21 @@ async function reasignarOperario(machineCode) {
   } catch (err) {
     alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
   }
+}
+
+/* ======================================================================
+   CÓDIGOS ÚNICOS
+   Los códigos (OBR-01, T-005, EX-114) los da la base de datos con un
+   contador por empresa. Antes se calculaban contando cuántos había, y eso
+   provocaba códigos repetidos al borrar o dar de baja: dos obras distintas
+   podían acabar siendo "OBR-03" en el histórico.
+   ====================================================================== */
+async function siguienteCodigo(entidad, prefijo, digitos) {
+  const { data, error } = await getSupabase().rpc('siguiente_codigo', {
+    p_company_id: currentUser.companyId, p_entity: entidad,
+  });
+  if (error) throw error;
+  return prefijo + '-' + String(data).padStart(digitos, '0');
 }
 
 /* ============ SUBIDA DE ARCHIVOS ============ */
@@ -4471,9 +4484,9 @@ async function submitAddWorker() {
     errBox.style.display = 'flex'; return;
   }
 
-  const code = 'T-' + String(workers.length + 1).padStart(3, '0');
   setButtonLoading('nw-submit', true, 'Guardando...', 'Guardar trabajador');
   try {
+    const code = await siguienteCodigo('worker', 'T', 3);
     const { data, error } = await getSupabase().from('workers').insert({
       company_id: currentUser.companyId, code, name, role, pin,
       machine_id: machineId, project_id: projectId, active: true,
