@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Opertra · Prototipo</title>
+<title>Opertra · Gestión de flota y personal</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1C2126">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -477,6 +477,11 @@
 
     table { font-size: 12.5px; }
     th, td { padding: 9px 12px; }
+    /* En obra se usa el móvil con guantes: los botones necesitan
+       al menos 44px de alto para poder acertar. */
+    .btn, .mode-btn, .avisos-tab-btn, .resolve-btn, .load-more-btn { min-height: 44px; }
+    .btn-ghost, .vac-delete { min-height: 40px; min-width: 40px; }
+    .drawer-close, .nav-item { min-height: 44px; }
     .machine-photo { width: 88px; height: 68px; }
     .drawer-photo { height: 190px; }
 
@@ -1288,7 +1293,7 @@ async function loadCompanyData() {
   const sb = getSupabase();
   try {
     const [projRes, machRes, docRes, workRes, vacRes] = await Promise.all([
-      sb.from('projects').select('id,code,name,client,status,start_date,end_date,notes').order('created_at'),
+      sb.from('projects').select('id,code,name,client,status,start_date,end_date,notes,updated_at').order('created_at'),
       sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked').order('created_at'),
       sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
       sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
@@ -1303,7 +1308,7 @@ async function loadCompanyData() {
     const codeByProjectDbId = {};
     projects = (projRes.data || []).map(p => {
       codeByProjectDbId[p.id] = p.code;
-      return { dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status, start: p.start_date, end: p.end_date, notes: p.notes };
+      return { dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status, start: p.start_date, end: p.end_date, notes: p.notes, updatedAt: p.updated_at };
     });
 
     const docsByMachine = {}, docsByWorker = {};
@@ -2932,6 +2937,22 @@ async function guardarObra(code) {
 
   setButtonLoading('eo-submit', true, 'Guardando...', 'Guardar');
   try {
+    // Si otra persona ha modificado esta ficha mientras la editabas, se avisa
+    // antes de pisar su trabajo. Con varios responsables, esto pasa.
+    const { data: actual } = await getSupabase().from('projects')
+      .select('updated_at').eq('id', p.dbId).single();
+    if (actual && p.updatedAt && actual.updated_at && actual.updated_at !== p.updatedAt) {
+      const seguir = confirm(
+        'Otra persona ha modificado esta ' + t('s') + ' mientras la editabas.\n\n' +
+        'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
+      if (!seguir) {
+        setButtonLoading('eo-submit', false, '', 'Guardar');
+        closeAddMachineModal();
+        await loadCompanyData();
+        return;
+      }
+    }
+
     const cambios = { name, client: client || null, status, start_date: start, end_date: end, notes: notes || null };
     if (status === 'finished' && p.status !== 'finished') cambios.finished_at = new Date().toISOString().slice(0,10);
     if (status !== 'finished') cambios.finished_at = null;
@@ -3358,6 +3379,21 @@ function suscribirCambios() {
 }
 
 /* Si llegan varios cambios seguidos, espera un momento y recarga una sola vez */
+/* Avisa de forma discreta cuando otra persona cambia algo, para que nadie
+   se quede mirando datos viejos sin saberlo. */
+function avisarCambioExterno() {
+  let av = document.getElementById('aviso-cambios');
+  if (av) return;  // ya está puesto
+  av = document.createElement('div');
+  av.id = 'aviso-cambios';
+  av.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:180;'
+    + 'background:var(--graphite);color:white;padding:11px 18px;border-radius:99px;font-size:13px;'
+    + 'font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.25);display:flex;align-items:center;gap:9px;';
+  av.innerHTML = '<i class="fa-solid fa-rotate"></i> Datos actualizados por otra persona';
+  document.body.appendChild(av);
+  setTimeout(() => { const e = document.getElementById('aviso-cambios'); if (e) e.remove(); }, 3500);
+}
+
 function recargarEnBreve() {
   clearTimeout(recargaPendiente);
   recargaPendiente = setTimeout(() => {
@@ -3367,7 +3403,7 @@ function recargarEnBreve() {
       recargarEnBreve();
       return;
     }
-    loadCompanyData();
+    loadCompanyData().then(() => avisarCambioExterno());
   }, 800);
 }
 
