@@ -575,7 +575,7 @@
   <section class="land-hero">
     <span class="land-eyebrow">Software para constructoras, excavaciones y flotas de maquinaria</span>
     <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde un solo sitio</h1>
-    <p class="land-sub">Fichaje escaneando el código de la máquina, ubicación de cada una, incidencias al momento y facturación por obra. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
+    <p class="land-sub">Fichaje escaneando el código de la máquina, control de tus trabajos, incidencias al momento y seguimiento de cobros por trabajo. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
     <div class="land-cta-row">
       <button class="btn btn-amber" style="padding:14px 24px;font-size:15px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
       <button class="btn btn-outline" style="padding:14px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
@@ -593,16 +593,16 @@
       <div class="land-problem-card"><i class="fa-solid fa-file-circle-question"></i><div><b>Fichajes en papel o WhatsApp</b><span>Nadie sabe con certeza quién ha trabajado, cuántas horas, ni en qué obra.</span></div></div>
       <div class="land-problem-card"><i class="fa-solid fa-truck-fast"></i><div><b>Maquinaria sin localizar</b><span>Llamadas y más llamadas para saber dónde está cada máquina y quién la lleva.</span></div></div>
       <div class="land-problem-card"><i class="fa-solid fa-triangle-exclamation"></i><div><b>Incidencias que se pierden</b><span>Una avería se comenta de palabra y se olvida hasta que ya es un problema grande.</span></div></div>
-      <div class="land-problem-card"><i class="fa-solid fa-file-invoice"></i><div><b>Facturación desconectada de la obra</b><span>Nadie sabe si lo facturado cuadra con las horas y máquinas realmente usadas.</span></div></div>
+      <div class="land-problem-card"><i class="fa-solid fa-file-invoice"></i><div><b>No sabes si lo facturado cuadra</b><span>Nadie comprueba si lo que se cobra por un trabajo se corresponde con las horas y máquinas realmente usadas.</span></div></div>
     </div>
   </section>
 
   <section class="land-section" id="land-features" style="background:var(--surface);">
     <h2 class="land-h2">Todo lo que necesitas, conectado de verdad</h2>
-    <p class="land-h2-sub">No son módulos sueltos: cada obra conecta sola con sus máquinas, su gente, sus incidencias y sus facturas.</p>
+    <p class="land-h2-sub">No son módulos sueltos: cada trabajo conecta solo con sus máquinas, su gente, sus incidencias y lo que queda por cobrar.</p>
     <div class="land-feature-grid">
-      <div class="land-feature-card"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y facturas de cada obra en una ficha.</span></div>
-      <div class="land-feature-card"><i class="fa-solid fa-truck"></i><b>Maquinaria + GPS</b><span>Ubicación real de cada máquina en un mapa, documentación e ITV con avisos automáticos.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y cobros de cada trabajo en una ficha.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-truck"></i><b>Maquinaria</b><span>Documentación e ITV con avisos antes de que caduquen. Ubicación en mapa si instalas dispositivos GPS, que se compran aparte.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-tower-broadcast"></i><b>Fichaje con QR</b><span>El trabajador escanea el código pegado en su máquina y ficha. Funciona en cualquier móvil, sin geolocalizar a las personas.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-bullhorn"></i><b>Incidencias con foto</b><span>Cualquier trabajador reporta una avería en segundos, con prioridad y foto.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-umbrella-beach"></i><b>Vacaciones</b><span>Vacaciones del equipo de un vistazo, para no solapar bajas en la misma obra.</span></div>
@@ -630,9 +630,9 @@
         <span class="land-price-desc">Hasta 5 máquinas y 10 trabajadores</span>
         <ul class="land-price-list">
           <li><i class="fa-solid fa-check"></i> Fichaje con QR</li>
-          <li><i class="fa-solid fa-check"></i> Maquinaria + GPS</li>
+          <li><i class="fa-solid fa-check"></i> Maquinaria y documentación</li>
           <li><i class="fa-solid fa-check"></i> Incidencias</li>
-          <li><i class="fa-solid fa-check"></i> 1 obra activa</li>
+          <li><i class="fa-solid fa-check"></i> 1 trabajo activo</li>
         </ul>
         <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
       </div>
@@ -643,8 +643,8 @@
         <span class="land-price-desc">Hasta 25 máquinas y 50 trabajadores</span>
         <ul class="land-price-list">
           <li><i class="fa-solid fa-check"></i> Todo lo de Starter</li>
-          <li><i class="fa-solid fa-check"></i> Obras ilimitadas</li>
-          <li><i class="fa-solid fa-check"></i> Facturación y clientes</li>
+          <li><i class="fa-solid fa-check"></i> Trabajos ilimitados</li>
+          <li><i class="fa-solid fa-check"></i> Control de cobros y clientes</li>
           <li><i class="fa-solid fa-check"></i> Informes</li>
         </ul>
         <button class="btn btn-amber" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
@@ -2333,7 +2333,7 @@ async function crearUsuario() {
   const fallo = (t) => { document.getElementById('nu-error-text').textContent = t; errBox.style.display = 'flex'; };
 
   if (!name) return fallo('Escribe el nombre.');
-  if (!email || !email.includes('@')) return fallo('Escribe un correo válido.');
+  if (!correoValido(email)) return fallo('Ese correo no parece válido. Comprueba que esté bien escrito.');
   if (pass.length < 8) return fallo('La contraseña debe tener al menos 8 caracteres.');
 
   setButtonLoading('nu-submit', true, 'Creando...', 'Crear acceso');
@@ -4681,6 +4681,14 @@ function validarFecha(iso, campo, opciones) {
   return null;
 }
 
+/* Un correo mal escrito en el registro es un cliente que no puede recuperar
+   su contraseña nunca. Se comprueba el formato antes de crear la cuenta. */
+function correoValido(email) {
+  const e = String(email || '').trim();
+  if (e.length < 5 || e.length > 254) return false;
+  return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(e);
+}
+
 function validarImporte(valor) {
   const n = parseFloat(valor);
   if (isNaN(n) || n <= 0) return 'Pon un importe mayor que cero.';
@@ -6355,7 +6363,7 @@ async function submitDemoRequest() {
   const fleet = document.getElementById('demo-fleet').value;
   const box = document.getElementById('demo-error');
   if (box) box.style.display = 'none';
-  if (!name || !company || !email || !email.includes('@')) {
+  if (!name || !company || !correoValido(email)) {
     if (box) {
       document.getElementById('demo-error-text').textContent = 'Rellena tu nombre, empresa y un correo válido.';
       box.style.display = 'flex';
@@ -6615,10 +6623,17 @@ async function handleSignup() {
   const errBox = document.getElementById('signup-error');
   errBox.style.display = 'none';
 
-  if (!companyName || !name || !email || !pass) {
-    document.getElementById('signup-error-text').textContent = 'Rellena todos los campos obligatorios.';
-    errBox.style.display = 'flex'; return;
-  }
+  const fallo = (txt) => {
+    document.getElementById('signup-error-text').textContent = txt;
+    errBox.style.display = 'flex';
+  };
+
+  if (!companyName || !name || !email || !pass) return fallo('Rellena todos los campos obligatorios.');
+  const errCampos = validarTexto(companyName, 'El nombre de la empresa', LIMITES.nombre, true)
+    || validarTexto(name, 'Tu nombre', LIMITES.nombre, true);
+  if (errCampos) return fallo(errCampos);
+  if (!correoValido(email)) return fallo('Ese correo no parece válido. Comprueba que esté bien escrito.');
+  if (cif && cif.length > 20) return fallo('El CIF es demasiado largo.');
   if (pass.length < 8) {
     document.getElementById('signup-error-text').textContent = 'La contraseña debe tener al menos 8 caracteres.';
     errBox.style.display = 'flex'; return;
@@ -6669,6 +6684,11 @@ async function handleForgotPassword() {
   const errBox = document.getElementById('login-error');
   if (!email) {
     document.getElementById('login-error-text').textContent = 'Escribe tu correo arriba y vuelve a pulsar "¿Has olvidado tu contraseña?".';
+    errBox.style.display = 'flex';
+    return;
+  }
+  if (!correoValido(email)) {
+    document.getElementById('login-error-text').textContent = 'Ese correo no parece válido.';
     errBox.style.display = 'flex';
     return;
   }
