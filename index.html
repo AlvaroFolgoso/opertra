@@ -1429,18 +1429,56 @@ function obraSchedule(p) {
 }
 
 /* Todo esto sale de las asignaciones reales — nada hardcodeado por obra */
-function projectWorkers(id) { return workers.filter(w => w.project === id); }
-function projectMachines(id) { return machines.filter(m => m.project === id); }
-function projectInvoices(id) { const p = projects.find(x => x.id === id); return p ? invoices.filter(i => i.projectDbId === p.dbId) : []; }
-function projectOpenIncidents(id) { const p = projects.find(x => x.id === id); return p ? incidents.filter(i => !i.resolved && i.project === p.name) : []; }
-function projectHoursThisMonth(id) {
-  const p = projects.find(x => x.id === id);
-  if (!p) return 0;
-  const mesActual = new Date().toISOString().slice(0,7);
-  return timeLogs
-    .filter(l => l.projectDbId === p.dbId && l.date.startsWith(mesActual))
-    .reduce((s,l) => s + l.hours, 0);
+/* ======================================================================
+   TOTALES POR OBRA
+   Antes, cada tarjeta de obra recorría las listas completas de trabajadores,
+   máquinas, fichajes, incidencias y cobros. Con 200 obras y 5.000 fichajes
+   eso era un millón de comprobaciones cada vez que se pintaba la pantalla.
+   Ahora se recorre todo UNA vez y se guarda el resultado.
+   ====================================================================== */
+let _totalesObra = null;
+let _totalesSello = '';
+
+function totalesPorObra() {
+  // Se recalcula solo si han cambiado los datos
+  const sello = `${projects.length}|${workers.length}|${machines.length}|${timeLogs.length}|${incidents.length}|${invoices.length}`;
+  if (_totalesObra && _totalesSello === sello) return _totalesObra;
+
+  const mes = new Date().toISOString().slice(0,7);
+  const t = {};
+  projects.forEach(p => {
+    t[p.id] = { workers: [], machines: [], invoices: [], openInc: 0, hours: 0, dbId: p.dbId, name: p.name };
+  });
+  const porDbId = {};
+  projects.forEach(p => { porDbId[p.dbId] = t[p.id]; });
+  const porNombre = {};
+  projects.forEach(p => { porNombre[p.name] = t[p.id]; });
+
+  workers.forEach(w => { const o = t[w.project]; if (o) o.workers.push(w); });
+  machines.forEach(m => { const o = t[m.project]; if (o) o.machines.push(m); });
+  invoices.forEach(i => { const o = porDbId[i.projectDbId]; if (o) o.invoices.push(i); });
+  incidents.forEach(i => { if (!i.resolved) { const o = porNombre[i.project]; if (o) o.openInc++; } });
+  timeLogs.forEach(l => {
+    if (!l.date || !l.date.startsWith(mes)) return;
+    const o = porDbId[l.projectDbId]; if (o) o.hours += l.hours;
+  });
+
+  _totalesObra = t; _totalesSello = sello;
+  return t;
 }
+
+function totalesDe(id) {
+  return totalesPorObra()[id] || { workers: [], machines: [], invoices: [], openInc: 0, hours: 0 };
+}
+
+function projectWorkers(id) { return totalesDe(id).workers; }
+function projectMachines(id) { return totalesDe(id).machines; }
+function projectInvoices(id) { return totalesDe(id).invoices; }
+function projectOpenIncidents(id) {
+  const p = projects.find(x => x.id === id);
+  return p ? incidents.filter(i => !i.resolved && i.project === p.name) : [];
+}
+function projectHoursThisMonth(id) { return totalesDe(id).hours; }
 
 /* Facturas — base mínima real que alimenta los KPIs y la alerta de vencidas (nada hardcodeado) */
 let invoices = [];
@@ -1619,10 +1657,11 @@ function obraCardHTML(p, detailed) {
   else if (daysLeft === 0) plazoText = 'Termina hoy';
   else plazoText = `${daysLeft} días para el fin de plazo`;
 
-  const wCount = projectWorkers(p.id).length;
-  const mCount = projectMachines(p.id).length;
-  const hours = projectHoursThisMonth(p.id);
-  const openInc = projectOpenIncidents(p.id).length;
+  const tot = totalesDe(p.id);
+  const wCount = tot.workers.length;
+  const mCount = tot.machines.length;
+  const hours = tot.hours;
+  const openInc = tot.openInc;
 
   return `
     <div class="plate obra-card" style="cursor:pointer;" onclick="openObraDrawer('${esc(p.id)}')">${rivets}
@@ -1792,9 +1831,16 @@ function renderDashboard() {
 
     <div class="dash-cols">
       <div class="plate" style="flex:1;padding:0;overflow:hidden;">${rivets}
-        <div class="panel-header"><span class="f-display">ACTIVIDAD EN TIEMPO REAL</span><span class="f-mono" style="font-size:12px;color:var(--steel)">hoy · 09:34</span></div>
+        <div class="panel-header"><span class="f-display">ACTIVIDAD EN TIEMPO REAL</span><span class="f-mono" style="font-size:12px;color:var(--steel)">hoy · ${new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span></div>
         <div style="padding:4px 20px 16px;">
-          ${workers.map(w => `
+          ${(() => {
+            // Con 800 trabajadores, listarlos todos generaba medio megabyte de
+            // HTML y bloqueaba la pantalla. El panel es un resumen: se muestran
+            // primero los que están trabajando ahora, hasta 12.
+            const orden = workers.slice().sort((a,b) =>
+              (b.status === 'working' ? 1 : 0) - (a.status === 'working' ? 1 : 0));
+            return orden.slice(0, 12);
+          })().map(w => `
             <div class="worker-row">
               <div class="worker-left">
                 <div class="worker-initials">${iniciales(w.name)}</div>
@@ -1805,13 +1851,16 @@ function renderDashboard() {
                 ${chip(w.status)}
               </div>
             </div>`).join('')}
+          ${workers.length > 12 ? `<div style="text-align:center;font-size:12px;color:var(--steel);padding:8px 0;">
+            y ${workers.length - 12} trabajador(es) más · <span style="color:var(--blue);cursor:pointer;" onclick="switchTab('trabajadores')">ver todos</span>
+          </div>` : ''}
           <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
-            ${machines.filter(m => m.device.linked).sort((a,b) => a.gpsAge.localeCompare(b.gpsAge)).slice(0,1).map(m => `
+            ${machines.filter(m => m.device.linked).sort((a,b) => String(a.gpsAge||'').localeCompare(String(b.gpsAge||''))).slice(0,1).map(m => `
               <div class="activity-feed-row">
                 <div class="activity-icon" style="background:var(--success-bg);color:var(--success);"><i class="fa-solid fa-satellite"></i></div>
                 <div><div style="font-size:13px;">${esc(m.id)} actualizó su posición · ${esc(m.location)}</div><div style="font-size:11px;color:var(--steel);">${esc(m.gpsAge)}</div></div>
               </div>`).join('')}
-            ${machines.filter(m => m.status === 'maintenance').map(m => `
+            ${machines.filter(m => m.status === 'maintenance').slice(0, 3).map(m => `
               <div class="activity-feed-row">
                 <div class="activity-icon" style="background:var(--danger-bg);color:var(--danger);"><i class="fa-solid fa-wrench"></i></div>
                 <div><div style="font-size:13px;">${esc(m.id)} está en mantenimiento · ${esc(m.location)}</div><div style="font-size:11px;color:var(--steel);">última señal ${esc(m.gpsAge)}</div></div>
@@ -1850,8 +1899,27 @@ function renderDashboard() {
         <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('obras')">ver todas <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
       </div>
       <div class="obras-grid">
-        ${projects.map(p => obraCardHTML(p, false)).join('')}
+        ${(() => {
+          // El panel es un RESUMEN: con 200 obras, pintarlas todas tardaba casi
+          // un segundo. Se muestran las 6 que más atención necesitan (las que
+          // van con retraso primero) y el resto se ve en su propia pestaña.
+          const activas = projects.filter(p => p.status !== 'finished');
+          const orden = activas.slice().sort((a,b) => {
+            const da = obraSchedule(a).daysLeft, db = obraSchedule(b).daysLeft;
+            if (da === null) return 1; if (db === null) return -1;
+            return da - db;
+          }).slice(0, 6);
+          if (orden.length === 0) {
+            return `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-diagram-project"></i>
+              <div style="font-size:14px;font-weight:600;color:var(--ink);">No hay ${t('p')} en curso</div></div>`;
+          }
+          return orden.map(p => obraCardHTML(p, false)).join('');
+        })()}
       </div>
+      ${projects.filter(p => p.status !== 'finished').length > 6
+        ? `<div style="text-align:center;font-size:12.5px;color:var(--steel);margin-top:10px;">
+             Mostrando las 6 más urgentes de ${projects.filter(p => p.status !== 'finished').length} en curso
+           </div>` : ''}
     </div>
   `;
 }
@@ -3056,11 +3124,11 @@ function openAddObraModal() {
   if (!esAdministrador()) return;
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
-      <span class="f-display" style="font-size:18px;">Añadir obra</span>
+      <span class="f-display" style="font-size:18px;">Añadir ${t('s')}</span>
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="form-group" style="margin-top:16px;">
-      <label class="form-label">Nombre de la obra</label>
+      <label class="form-label">Nombre de la ${t('s')}</label>
       <input class="form-input" id="no-name" maxlength="120" placeholder="${t('ej')}">
     </div>
     <div class="form-group">
@@ -5393,7 +5461,8 @@ async function deleteVacation(workerId, vacId) {
 let avisosSubTab = 'incidencias'; // 'reportar' | 'incidencias'
 let avisosJustSubmitted = false;
 
-function showAvisosTab(tab) { avisosSubTab = tab; avisosJustSubmitted = false; renderAvisos(); }
+function showAvisosTab(tab) {
+  incidenciasVisibles = 20; avisosSubTab = tab; avisosJustSubmitted = false; renderAvisos(); }
 
 function renderAvisos() {
   const abiertas = incidents.filter(i => !i.resolved);
@@ -5423,6 +5492,7 @@ function renderAvisos() {
 }
 
 let incPhotoFile = null;
+let incidenciasVisibles = 20;
 
 function renderReportarForm() {
   const ficha = miFichaTrabajador();
@@ -5519,7 +5589,11 @@ function renderIncidenciasList(lista, esHistorico) {
   const ordenadas = lista.slice().sort((a,b) =>
     esHistorico ? b.time - a.time : ((orden[a.priority]??1) - (orden[b.priority]??1) || b.time - a.time));
 
-  return ordenadas.map(inc => `
+  // Con cientos de incidencias, pintarlas todas generaba más de 150 KB de HTML
+  const visibles = ordenadas.slice(0, incidenciasVisibles);
+  const restantes = ordenadas.length - visibles.length;
+
+  return visibles.map(inc => `
     <div class="plate incident-card" style="${esHistorico ? 'opacity:0.75;' : ''}">${rivets}
       <div class="incident-top">
         ${inc.photoPath ? `<div class="incident-thumb" id="inc-thumb-${inc.dbId}" onclick="viewIncidentPhoto('${inc.photoPath}')" style="background:var(--surface);display:flex;align-items:center;justify-content:center;"><i class="fa-solid fa-image" style="color:var(--steel);font-size:14px;"></i></div>` : ''}
@@ -5542,8 +5616,12 @@ function renderIncidenciasList(lista, esHistorico) {
         ${esHistorico && inc.resolvedAt ? `<span style="color:var(--success);"><i class="fa-solid fa-check"></i> Resuelta ${timeAgo(new Date(inc.resolvedAt).getTime())}</span>` : ''}
       </div>
     </div>
-  `).join('');
+  `).join('') + (restantes > 0
+    ? `<button class="load-more-btn" onclick="verMasIncidencias()">Ver ${restantes} incidencia(s) más</button>`
+    : '');
 }
+
+function verMasIncidencias() { incidenciasVisibles += 20; renderAvisos(); }
 
 async function submitIncident() {
   if (!hayConexion()) return;
@@ -5706,7 +5784,7 @@ function clientCardHTML(c) {
   return `
     <div class="plate obra-card" style="cursor:pointer;" onclick="openClientDrawer(decodeURIComponent('${encodeURIComponent(c.name)}'))">${rivets}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div><div class="f-display" style="font-size:17px;">${esc(c.name)}</div><div style="font-size:12px;color:var(--steel);margin-top:2px;">${c.projects.length} obra${c.projects.length!==1?'s':''}</div></div>
+        <div><div class="f-display" style="font-size:17px;">${esc(c.name)}</div><div style="font-size:12px;color:var(--steel);margin-top:2px;">${c.projects.length} ${c.projects.length===1?t('s'):t('p')}</div></div>
         ${c.overdue > 0 ? `<span class="chip status-caducado"><span class="dot"></span>${c.overdue} vencida${c.overdue!==1?'s':''}</span>` : `<span class="chip status-vigente"><span class="dot"></span>Al día</span>`}
       </div>
       <div class="obra-stats-row" style="margin-top:14px;">
@@ -5797,6 +5875,10 @@ function invStatusChip(status) {
 }
 
 let filtroCobros = 'todos';
+/* Con cientos de cobros anotados, pintar la tabla entera bloqueaba la
+   pantalla casi un segundo. Se muestran de 40 en 40. */
+let cobrosVisibles = 40;
+function verMasCobros() { cobrosVisibles += 40; renderFacturacion(); }
 
 function cobrosFiltrados() {
   return invoices.filter(i => {
@@ -5808,7 +5890,7 @@ function cobrosFiltrados() {
   }).sort((a,b) => b.dueDate.localeCompare(a.dueDate));
 }
 
-function filtrarCobros(f) { filtroCobros = f; renderFacturacion(); }
+function filtrarCobros(f) { filtroCobros = f; cobrosVisibles = 40; renderFacturacion(); }
 
 function renderFacturacion() {
   const lista = cobrosFiltrados();
@@ -5875,7 +5957,7 @@ function renderFacturacion() {
             <th>Referencia</th><th>Cliente</th><th>${t('S')}</th><th>Concepto</th><th>Importe</th><th>Vence</th><th>Estado</th><th></th>
           </tr></thead>
           <tbody>
-            ${lista.map(i => {
+            ${lista.slice(0, cobrosVisibles).map(i => {
               const e = estadoCobro(i);
               return `
               <tr>
@@ -5896,7 +5978,10 @@ function renderFacturacion() {
             }).join('')}
           </tbody>
         </table>
-      </div>`}
+      </div>
+      ${lista.length > cobrosVisibles
+        ? `<button class="load-more-btn" onclick="verMasCobros()">Ver más (${lista.length - cobrosVisibles} restantes)</button>`
+        : ''}`}
     </div>
   `;
 }
@@ -6322,8 +6407,12 @@ function empezarOperacion(clave) {
 }
 function terminarOperacion(clave) { operacionesEnCurso.delete(clave); }
 
+/* El botón puede haber desaparecido si la pantalla se ha repintado mientras
+   la operación estaba en marcha. Sin esta comprobación, la operación entera
+   fallaba justo al terminar, cuando en realidad ya se había guardado bien. */
 function setButtonLoading(btnId, loading, textLoading, textNormal) {
   const btn = document.getElementById(btnId);
+  if (!btn) return;
   btn.disabled = loading;
   btn.innerHTML = loading ? `<i class="fa-solid fa-spinner fa-spin"></i> ${textLoading}` : textNormal;
 }
