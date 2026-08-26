@@ -575,7 +575,7 @@
   <section class="land-hero">
     <span class="land-eyebrow">Software para constructoras, excavaciones y flotas de maquinaria</span>
     <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde un solo sitio</h1>
-    <p class="land-sub">Fichaje escaneando el código de la máquina, control de tus trabajos, incidencias al momento y seguimiento de cobros por trabajo. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
+    <p class="land-sub">Fichaje escaneando el código de la máquina, localización GPS de tu flota, incidencias al momento y control de cobros por trabajo. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
     <div class="land-cta-row">
       <button class="btn btn-amber" style="padding:14px 24px;font-size:15px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
       <button class="btn btn-outline" style="padding:14px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
@@ -602,7 +602,7 @@
     <p class="land-h2-sub">No son módulos sueltos: cada trabajo conecta solo con sus máquinas, su gente, sus incidencias y lo que queda por cobrar.</p>
     <div class="land-feature-grid">
       <div class="land-feature-card"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y cobros de cada trabajo en una ficha.</span></div>
-      <div class="land-feature-card"><i class="fa-solid fa-truck"></i><b>Maquinaria</b><span>Documentación e ITV con avisos antes de que caduquen. Ubicación en mapa si instalas dispositivos GPS, que se compran aparte.</span></div>
+      <div class="land-feature-card"><i class="fa-solid fa-truck"></i><b>Maquinaria con GPS</b><span>Ubicación de cada máquina en el mapa, en tiempo real. Documentación e ITV con avisos antes de que caduquen. Nosotros instalamos los dispositivos.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-tower-broadcast"></i><b>Fichaje con QR</b><span>El trabajador escanea el código pegado en su máquina y ficha. Funciona en cualquier móvil, sin geolocalizar a las personas.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-bullhorn"></i><b>Incidencias con foto</b><span>Cualquier trabajador reporta una avería en segundos, con prioridad y foto.</span></div>
       <div class="land-feature-card"><i class="fa-solid fa-umbrella-beach"></i><b>Vacaciones</b><span>Vacaciones del equipo de un vistazo, para no solapar bajas en la misma obra.</span></div>
@@ -623,6 +623,11 @@
   <section class="land-section" id="land-pricing" style="background:var(--surface);">
     <h2 class="land-h2">Precios pensados para pymes de construcción</h2>
     <p class="land-h2-sub">Sin permanencia. El precio depende del número de máquinas y trabajadores.</p>
+    <p style="font-size:12.5px;color:var(--steel);max-width:580px;margin:10px auto 0;line-height:1.55;text-align:center;">
+      Opertra gestiona tus trabajos, tu personal y tu maquinaria. Los dispositivos GPS los instalamos
+      nosotros en tus máquinas —consúltanos el presupuesto según el tamaño de tu flota—.
+      Para emitir facturas con validez fiscal sigue usando tu programa de facturación habitual.
+    </p>
     <div class="land-pricing-grid">
       <div class="land-price-card">
         <span class="land-price-name">Starter</span>
@@ -631,6 +636,7 @@
         <ul class="land-price-list">
           <li><i class="fa-solid fa-check"></i> Fichaje con QR</li>
           <li><i class="fa-solid fa-check"></i> Maquinaria y documentación</li>
+            <li><i class="fa-solid fa-check"></i> GPS instalado (opcional)</li>
           <li><i class="fa-solid fa-check"></i> Incidencias</li>
           <li><i class="fa-solid fa-check"></i> 1 trabajo activo</li>
         </ul>
@@ -1148,10 +1154,7 @@ async function subirArchivo(file, carpeta) {
     if (msg.includes('already exists')) {
       throw new Error('Ya existe un archivo con ese nombre. Vuelve a intentarlo.');
     }
-    if (msg.includes('exceeded') || msg.includes('quota')) {
-      throw new Error('Se ha alcanzado el límite de almacenamiento de la cuenta.');
-    }
-    throw err;
+    throw new Error(mensajeError(err));
   }
 }
 
@@ -2193,7 +2196,7 @@ async function exportarTodo() {
 
     registrarEnHistorial('exportación', 'Datos', 'Copia completa', `${hojas.reduce((s,h)=>s+h.filas.length,0)} registros`);
   } catch (err) {
-    alert('No se pudo exportar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo exportar: ' + mensajeError(err));
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-download"></i> Descargar todos mis datos'; }
   }
@@ -2354,7 +2357,7 @@ async function crearUsuario() {
     alert(`Acceso creado para ${name}.\n\nCorreo: ${email}\nContraseña: ${pass}\n\nApunta estos datos y pásaselos. La contraseña no se volverá a mostrar.`);
     openUsuariosModal();
   } catch (err) {
-    const msg = (err.message || '');
+    const msg = mensajeError(err);
     if (msg.includes('already registered')) return fallo('Ya existe una cuenta con ese correo.'), setButtonLoading('nu-submit', false, '', 'Crear acceso');
     fallo('No se pudo crear: ' + (msg || 'inténtalo de nuevo.'));
     setButtonLoading('nu-submit', false, '', 'Crear acceso');
@@ -2371,7 +2374,7 @@ async function revocarAcceso(userId, nombre) {
     registrarEnHistorial('revocación de acceso', 'Usuario', nombre, '');
     pintarListaUsuarios();
   } catch (err) {
-    alert('No se pudo revocar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo revocar: ' + mensajeError(err));
   }
 }
 
@@ -2381,7 +2384,7 @@ async function restaurarAcceso(userId) {
     if (error) throw error;
     pintarListaUsuarios();
   } catch (err) {
-    alert('No se pudo restaurar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo restaurar: ' + mensajeError(err));
   }
 }
 
@@ -2715,7 +2718,7 @@ async function guardarMaquina(code) {
     openDrawer(code);
     pintarPestanaActual();
   } catch (err) {
-    document.getElementById('em-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('em-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('em-submit', false, '', 'Guardar');
   }
@@ -2734,7 +2737,7 @@ async function borrarMaquina(code) {
     closeAddMachineModal(); closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo eliminar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo eliminar: ' + mensajeError(err));
   }
 }
 
@@ -2821,7 +2824,7 @@ async function guardarTrabajador(code) {
     openWorkerDrawer(code);
     pintarPestanaActual();
   } catch (err) {
-    document.getElementById('ew-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('ew-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('ew-submit', false, '', 'Guardar');
   }
@@ -2844,7 +2847,7 @@ async function darDeBajaTrabajador(code) {
     closeAddMachineModal(); closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo dar de baja: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo dar de baja: ' + mensajeError(err));
   }
 }
 
@@ -2973,7 +2976,7 @@ async function guardarObra(code) {
     openObraDrawer(code);
     pintarPestanaActual();
   } catch (err) {
-    document.getElementById('eo-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('eo-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('eo-submit', false, '', 'Guardar');
   }
@@ -2996,7 +2999,7 @@ async function borrarObra(code) {
     closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo eliminar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo eliminar: ' + mensajeError(err));
   }
 }
 
@@ -3119,7 +3122,7 @@ async function assignWorkerToObra(projId) {
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo asignar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo asignar: ' + mensajeError(err));
   }
 }
 async function assignMachineToObra(projId) {
@@ -3136,7 +3139,7 @@ async function assignMachineToObra(projId) {
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo asignar la máquina: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo asignar la máquina: ' + mensajeError(err));
   }
 }
 
@@ -3198,7 +3201,7 @@ async function submitAddObra() {
     closeAddMachineModal();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo guardar la obra: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo guardar la obra: ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar obra'; }
   } finally {
     terminarOperacion('crear-obra');
@@ -3490,7 +3493,7 @@ async function darmeDeAltaComoTrabajador() {
     pintarPestanaActual();
     alert(`Listo. Ya puedes fichar.\n\nTu PIN es ${pin} — te sirve para entrar también desde el móvil con el código ${currentUser.accessCode}.`);
   } catch (err) {
-    alert('No se pudo crear tu ficha: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo crear tu ficha: ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Darme de alta'; }
   } finally {
     terminarOperacion('autoalta');
@@ -3657,7 +3660,7 @@ async function ficharAhora() {
     arrancarContador();
     renderDashboard();
   } catch (err) {
-    alert('No se pudo registrar el fichaje: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo registrar el fichaje: ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
   } finally {
     fichajeCargando = false;
@@ -3806,7 +3809,7 @@ async function iniciarQR() {
   } catch (err) {
     escanearError = err.name === 'NotAllowedError'
       ? 'Has denegado el permiso de cámara. Actívalo en los ajustes del navegador para este sitio.'
-      : 'No se pudo abrir la cámara: ' + (err.message || 'inténtalo de nuevo.');
+      : 'No se pudo abrir la cámara: ' + mensajeError(err);
     pintarEscaneo();
   }
 }
@@ -3967,7 +3970,7 @@ async function guardarCorreccionFichaje(dbId) {
     await cargarFichajes();
     renderFichaje();
   } catch (err) {
-    fallo('No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.'));
+    fallo('No se pudo guardar: ' + mensajeError(err));
     setButtonLoading('ef-submit', false, '', 'Guardar corrección');
   } finally {
     terminarOperacion('corregir-fichaje');
@@ -3995,7 +3998,7 @@ async function cerrarOlvidadas() {
     await cargarFichajes();
     renderFichaje();
   } catch (err) {
-    alert('No se pudieron cerrar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudieron cerrar: ' + mensajeError(err));
   }
 }
 
@@ -4042,7 +4045,7 @@ async function aplicarFiltroFichaje() {
     if (error) throw error;
     resultadosFiltro = (data || []).map(mapearFichaje);
   } catch (e) {
-    alert('No se pudieron cargar los fichajes: ' + (e.message || 'inténtalo de nuevo.'));
+    alert('No se pudieron cargar los fichajes: ' + mensajeError(e));
     resultadosFiltro = [];
   } finally {
     filtrando = false;
@@ -4315,8 +4318,8 @@ function initFleetMap() {
           ${machines.length === 0
             ? 'Añade máquinas y vincula sus dispositivos GPS para verlas aquí.'
             : conDispositivo === 0
-              ? 'Abre una máquina y vincula su dispositivo GPS. Necesita estar instalado físicamente y configurado para enviar datos.'
-              : `${conDispositivo} máquina(s) tienen dispositivo registrado pero aún no han enviado su posición. Comprueba con el instalador que estén configuradas.`}
+              ? 'Abre una máquina y vincula su dispositivo GPS. Si todavía no tienes GPS instalado, escríbenos y te lo montamos.'
+              : `${conDispositivo} máquina(s) tienen dispositivo registrado pero aún no han enviado su posición. Si acaban de instalarse, pueden tardar unos minutos en dar señal.`}
         </div>
       </div>`;
     el.style.background = 'var(--surface)';
@@ -4379,7 +4382,7 @@ function openDrawer(id) {
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:500;">${m.device.linked ? (m.lat ? 'Enviando ubicación' : 'Dispositivo registrado, sin señal todavía') : 'Sin dispositivo vinculado'}</div>
         <div class="f-mono" style="font-size:11px;color:var(--steel);margin-top:2px;">${m.device.linked ? esc(m.device.id) + ' · ' + esc(m.device.model) : 'Esta máquina aún no envía ubicación'}</div>
-        ${m.device.linked && !m.lat ? `<div style="font-size:11.5px;color:var(--amber-deep);margin-top:6px;line-height:1.45;"><i class="fa-solid fa-triangle-exclamation"></i> El código está guardado, pero todavía no llega ninguna señal. Comprueba que el dispositivo esté instalado y configurado para enviar datos.</div>` : ''}
+        ${m.device.linked && !m.lat ? `<div style="font-size:11.5px;color:var(--amber-deep);margin-top:6px;line-height:1.45;"><i class="fa-solid fa-triangle-exclamation"></i> El código está guardado, pero todavía no llega ninguna señal. Si se acaba de instalar puede tardar unos minutos; si sigue así, avísanos.</div>` : ''}
       </div>
       <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="openLinkDeviceModal('${esc(m.id)}')">${m.device.linked ? 'Cambiar' : 'Vincular'}</button>
     </div>
@@ -4551,7 +4554,7 @@ function openAddMachineModal() {
       <input class="form-input" id="nm-device" placeholder="Código del dispositivo (ej. TRK-2301)">
       <div class="form-hint">
         <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-        <span>Cada máquina necesita su propio dispositivo GPS físico instalado para poder localizarse. Puedes guardar la máquina ahora y vincular el dispositivo cuando lo tengas.</span>
+        <span>Cada máquina necesita su propio dispositivo GPS para poder localizarse en el mapa. Puedes guardar la máquina ahora y vincular el dispositivo cuando lo instalemos.</span>
       </div>
     </div>
 
@@ -4623,7 +4626,7 @@ async function submitAddMachine() {
     closeAddMachineModal();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo guardar la máquina: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo guardar la máquina: ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar máquina'; }
   } finally {
     terminarOperacion('crear-maquina');
@@ -4652,7 +4655,7 @@ async function reasignarOperario(machineCode) {
     openDrawer(machineCode);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo reasignar: ' + mensajeError(err));
   }
 }
 
@@ -4683,6 +4686,39 @@ function validarFecha(iso, campo, opciones) {
 
 /* Un correo mal escrito en el registro es un cliente que no puede recuperar
    su contraseña nunca. Se comprueba el formato antes de crear la cuenta. */
+/* Los errores de la base de datos vienen en inglés y con jerga técnica.
+   Un jefe de obra viendo "violates row-level security policy" no sabe qué
+   hacer. Aquí se traducen a algo accionable. */
+function mensajeError(err) {
+  const m = String((err && err.message) || err || '').toLowerCase();
+
+  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed'))
+    return 'Se ha perdido la conexión. Comprueba tu internet e inténtalo de nuevo.';
+  if (m.includes('duplicate key') || m.includes('already exists'))
+    return 'Ya existe un registro con esos datos. Revisa que no lo hayas creado antes.';
+  if (m.includes('row-level security') || m.includes('permission denied'))
+    return 'No tienes permiso para hacer esto. Si crees que es un error, avisa al administrador de tu empresa.';
+  if (m.includes('foreign key'))
+    return 'Ese elemento ya no existe o ha sido eliminado por otra persona. Actualiza la página.';
+  if (m.includes('not-null') || m.includes('null value'))
+    return 'Falta algún dato obligatorio.';
+  if (m.includes('jwt') || m.includes('expired') || m.includes('invalid token'))
+    return 'Tu sesión ha caducado. Vuelve a iniciar sesión.';
+  if (m.includes('timeout'))
+    return 'La operación ha tardado demasiado. Inténtalo de nuevo.';
+  if (m.includes('exceeded') || m.includes('quota') || m.includes('storage'))
+    return 'Se ha alcanzado el límite de almacenamiento. Avisa al administrador.';
+  if (m.includes('invalid input syntax'))
+    return 'Alguno de los datos no tiene el formato correcto.';
+  if (m.includes('pin incorrecto'))
+    return 'El PIN no es correcto.';
+  if (m.includes('check constraint') || m.includes('violates check'))
+    return 'Alguno de los datos no es válido. Revísalos.';
+
+  // Si no lo reconocemos, mostramos algo útil pero sin jerga
+  return 'No se ha podido completar. Inténtalo de nuevo, y si sigue fallando avísanos.';
+}
+
 function correoValido(email) {
   const e = String(email || '').trim();
   if (e.length < 5 || e.length > 254) return false;
@@ -4739,7 +4775,7 @@ async function subirFotoMaquina(machineCode, event) {
     openDrawer(machineCode);
     renderMaquinaria();
   } catch (err) {
-    alert('No se pudo subir la foto: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo subir la foto: ' + mensajeError(err));
     openDrawer(machineCode);
   }
 }
@@ -4761,7 +4797,7 @@ async function subirFotoTrabajador(workerCode, event) {
     openWorkerDrawer(workerCode);
     renderTrabajadores();
   } catch (err) {
-    alert('No se pudo subir la foto: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo subir la foto: ' + mensajeError(err));
     openWorkerDrawer(workerCode);
   }
 }
@@ -4868,7 +4904,7 @@ async function submitAddDoc(tipo, ownerDbId, ownerCode) {
     if (tipo === 'machine') openDrawer(ownerCode); else openWorkerDrawer(ownerCode);
     renderDashboard();
   } catch (err) {
-    document.getElementById('nd-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('nd-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('nd-submit', false, '', 'Guardar documento');
   } finally {
@@ -4920,7 +4956,7 @@ function openLinkDeviceModal(machineCode) {
     </div>
     <div class="form-hint">
       <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-      <span>Guarda aquí el código de serie del dispositivo GPS. <b>Importante:</b> esto solo lo deja registrado — para que la máquina envíe su ubicación de verdad hace falta tener el dispositivo instalado y configurado por el instalador o el fabricante.</span>
+      <span>Guarda aquí el código de serie del dispositivo GPS instalado en la máquina. Si aún no tienes GPS en esta máquina, escríbenos y te lo instalamos.</span>
     </div>
     <div id="ld-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="ld-error-text"></span></div>
 
@@ -4959,7 +4995,7 @@ async function submitLinkDevice(machineCode) {
     openDrawer(machineCode);
     renderMaquinaria();
   } catch (err) {
-    document.getElementById('ld-error-text').textContent = 'No se pudo vincular: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('ld-error-text').textContent = 'No se pudo vincular: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('ld-submit', false, '', m.device.linked ? 'Guardar' : 'Vincular');
   }
@@ -4979,7 +5015,7 @@ async function desvincularDispositivo(machineCode) {
     openDrawer(machineCode);
     renderMaquinaria();
   } catch (err) {
-    alert('No se pudo desvincular: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo desvincular: ' + mensajeError(err));
   }
 }
 
@@ -5128,7 +5164,7 @@ async function submitAddWorker() {
     pintarPestanaActual();
     switchTab('trabajadores');
   } catch (err) {
-    document.getElementById('nw-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('nw-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('nw-submit', false, '', 'Guardar trabajador');
   } finally {
@@ -5434,7 +5470,7 @@ async function reasignarMaquina(workerCode) {
     openWorkerDrawer(workerCode);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo reasignar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo reasignar: ' + mensajeError(err));
   }
 }
 
@@ -5484,7 +5520,7 @@ async function addVacation(workerId) {
     document.getElementById('vac-end').value = '';
     renderTrabajadores();
   } catch (err) {
-    alert('No se pudieron guardar las vacaciones: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudieron guardar las vacaciones: ' + mensajeError(err));
   }
 }
 
@@ -5497,7 +5533,7 @@ async function deleteVacation(workerId, vacId) {
     document.getElementById('vac-list').innerHTML = renderVacList(w);
     renderTrabajadores();
   } catch (err) {
-    alert('No se pudieron borrar las vacaciones: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudieron borrar las vacaciones: ' + mensajeError(err));
   }
 }
 
@@ -5722,7 +5758,7 @@ async function submitIncident() {
     await cargarIncidencias();
     pintarPestanaActual(); renderNav();
   } catch (err) {
-    document.getElementById('inc-error-text').textContent = 'No se pudo enviar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('inc-error-text').textContent = 'No se pudo enviar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('inc-submit', false, '', '<i class="fa-solid fa-paper-plane"></i> Enviar incidencia');
   } finally {
@@ -5769,7 +5805,7 @@ async function resolveIncident(dbId) {
     await cargarIncidencias();
     pintarPestanaActual(); renderNav();
   } catch (err) {
-    alert('No se pudo marcar como resuelta: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo marcar como resuelta: ' + mensajeError(err));
     setButtonLoading('res-submit', false, '', '<i class="fa-solid fa-check"></i> Sí, está resuelta');
   }
 }
@@ -6039,7 +6075,7 @@ async function markInvoicePaid(dbId) {
     if (inv) { inv.status = 'paid'; inv.paidAt = new Date().toISOString(); }
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo marcar como cobrado: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo marcar como cobrado: ' + mensajeError(err));
   }
 }
 
@@ -6052,7 +6088,7 @@ async function markInvoicePending(dbId) {
     if (inv) { inv.status = 'pending'; inv.paidAt = null; }
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo deshacer: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo deshacer: ' + mensajeError(err));
   }
 }
 
@@ -6066,7 +6102,7 @@ async function borrarCobro(dbId) {
     invoices = invoices.filter(i => i.dbId !== dbId);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo borrar: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo borrar: ' + mensajeError(err));
   }
 }
 
@@ -6170,7 +6206,7 @@ async function submitAddInvoice() {
     closeAddMachineModal();
     pintarPestanaActual();
   } catch (err) {
-    document.getElementById('ni-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('ni-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('ni-submit', false, '', 'Guardar');
   } finally {
@@ -6581,7 +6617,7 @@ async function handleWorkerLogin() {
     try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
     enterAppOrShowTrialExpired();
   } catch (err) {
-    document.getElementById('pin-error-text').textContent = err.message || 'No se pudo verificar. Inténtalo de nuevo.';
+    document.getElementById('pin-error-text').textContent = mensajeError(err);
     errBox.style.display = 'flex';
   } finally {
     setButtonLoading('pin-submit-btn', false, '', 'Entrar');
@@ -6938,7 +6974,7 @@ async function subirFotoPerfil(event) {
     openUserSettings();
     renderTopbarUser();
   } catch (err) {
-    alert('No se pudo subir la foto: ' + (err.message || 'inténtalo de nuevo.'));
+    alert('No se pudo subir la foto: ' + mensajeError(err));
     openUserSettings();
   }
 }
@@ -6967,7 +7003,7 @@ async function guardarAjustesCuenta() {
     closeAddMachineModal();
     renderTopbarUser(); renderTrabajadores();
   } catch (err) {
-    document.getElementById('settings-error-text').textContent = 'No se pudo guardar: ' + (err.message || 'inténtalo de nuevo.');
+    document.getElementById('settings-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
     setButtonLoading('settings-submit', false, '', 'Guardar cambios');
   }
@@ -7010,6 +7046,7 @@ const LEGAL_CONTENT = {
 
       <h3>2. Objeto</h3>
       <p>Opertra es una aplicación de gestión dirigida a empresas de construcción, transporte, mantenimiento y sectores afines. Permite gestionar personal, maquinaria, trabajos, registro de jornada, incidencias y control de cobros.</p>
+      <p>De forma complementaria y opcional, se ofrece el suministro e instalación de dispositivos de localización GPS en la maquinaria de la empresa cliente, con presupuesto independiente de la suscripción al software.</p>
       <p>Opertra <b>no es un programa de facturación</b> ni emite facturas con validez fiscal. El módulo de cobros es una herramienta de control interno.</p>
 
       <h3>3. Condiciones de acceso</h3>
@@ -7047,21 +7084,26 @@ const LEGAL_CONTENT = {
 
       <h3>4. Sobre la geolocalización</h3>
       <p><b>Opertra no geolocaliza a las personas.</b> La ubicación se asocia exclusivamente a los dispositivos GPS instalados en la maquinaria, que son bienes de la empresa. El registro de jornada guarda la hora de entrada y salida y el trabajo asignado, pero no la posición del trabajador.</p>
+      <p>Cuando la empresa contrata el servicio de instalación de dispositivos GPS, estos se instalan en la maquinaria y transmiten su posición al sistema. La empresa contratante es responsable de informar a su personal de la existencia de estos dispositivos y de su finalidad, que es el control de sus propios activos.</p>
 
-      <h3>5. Finalidad y base jurídica</h3>
+      <h3>5. Registro de actividad</h3>
+      <p>Para garantizar la integridad de los datos, el sistema conserva un registro de determinadas acciones: quién modificó un plazo, quién corrigió un fichaje y por qué motivo, quién dio de alta o de baja a un usuario, y cuándo se hizo. Este registro es accesible por los administradores de la empresa y su finalidad es la trazabilidad exigida por la normativa de registro de jornada.</p>
+      <p>Las correcciones sobre el registro de jornada conservan siempre los valores originales, de forma que puede acreditarse cualquier modificación posterior.</p>
+
+      <h3>6. Finalidad y base jurídica</h3>
       <p>Prestación del servicio contratado (ejecución del contrato), cumplimiento del registro de jornada exigido por el artículo 34.9 del Estatuto de los Trabajadores (obligación legal de la empresa contratante), y seguridad de los activos de la empresa (interés legítimo).</p>
 
-      <h3>6. Conservación</h3>
+      <h3>7. Conservación</h3>
       <p>Los registros de jornada se conservan durante el plazo legalmente exigido a la empresa (cuatro años). El resto de datos se conservan mientras la cuenta esté activa y, tras su baja, durante los plazos de prescripción aplicables.</p>
 
-      <h3>7. Destinatarios y encargados</h3>
+      <h3>8. Destinatarios y encargados</h3>
       <p>Los datos se alojan en la infraestructura de Supabase Inc. y Vercel Inc., con servidores en la Unión Europea. No se ceden datos a terceros salvo obligación legal.</p>
 
-      <h3>8. Derechos</h3>
+      <h3>9. Derechos</h3>
       <p>Puedes ejercer los derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a ${DATOS_TITULAR.email}, adjuntando copia de un documento identificativo. Si eres trabajador de una empresa usuaria, dirígete en primer lugar a tu empresa, que es la responsable de tus datos.</p>
       <p>Tienes derecho a reclamar ante la Agencia Española de Protección de Datos (www.aepd.es).</p>
 
-      <h3>9. Seguridad</h3>
+      <h3>10. Seguridad</h3>
       <p>Se aplican medidas técnicas y organizativas: cifrado en tránsito y en reposo, aislamiento estricto entre empresas a nivel de base de datos, acceso a documentos mediante enlaces temporales y contraseñas almacenadas de forma irreversible.</p>
     `,
   },
@@ -7112,19 +7154,23 @@ const LEGAL_CONTENT = {
         · No utilizar la aplicación para finalidades ilícitas ni para vigilar a sus trabajadores más allá de lo permitido por la normativa laboral.
       </p>
 
-      <h3>5. Naturaleza del servicio</h3>
+      <h3>5. Servicio de localización GPS</h3>
+      <p>Opertra ofrece, de forma opcional y con presupuesto independiente, la instalación de dispositivos de localización en la maquinaria de la empresa cliente. Este servicio se factura aparte de la suscripción.</p>
+      <p>Los dispositivos instalados quedan en propiedad de la empresa cliente salvo pacto en contrario. Opertra no garantiza la cobertura de la señal en todas las ubicaciones, ya que depende de la red móvil disponible en cada zona.</p>
+
+      <h3>6. Naturaleza del servicio</h3>
       <p>Opertra es una herramienta de gestión. <b>No sustituye a un programa de facturación</b> ni emite documentos con validez fiscal, ni constituye asesoramiento laboral, fiscal o jurídico. La responsabilidad del cumplimiento normativo corresponde a la empresa cliente.</p>
 
-      <h3>6. Disponibilidad y soporte</h3>
+      <h3>7. Disponibilidad y soporte</h3>
       <p>Se realizarán esfuerzos razonables para mantener el servicio disponible de forma continuada, pudiendo interrumpirse por mantenimiento programado, incidencias técnicas o causas ajenas. El soporte se presta por correo electrónico en horario laboral.</p>
 
-      <h3>7. Tus datos son tuyos</h3>
+      <h3>8. Tus datos son tuyos</h3>
       <p>Los datos introducidos son propiedad de la empresa cliente. Puede exportarlos en cualquier momento desde la aplicación. En caso de baja, dispondrá de 30 días para descargarlos, transcurridos los cuales podrán ser eliminados definitivamente.</p>
 
-      <h3>8. Limitación de responsabilidad</h3>
+      <h3>9. Limitación de responsabilidad</h3>
       <p>Salvo dolo o negligencia grave, la responsabilidad del titular queda limitada al importe abonado por la empresa cliente en los tres meses anteriores al hecho causante.</p>
 
-      <h3>9. Modificaciones</h3>
+      <h3>10. Modificaciones</h3>
       <p>Estos términos podrán actualizarse. Los cambios sustanciales se comunicarán con al menos 30 días de antelación, pudiendo la empresa cliente cancelar la suscripción si no los acepta.</p>
     `,
   },
