@@ -1372,6 +1372,8 @@ async function loadCompanyData() {
     pintarPestanaActual();
     arrancarContador();
     suscribirCambios();
+    arrancarRepasoTrabajador();
+    window.__ultimaCarga = Date.now();
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
   } catch (err) {
     console.error('Error cargando datos de la empresa:', err);
@@ -3328,6 +3330,23 @@ function avisarSinConexion(hay) {
 }
 
 window.addEventListener('online',  () => { avisarSinConexion(true);  if (currentUser.companyId) loadCompanyData(); });
+
+/* Cuando la app queda en segundo plano (el trabajador cambia a WhatsApp, o el
+   jefe deja la pestaña abierta toda la tarde), se dejan de consumir recursos.
+   Al volver, se refresca por si algo cambió mientras tanto. */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(contadorHandle);
+    return;
+  }
+  if (!currentUser.companyId) return;
+  arrancarContador();
+  // Si lleva más de 2 minutos oculta, los datos pueden estar viejos
+  const ahora = Date.now();
+  if (!window.__ultimaCarga || ahora - window.__ultimaCarga > 120000) {
+    loadCompanyData();
+  }
+});
 window.addEventListener('offline', () => avisarSinConexion(false));
 
 /* Comprueba antes de guardar: mejor avisar que fallar a medias */
@@ -3366,9 +3385,32 @@ function vigilarSesion() {
    ====================================================================== */
 let canalTiempoReal = null;
 let recargaPendiente = null;
+let repasoTrabajador = null;
+
+/* El trabajador no mantiene conexión abierta, pero sí conviene refrescar su
+   estado de vez en cuando por si el responsable ha creado una obra nueva o
+   ha corregido su fichaje. Cada 3 minutos es más que suficiente y no consume
+   conexiones permanentes. */
+function arrancarRepasoTrabajador() {
+  clearInterval(repasoTrabajador);
+  if (!currentUser.isWorker) return;
+  repasoTrabajador = setInterval(() => {
+    if (document.hidden) return;          // no gastar si la app no está a la vista
+    if (navigator.onLine === false) return;
+    loadCompanyData();
+  }, 180000);
+}
+
+function pararRepasoTrabajador() { clearInterval(repasoTrabajador); }
 
 function suscribirCambios() {
   if (canalTiempoReal || !currentUser.companyId) return;
+
+  // El personal de obra NO necesita conexión permanente: entra, ficha y cierra.
+  // Mantenerles una conexión abierta consumiría el límite de la cuenta sin
+  // aportar nada. Con 40 empresas y 80 trabajadores, la diferencia es entre
+  // 800 conexiones y unas 120.
+  if (currentUser.isWorker) return;
   const filtro = `company_id=eq.${currentUser.companyId}`;
   canalTiempoReal = getSupabase()
     .channel('cambios-empresa')
@@ -3413,6 +3455,7 @@ function recargarEnBreve() {
 function cortarSuscripcion() {
   if (canalTiempoReal) { getSupabase().removeChannel(canalTiempoReal); canalTiempoReal = null; }
   clearTimeout(recargaPendiente);
+  pararRepasoTrabajador();
 }
 
 /* Solo se traen los fichajes de los últimos 60 días, y como mucho 300.
@@ -5828,7 +5871,11 @@ async function cargarIncidencias() {
         sb.from('incidents').select('id,worker_id,project_id,machine_id,title,description,priority,photo_path,resolved,created_at,resolved_at').eq('resolved', true).order('resolved_at', { ascending: false }).limit(30),
       ]);
       error = abiertas.error || resueltas.error;
-      data = [...(abiertas.data || []), ...(resueltas.data || [])];
+      // Se piden en dos consultas (abiertas + últimas resueltas). Si una cambia
+      // de estado justo entre ambas, podría venir repetida: la quitamos.
+      const vistas = new Set();
+      data = [...(abiertas.data || []), ...(resueltas.data || [])]
+        .filter(i => { if (vistas.has(i.id)) return false; vistas.add(i.id); return true; });
     }
     if (error) throw error;
     incidents = (data || []).map(i => {
@@ -6241,7 +6288,9 @@ async function cargarCobros() {
       sb.from('invoices').select('id,project_id,client,reference,concept,amount,due_date,status,paid_at').eq('status', 'paid').order('paid_at', { ascending: false }).limit(50),
     ]);
     const error = pend.error || pag.error;
-    const data = [...(pend.data || []), ...(pag.data || [])];
+    const vistos = new Set();
+    const data = [...(pend.data || []), ...(pag.data || [])]
+      .filter(i => { if (vistos.has(i.id)) return false; vistos.add(i.id); return true; });
     if (error) throw error;
     invoices = (data || []).map(i => {
       const p = projects.find(x => x.dbId === i.project_id);
