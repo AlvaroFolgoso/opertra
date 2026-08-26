@@ -89,7 +89,7 @@
   .user-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--graphite); color: var(--amber); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
   .user-text { text-align: left; line-height: 1.25; }
   .user-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
-  .user-company { font-size: 10.5px; color: var(--steel); font-weight: 500; letter-spacing: 0.01em; }
+  .user-company { font-size: 10px; color: var(--steel); font-weight: 500; letter-spacing: 0.01em; }
 
   .view { display: none; padding: 32px; overflow: auto; flex: 1; }
   .view.active { display: block; }
@@ -146,10 +146,10 @@
   .avisos-tab-icon { width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--surface); color: var(--steel); flex-shrink: 0; }
   .avisos-tab-btn.active .avisos-tab-icon { background: var(--amber); color: var(--graphite); }
   .avisos-tab-title { font-size: 14px; font-weight: 700; }
-  .avisos-tab-sub { font-size: 11.5px; color: var(--steel); margin-top: 1px; }
+  .avisos-tab-sub { font-size: 11px; color: var(--steel); margin-top: 1px; }
 
   .incident-card { padding: 16px; margin-bottom: 12px; }
-  .priority-badge { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .priority-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.02em; }
   .priority-alta { color: var(--danger); background: var(--danger-bg); }
   .priority-media { color: var(--amber-deep); background: var(--amber-bg); }
   .priority-baja { color: var(--steel); background: var(--surface); }
@@ -172,7 +172,7 @@
   .empty-state { text-align: center; padding: 48px 20px; color: var(--steel); }
   .empty-state i { font-size: 28px; opacity: 0.4; margin-bottom: 10px; }
 
-  .nav-badge { margin-left: auto; background: var(--amber); color: var(--graphite); font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 99px; }
+  .nav-badge { margin-left: auto; background: var(--amber); color: var(--graphite); font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 99px; }
   .textarea { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); font-family: 'Manrope', sans-serif; font-size: 14px; resize: vertical; min-height: 90px; }
   .success-banner { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 8px; background: var(--success-bg); color: var(--success); font-size: 13.5px; font-weight: 600; margin-bottom: 16px; }
 
@@ -233,7 +233,7 @@
   .machine-top { display: flex; gap: 12px; }
   .machine-photo { width: 112px; height: 84px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); overflow: hidden; }
   .machine-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 22px; }
-  .machine-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 2px; font-size: 9px; }
+  .machine-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 2px; font-size: 10px; }
   .machine-id { font-size: 12px; color: var(--steel); font-family: 'IBM Plex Mono', monospace; }
   .machine-type { font-family: 'Oswald', sans-serif; font-size: 18px; margin-top: 2px; }
   .machine-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--steel); }
@@ -305,12 +305,12 @@
 
   .land-section { padding: 64px 6vw; max-width: 1160px; margin: 0 auto; }
   .land-h2 { font-family: 'Oswald', sans-serif; font-size: clamp(22px, 3vw, 30px); text-align: center; color: var(--ink); }
-  .land-h2-sub { text-align: center; color: var(--steel); font-size: 14.5px; margin-top: 8px; max-width: 520px; margin-left: auto; margin-right: auto; }
+  .land-h2-sub { text-align: center; color: var(--steel); font-size: 14px; margin-top: 8px; max-width: 520px; margin-left: auto; margin-right: auto; }
 
   .land-problem-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 36px; }
   .land-problem-card { display: flex; gap: 14px; padding: 20px; border-radius: 10px; border: 1px solid var(--border); flex: 1 1 240px; max-width: 360px; }
   .land-problem-card i { font-size: 22px; color: var(--danger); flex-shrink: 0; margin-top: 2px; }
-  .land-problem-card b { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .land-problem-card b { display: block; font-size: 14px; margin-bottom: 4px; }
   .land-problem-card span { font-size: 13px; color: var(--steel); line-height: 1.5; }
 
   .land-feature-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; margin-top: 36px; }
@@ -365,7 +365,7 @@
   .login-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--steel); font-size: 12px; }
   .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
   .login-error { display: none; background: var(--danger-bg); color: var(--danger); font-size: 12.5px; padding: 10px 12px; border-radius: 6px; margin-top: 12px; }
-  .login-legal { font-size: 11.5px; color: var(--steel); text-align: center; margin-top: 20px; line-height: 1.5; }
+  .login-legal { font-size: 11px; color: var(--steel); text-align: center; margin-top: 20px; line-height: 1.5; }
   .login-legal a { color: var(--steel); text-decoration: underline; cursor: pointer; }
   .login-link { text-align: center; font-size: 13px; margin-top: 16px; }
   .login-link a { color: var(--blue); cursor: pointer; text-decoration: none; font-weight: 600; }
@@ -415,7 +415,7 @@
   #legal-modal p { font-size: 13.5px; color: var(--steel); line-height: 1.65; margin: 0 0 12px; }
   #legal-modal h3 { font-size: 14px; margin: 18px 0 6px; }
   .sidebar-legal { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px 0; margin-top: 4px; }
-  .sidebar-legal button { background: none; border: none; color: #7C838A; font-size: 10.5px; text-align: left; cursor: pointer; padding: 3px 4px; font-family: 'Manrope', sans-serif; }
+  .sidebar-legal button { background: none; border: none; color: #7C838A; font-size: 10px; text-align: left; cursor: pointer; padding: 3px 4px; font-family: 'Manrope', sans-serif; }
   .sidebar-legal button:hover { color: white; text-decoration: underline; }
 
   /* ============ VACACIONES ============ */
@@ -458,8 +458,8 @@
     #sidebar { display: none; }
 
     #topbar { padding: 12px 16px; }
-    #topbar h1 { font-size: 19px; }
-    #topbar p { font-size: 11.5px; }
+    #topbar h1 { font-size: 18px; }
+    #topbar p { font-size: 11px; }
     .user-company { display: none; }
     .company-pill { display: none; }
 
@@ -471,7 +471,17 @@
     .avisos-tabs { flex-direction: column; }
 
     #drawer { width: 100%; }
-    #add-machine-modal, #legal-modal { width: 92vw; padding: 20px; }
+    /* Con el teclado abierto en el móvil queda poco alto: la ventana se ajusta
+       y los botones de acción se quedan siempre visibles abajo. */
+    #add-machine-modal, #legal-modal { width: 94vw; padding: 18px; max-height: 92vh; }
+    #add-machine-modal { padding-bottom: 0; }
+    #add-machine-modal .modal-actions {
+      position: sticky; bottom: 0; background: var(--card);
+      padding: 14px 0 18px; margin-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .modal-actions { flex-wrap: wrap; }
+    .modal-actions .btn { min-width: 100px; }
     #login-screen { padding: 20px 12px; }
     .login-box { width: 100%; padding: 22px; }
 
@@ -480,6 +490,8 @@
     /* En obra se usa el móvil con guantes: los botones necesitan
        al menos 44px de alto para poder acertar. */
     .btn, .mode-btn, .avisos-tab-btn, .resolve-btn, .load-more-btn { min-height: 44px; }
+    /* El botón de fichar es lo que más se usa: grande y cómodo con guantes */
+    #btn-fichar { min-height: 60px; font-size: 17px; }
     .btn-ghost, .vac-delete { min-height: 40px; min-width: 40px; }
     .drawer-close, .nav-item { min-height: 44px; }
     .machine-photo { width: 88px; height: 68px; }
@@ -488,7 +500,7 @@
     .invoice-doc { padding: 18px; }
     .inv-totals-box { width: 100%; }
     .report-label { width: 100px; font-size: 12px; }
-    .report-value { width: 70px; font-size: 11.5px; }
+    .report-value { width: 70px; font-size: 11px; }
   }
 
   /* ============ NAVEGACIÓN MÓVIL PREMIUM ============ */
@@ -504,7 +516,7 @@
       flex: 1; flex-direction: column; gap: 3px; font-size: 10px; padding: 6px 2px;
       border-radius: 10px; position: relative; max-width: 76px;
     }
-    #mobile-nav .nav-item i { font-size: 19px; }
+    #mobile-nav .nav-item i { font-size: 18px; }
     #mobile-nav .nav-badge { position: absolute; top: 0px; right: 14px; margin-left: 0; }
   }
 
@@ -520,7 +532,7 @@
 
   @media (max-width: 420px) {
     .user-avatar { width: 32px; height: 32px; font-size: 11px; }
-    #mobile-nav .nav-item { font-size: 9px; }
+    #mobile-nav .nav-item { font-size: 10px; }
     #mobile-nav .nav-item i { font-size: 17px; }
   }
 
@@ -1692,7 +1704,7 @@ function obraCardHTML(p, detailed) {
         <span><i class="fa-solid fa-truck"></i> ${mCount} máquina${mCount!==1?'s':''}</span>
         <span><i class="fa-solid fa-clock"></i> ${hours.toLocaleString('es-ES',{maximumFractionDigits:1})} h este mes</span>
       </div>
-      ${openInc > 0 ? `<div style="margin-top:8px;font-size:11.5px;color:var(--danger);font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> ${openInc} incidencia${openInc!==1?'s':''} abierta${openInc!==1?'s':''}</div>` : ''}
+      ${openInc > 0 ? `<div style="margin-top:8px;font-size: 11px;color:var(--danger);font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> ${openInc} incidencia${openInc!==1?'s':''} abierta${openInc!==1?'s':''}</div>` : ''}
     </div>`;
 }
 
@@ -1760,6 +1772,180 @@ function buildCriticalAlerts() {
   return visibles;
 }
 
+/* ======================================================================
+   PRIMERA VEZ DEL TRABAJADOR
+   Un maquinista que abre esto por primera vez no tiene por qué saber qué
+   hacer. Tres pantallas cortas, con lenguaje de obra, y no vuelve a salir.
+   Ocupa unos 3 KB: no afecta al rendimiento.
+   ====================================================================== */
+const TUTO_KEY = 'opertra_tuto_visto';
+let tutoPaso = 0;
+
+function tutoYaVisto() {
+  try { return localStorage.getItem(TUTO_KEY) === (currentUser.id || '1'); } catch (e) { return true; }
+}
+
+function marcarTutoVisto() {
+  try { localStorage.setItem(TUTO_KEY, currentUser.id || '1'); } catch (e) {}
+}
+
+function comprobarTutorialTrabajador() {
+  if (!currentUser.isWorker || tutoYaVisto()) return;
+  tutoPaso = 0;
+  setTimeout(pintarTutorial, 600);
+}
+
+function pintarTutorial() {
+  const machine = myAssignedMachine();
+  const pasos = [
+    {
+      icono: 'fa-hand-wave',
+      titulo: `Hola, ${esc((currentUser.name || '').split(' ')[0])}`,
+      texto: `Con esta app fichas tu entrada y tu salida, y avisas si algo se rompe. Nada más. Te lo explicamos en veinte segundos.`,
+    },
+    {
+      icono: machine ? 'fa-qrcode' : 'fa-right-to-bracket',
+      titulo: 'Para fichar',
+      texto: machine
+        ? `Elige dónde vas a trabajar, pulsa el botón y apunta con la cámara al código pegado en tu máquina (${esc(machine.id)}). Al terminar, vuelves a fichar para la salida.`
+        : `Elige dónde vas a trabajar y pulsa el botón grande. Al terminar la jornada, vuelves a entrar y fichas la salida.`,
+    },
+    {
+      icono: 'fa-triangle-exclamation',
+      titulo: 'Si algo se rompe',
+      texto: `Entra en Avisos y cuéntalo. Puedes hacer una foto. Tu responsable lo ve al momento, sin llamadas ni mensajes.`,
+    },
+  ];
+
+  const p = pasos[tutoPaso];
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div style="text-align:center;padding:8px 4px;">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--amber-bg);color:var(--amber-deep);
+           display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 18px;">
+        <i class="fa-solid ${p.icono}"></i>
+      </div>
+      <div class="f-display" style="font-size: 20px;">${p.titulo}</div>
+      <div style="font-size: 14px;color:var(--steel);line-height:1.6;margin-top:12px;max-width:330px;margin-left:auto;margin-right:auto;">
+        ${p.texto}
+      </div>
+
+      <div style="display:flex;gap:7px;justify-content:center;margin:24px 0 20px;">
+        ${pasos.map((_, i) => `<div style="width:${i===tutoPaso?'22px':'7px'};height:7px;border-radius:99px;
+          background:${i===tutoPaso?'var(--amber)':'var(--border)'};transition:width .2s;"></div>`).join('')}
+      </div>
+
+      <button class="btn btn-amber" style="width:100%;justify-content:center;padding:14px;font-size:16px;" onclick="tutoSiguiente()">
+        ${tutoPaso < pasos.length - 1 ? 'Siguiente' : 'Entendido, empezar'}
+      </button>
+      ${tutoPaso < pasos.length - 1
+        ? `<button class="btn-ghost" style="margin-top:10px;font-size:13px;" onclick="tutoSaltar()">Saltar</button>`
+        : ''}
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function tutoSiguiente() {
+  tutoPaso++;
+  if (tutoPaso > 2) { tutoSaltar(); return; }
+  pintarTutorial();
+}
+
+function tutoSaltar() {
+  marcarTutoVisto();
+  closeAddMachineModal();
+}
+
+/* Por si quiere volver a verlo */
+function repetirTutorial() {
+  closeAddMachineModal();
+  try { localStorage.removeItem(TUTO_KEY); } catch (e) {}
+  tutoPaso = 0;
+  pintarTutorial();
+}
+
+/* ======================================================================
+   PRIMEROS PASOS
+   Una empresa que acaba de registrarse ve un panel vacío y no sabe por dónde
+   empezar. Este bloque le guía y desaparece solo cuando ya no hace falta.
+   ====================================================================== */
+const GUIA_KEY = 'opertra_guia_oculta';
+
+function guiaOculta() {
+  try { return localStorage.getItem(GUIA_KEY) === (currentUser.companyId || '1'); } catch (e) { return false; }
+}
+
+function ocultarPrimerosPasos() {
+  try { localStorage.setItem(GUIA_KEY, currentUser.companyId || '1'); } catch (e) {}
+  renderDashboard();
+}
+
+function mostrarPrimerosPasos() {
+  try { localStorage.removeItem(GUIA_KEY); } catch (e) {}
+  closeAddMachineModal();
+  switchTab('dashboard');
+}
+
+function bloquePrimerosPasos() {
+  if (!esAdministrador()) return '';
+  if (guiaOculta()) return '';
+
+  const yoFicho = !!miFichaTrabajador();
+  const pasos = [
+    { hecho: projects.length > 0, texto: `Crea tu primera ${t('s')}`,
+      detalle: `Un trabajo, una obra o un servicio: es donde se imputan las horas`,
+      accion: `switchTab('obras')`, icono: 'fa-diagram-project' },
+    { hecho: machines.length > 0, texto: 'Registra tus máquinas',
+      detalle: 'Excavadoras, camiones, furgonetas... con su documentación',
+      accion: `switchTab('maquinaria')`, icono: 'fa-truck' },
+    { hecho: workers.length > 0, texto: 'Da de alta a tu equipo',
+      detalle: 'Cada uno recibe un PIN para fichar desde su móvil',
+      accion: `switchTab('trabajadores')`, icono: 'fa-users' },
+    { hecho: timeLogs.length > 0 || yoFicho, texto: 'Que empiecen a fichar',
+      detalle: `Pásales el código ${esc(currentUser.accessCode || '')} y su PIN`,
+      accion: `switchTab('trabajadores')`, icono: 'fa-tower-broadcast' },
+  ];
+
+  const hechos = pasos.filter(p => p.hecho).length;
+  if (hechos === pasos.length) return '';   // ya está en marcha: fuera la guía
+
+  return `
+    <div class="plate" style="padding:20px;margin-bottom:18px;border-left:3px solid var(--amber);">${rivets}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div class="f-display" style="font-size:17px;">EMPIEZA POR AQUÍ</div>
+          <div style="font-size:12.5px;color:var(--steel);margin-top:2px;">
+            En cinco minutos lo tienes listo. ${hechos} de ${pasos.length} completado${hechos!==1?'s':''}.
+          </div>
+        </div>
+        <button class="btn-ghost" style="font-size:12px;align-self:flex-start;" onclick="ocultarPrimerosPasos()" title="Puedes volver a verlo desde Ajustes">
+          Ocultar
+        </button>
+        <div style="flex:1;min-width:120px;max-width:220px;">
+          <div class="obra-progress-track"><div class="obra-progress-fill" style="width:${(hechos/pasos.length)*100}%;"></div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+        ${pasos.map((p, i) => `
+          <div onclick="${p.hecho ? '' : p.accion}" style="display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:8px;
+               background:${p.hecho ? 'var(--success-bg)' : 'var(--surface)'};
+               border:1px solid ${p.hecho ? '#BFE0CD' : 'var(--border)'};
+               ${p.hecho ? '' : 'cursor:pointer;'}">
+            <div style="width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+                 background:${p.hecho ? 'var(--success)' : 'var(--graphite)'};color:white;font-size:12px;">
+              ${p.hecho ? '<i class="fa-solid fa-check"></i>' : (i+1)}
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13.5px;font-weight:600;${p.hecho ? 'color:var(--steel);text-decoration:line-through;' : ''}">${p.texto}</div>
+              ${!p.hecho ? `<div style="font-size:12px;color:var(--steel);margin-top:1px;">${p.detalle}</div>` : ''}
+            </div>
+            ${!p.hecho ? '<i class="fa-solid fa-chevron-right" style="color:var(--steel);font-size:12px;"></i>' : ''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
 function renderDashboard() {
   const active = machines.filter(m => m.status === 'active').length;
   const maint = machines.filter(m => m.status === 'maintenance').length;
@@ -1776,6 +1962,7 @@ function renderDashboard() {
   const alerts = buildCriticalAlerts();
 
   document.getElementById('view-dashboard').innerHTML = `
+    ${bloquePrimerosPasos()}
     <div class="plate critical-block">${rivets}
       <div class="critical-head">
         <i class="fa-solid fa-circle-exclamation"></i>
@@ -2497,7 +2684,7 @@ function imprimirTodasLasEtiquetas() {
       .cod { font-size: 24px; font-weight: 800; margin: 3px 0; font-family: ui-monospace, monospace; }
       .tip { font-size: 12px; color: #444; margin-bottom: 8px; }
       .qr { display: flex; justify-content: center; }
-      .pie { font-size: 10.5px; color: #555; margin-top: 8px; }
+      .pie { font-size: 10px; color: #555; margin-top: 8px; }
     </style></head><body>
       <div class="hoja">
         ${machines.map(m => `
@@ -2571,11 +2758,11 @@ function compartirAcceso(workerCode) {
     <div style="display:flex;gap:10px;margin-top:16px;">
       <div class="plate" style="flex:1;padding:14px;text-align:center;">
         <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Código empresa</div>
-        <div class="f-mono" style="font-size:19px;font-weight:600;letter-spacing:1px;color:var(--amber-deep);margin-top:4px;">${esc(currentUser.accessCode || '—')}</div>
+        <div class="f-mono" style="font-size: 18px;font-weight:600;letter-spacing:1px;color:var(--amber-deep);margin-top:4px;">${esc(currentUser.accessCode || '—')}</div>
       </div>
       <div class="plate" style="flex:1;padding:14px;text-align:center;">
         <div style="font-size:11px;color:var(--steel);text-transform:uppercase;font-weight:600;">Su PIN</div>
-        <div class="f-mono" style="font-size:19px;font-weight:600;letter-spacing:4px;color:var(--amber-deep);margin-top:4px;">${esc(w.pin || '—')}</div>
+        <div class="f-mono" style="font-size: 18px;font-weight:600;letter-spacing:4px;color:var(--amber-deep);margin-top:4px;">${esc(w.pin || '—')}</div>
       </div>
     </div>
 
@@ -3623,7 +3810,7 @@ function renderFicharCard() {
                   <button class="mode-btn ${horasPrevistas!==null && ![4,6,8].includes(horasPrevistas)?'active':''}" style="flex:1;min-width:64px;justify-content:center;background:${horasPrevistas!==null && ![4,6,8].includes(horasPrevistas)?'var(--card)':'var(--surface)'};border:1px solid ${horasPrevistas!==null && ![4,6,8].includes(horasPrevistas)?'var(--amber)':'var(--border)'};border-radius:8px;padding:10px;" onclick="pedirHorasPersonalizadas()">Otras</button>
                   <button class="mode-btn ${horasPrevistas===null?'active':''}" style="flex:1;min-width:74px;justify-content:center;background:${horasPrevistas===null?'var(--card)':'var(--surface)'};border:1px solid ${horasPrevistas===null?'var(--amber)':'var(--border)'};border-radius:8px;padding:10px;" onclick="setHorasPrevistas(null)">Sin fijar</button>
                 </div>
-                <div style="font-size:11.5px;color:var(--steel);margin-top:8px;text-align:center;line-height:1.45;">
+                <div style="font-size: 11px;color:var(--steel);margin-top:8px;text-align:center;line-height:1.45;">
                   ${horasPrevistas
                     ? `Te avisaremos sobre las ${horaFin(horasPrevistas)} por si se te olvida fichar la salida. Puedes salir antes o después: se guarda la hora real.`
                     : 'Sin aviso. Recuerda fichar la salida al terminar.'}
@@ -3632,7 +3819,7 @@ function renderFicharCard() {
               <button class="btn btn-amber" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
                 <i class="fa-solid fa-${machine ? 'qrcode' : 'right-to-bracket'}"></i> ${machine ? 'Escanear y fichar' : 'Fichar entrada'}
               </button>
-              ${machine ? `<div style="font-size:11.5px;color:var(--steel);margin-top:8px;">Escanea el código de la máquina para confirmar que estás con ella.</div>` : ''}
+              ${machine ? `<div style="font-size: 11px;color:var(--steel);margin-top:8px;">Escanea el código de la máquina para confirmar que estás con ella.</div>` : ''}
             `}
           `}
         </div>
@@ -4233,8 +4420,8 @@ function renderRegistroHoras() {
                 </td>
                 <td class="f-mono" style="font-size:12.5px;font-weight:600;">
                   ${l.checkOut === '—' ? 'en curso' : l.hours.toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' h'}
-                  ${l.editedBy ? `<i class="fa-solid fa-pen" style="font-size:9px;color:var(--amber-deep);margin-left:4px;" title="Corregido por ${esc(l.editedBy)}: ${esc(l.editReason)}"></i>` : ''}
-                  ${l.autoClosed ? `<i class="fa-solid fa-robot" style="font-size:9px;color:var(--danger);margin-left:4px;" title="Cerrada automáticamente — revisa la hora real"></i>` : ''}
+                  ${l.editedBy ? `<i class="fa-solid fa-pen" style="font-size: 10px;color:var(--amber-deep);margin-left:4px;" title="Corregido por ${esc(l.editedBy)}: ${esc(l.editReason)}"></i>` : ''}
+                  ${l.autoClosed ? `<i class="fa-solid fa-robot" style="font-size: 10px;color:var(--danger);margin-left:4px;" title="Cerrada automáticamente — revisa la hora real"></i>` : ''}
                 </td>
                 ${esAdmin ? `<td><button class="btn-ghost" onclick="openEditFichajeModal('${l.dbId}')" title="Corregir">corregir</button></td>` : ''}
               </tr>`).join('')}
@@ -4450,7 +4637,7 @@ function openDrawer(id) {
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:500;">${m.device.linked ? (m.lat ? 'Enviando ubicación' : 'Dispositivo registrado, sin señal todavía') : 'Sin dispositivo vinculado'}</div>
         <div class="f-mono" style="font-size:11px;color:var(--steel);margin-top:2px;">${m.device.linked ? esc(m.device.id) + ' · ' + esc(m.device.model) : 'Esta máquina aún no envía ubicación'}</div>
-        ${m.device.linked && !m.lat ? `<div style="font-size:11.5px;color:var(--amber-deep);margin-top:6px;line-height:1.45;"><i class="fa-solid fa-triangle-exclamation"></i> El código está guardado, pero todavía no llega ninguna señal. Si se acaba de instalar puede tardar unos minutos; si sigue así, avísanos.</div>` : ''}
+        ${m.device.linked && !m.lat ? `<div style="font-size: 11px;color:var(--amber-deep);margin-top:6px;line-height:1.45;"><i class="fa-solid fa-triangle-exclamation"></i> El código está guardado, pero todavía no llega ninguna señal. Si se acaba de instalar puede tardar unos minutos; si sigue así, avísanos.</div>` : ''}
       </div>
       <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="openLinkDeviceModal('${esc(m.id)}')">${m.device.linked ? 'Cambiar' : 'Vincular'}</button>
     </div>
@@ -5964,6 +6151,14 @@ function renderClientes() {
       </div>
     </div>
     <div class="obras-grid" id="clientes-results">
+      ${clients.length === 0 ? `
+        <div class="plate empty-state" style="grid-column:1/-1;">${rivets}
+          <i class="fa-solid fa-address-book"></i>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay clientes</div>
+          <div style="font-size:13px;margin-top:3px;max-width:380px;">
+            Los clientes aparecen solos cuando creas ${t('p')} y les pones el nombre del cliente.
+          </div>
+        </div>` : ''}
       ${clients.map(clientCardHTML).join('')}
     </div>
   `;
@@ -6648,7 +6843,7 @@ function enterAppOrShowTrialExpired() {
     showScreen('app');
     renderTopbarUser(); renderNav(); renderTrialBanner();
     switchTab(currentUser.isWorker ? 'fichaje' : 'dashboard');
-    loadCompanyData();
+    loadCompanyData().then(() => comprobarTutorialTrabajador());
   }
 }
 
@@ -6993,6 +7188,13 @@ function openUserSettings() {
       <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="reabrirCookies()">
         <i class="fa-solid fa-rotate-left"></i> Revisar preferencias de cookies
       </button>
+      ${!esTrabajador ? `
+      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="mostrarPrimerosPasos()">
+        <i class="fa-solid fa-list-check"></i> Volver a ver los primeros pasos
+      </button>` : `
+      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="repetirTutorial()">
+        <i class="fa-solid fa-circle-question"></i> Ver cómo se ficha
+      </button>`}
     </div>
 
     <div class="form-group">
