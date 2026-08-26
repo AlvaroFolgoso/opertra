@@ -1372,7 +1372,6 @@ async function loadCompanyData() {
     pintarPestanaActual();
     arrancarContador();
     suscribirCambios();
-    arrancarRepasoTrabajador();
     window.__ultimaCarga = Date.now();
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
   } catch (err) {
@@ -3334,16 +3333,22 @@ window.addEventListener('online',  () => { avisarSinConexion(true);  if (current
 /* Cuando la app queda en segundo plano (el trabajador cambia a WhatsApp, o el
    jefe deja la pestaña abierta toda la tarde), se dejan de consumir recursos.
    Al volver, se refresca por si algo cambió mientras tanto. */
+let temporizadorOculta = null;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     clearInterval(contadorHandle);
+    // Tras 5 minutos sin mirarla, se suelta la conexión
+    clearTimeout(temporizadorOculta);
+    temporizadorOculta = setTimeout(soltarConexionSiOculta, 300000);
     return;
   }
+  clearTimeout(temporizadorOculta);
   if (!currentUser.companyId) return;
   arrancarContador();
-  // Si lleva más de 2 minutos oculta, los datos pueden estar viejos
+  suscribirCambios();          // reconectar si se había soltado
+  // Al volver, los datos pueden estar viejos: se refrescan
   const ahora = Date.now();
-  if (!window.__ultimaCarga || ahora - window.__ultimaCarga > 120000) {
+  if (!window.__ultimaCarga || ahora - window.__ultimaCarga > 20000) {
     loadCompanyData();
   }
 });
@@ -3385,23 +3390,38 @@ function vigilarSesion() {
    ====================================================================== */
 let canalTiempoReal = null;
 let recargaPendiente = null;
-let repasoTrabajador = null;
+/* ======================================================================
+   DATOS SIEMPRE AL DÍA PARA EL TRABAJADOR
+   Esperar tres minutos a que aparezca una obra nueva es inaceptable. En vez
+   de eso: se refresca al abrir la app, al volver a ella, y justo antes de
+   fichar. El trabajador nunca ve datos viejos en el momento que importa,
+   y no consume una conexión permanente por persona.
+   ====================================================================== */
+async function refrescarAntesDeFichar() {
+  const sel = document.getElementById('fichaje-obra');
+  const antes = projects.length;
+  const elegida = sel ? sel.value : null;
 
-/* El trabajador no mantiene conexión abierta, pero sí conviene refrescar su
-   estado de vez en cuando por si el responsable ha creado una obra nueva o
-   ha corregido su fichaje. Cada 3 minutos es más que suficiente y no consume
-   conexiones permanentes. */
-function arrancarRepasoTrabajador() {
-  clearInterval(repasoTrabajador);
-  if (!currentUser.isWorker) return;
-  repasoTrabajador = setInterval(() => {
-    if (document.hidden) return;          // no gastar si la app no está a la vista
-    if (navigator.onLine === false) return;
-    loadCompanyData();
-  }, 180000);
+  try {
+    const { data, error } = await getSupabase()
+      .from('projects').select('id,code,name,client,status,start_date,end_date,notes,updated_at')
+      .order('created_at');
+    if (error || !data) return;
+
+    projects = data.map(p => ({
+      dbId: p.id, id: p.code, name: p.name, client: p.client, status: p.status,
+      start: p.start_date, end: p.end_date, notes: p.notes, updatedAt: p.updated_at,
+    }));
+    _totalesObra = null;
+
+    // Si han aparecido obras nuevas, se repinta manteniendo lo que había elegido
+    if (projects.length !== antes) {
+      renderFichaje();
+      const nuevoSel = document.getElementById('fichaje-obra');
+      if (nuevoSel && elegida && projects.some(p => p.dbId === elegida)) nuevoSel.value = elegida;
+    }
+  } catch (e) { /* si falla, se ficha con lo que ya había */ }
 }
-
-function pararRepasoTrabajador() { clearInterval(repasoTrabajador); }
 
 function suscribirCambios() {
   if (canalTiempoReal || !currentUser.companyId) return;
@@ -3455,7 +3475,6 @@ function recargarEnBreve() {
 function cortarSuscripcion() {
   if (canalTiempoReal) { getSupabase().removeChannel(canalTiempoReal); canalTiempoReal = null; }
   clearTimeout(recargaPendiente);
-  pararRepasoTrabajador();
 }
 
 /* Solo se traen los fichajes de los últimos 60 días, y como mucho 300.
@@ -3671,6 +3690,8 @@ function pedirPermisoAvisos() {
 async function ficharAhora() {
   if (!hayConexion()) return;
   if (fichajeCargando) return;
+  // Si va a fichar entrada, comprobamos que la lista de trabajos esté al día
+  if (!fichajeAbierto) await refrescarAntesDeFichar();
   fichajeCargando = true;
   const btn = document.getElementById('btn-fichar');
   const textoOriginal = btn ? btn.innerHTML : '';
@@ -3744,7 +3765,11 @@ function cerrarEscaneo() {
 }
 
 /* Abre el escáner para confirmar el fichaje con la máquina */
-function abrirEscaneo() {
+async function abrirEscaneo() {
+  // Red de seguridad: si el responsable acaba de crear la obra, aquí se
+  // recoge aunque el aviso en vivo no haya llegado todavía.
+  if (!fichajeAbierto) await refrescarAntesDeFichar();
+
   const machine = myAssignedMachine();
   if (!machine) { ficharAhora(); return; } // sin máquina, se ficha directo
 
