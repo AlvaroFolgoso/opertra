@@ -3687,6 +3687,15 @@ function recargarEnBreve() {
   }, 800);
 }
 
+/* Si la app queda en segundo plano un buen rato, se suelta la conexión para
+   no ocupar sitio en la cuenta; al volver se reconecta sola. Así cien móviles
+   olvidados en el bolsillo no bloquean el servicio para nadie. */
+function soltarConexionSiOculta() {
+  if (!document.hidden || !canalTiempoReal) return;
+  try { getSupabase().removeChannel(canalTiempoReal); } catch (e) {}
+  canalTiempoReal = null;
+}
+
 function cortarSuscripcion() {
   if (canalTiempoReal) { getSupabase().removeChannel(canalTiempoReal); canalTiempoReal = null; }
   clearTimeout(recargaPendiente);
