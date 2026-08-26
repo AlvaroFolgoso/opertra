@@ -3469,10 +3469,44 @@ function miFichaTrabajador() {
 }
 function puedoFichar() { return !!miFichaTrabajador(); }
 
+/* Máquina HABITUAL del trabajador: es solo una propuesta por defecto.
+   La que de verdad cuenta es la que elige al fichar, porque un maquinista
+   puede llevar la excavadora un día, el camión otro, o ir a pie de peón. */
 function myAssignedMachine() {
   const w = miFichaTrabajador();
   if (!w || !w.machineDbId) return null;
   return machines.find(m => m.dbId === w.machineDbId) || null;
+}
+
+/* Lo que el trabajador elige antes de fichar: dónde trabaja y con qué.
+   Se guarda en variables (no se lee del desplegable) para que al repintar la
+   pantalla no se pierda lo que ya había seleccionado. */
+let maquinaElegidaManual = undefined;
+let obraElegidaManual = undefined;
+
+function maquinaElegida() {
+  if (maquinaElegidaManual !== undefined) return maquinaElegidaManual;
+  const habitual = myAssignedMachine();
+  return habitual ? habitual.dbId : '';
+}
+
+function obraElegida() {
+  if (obraElegidaManual !== undefined && projects.some(p => p.dbId === obraElegidaManual)) {
+    return obraElegidaManual;
+  }
+  return obraPropuesta();
+}
+
+function cambiarObraHoy(valor) { obraElegidaManual = valor; }
+
+function cambiarMaquinaHoy(valor) {
+  maquinaElegidaManual = valor;
+  renderFichaje();
+}
+
+function maquinaDeHoy() {
+  const id = maquinaElegida();
+  return id ? (machines.find(m => m.dbId === id) || null) : null;
 }
 
 /* Obra propuesta: la del último fichaje, o la asignada al trabajador */
@@ -3585,10 +3619,7 @@ let recargaPendiente = null;
    y no consume una conexión permanente por persona.
    ====================================================================== */
 async function refrescarAntesDeFichar() {
-  const sel = document.getElementById('fichaje-obra');
   const antes = projects.length;
-  const elegida = sel ? sel.value : null;
-
   try {
     const { data, error } = await getSupabase()
       .from('projects').select('id,code,name,client,status,start_date,end_date,notes,updated_at')
@@ -3601,12 +3632,9 @@ async function refrescarAntesDeFichar() {
     }));
     _totalesObra = null;
 
-    // Si han aparecido obras nuevas, se repinta manteniendo lo que había elegido
-    if (projects.length !== antes) {
-      renderFichaje();
-      const nuevoSel = document.getElementById('fichaje-obra');
-      if (nuevoSel && elegida && projects.some(p => p.dbId === elegida)) nuevoSel.value = elegida;
-    }
+    // Si han aparecido obras nuevas, se repinta. Lo que había elegido se
+    // conserva solo, porque está guardado en obraElegidaManual.
+    if (projects.length !== antes) renderFichaje();
   } catch (e) { /* si falla, se ficha con lo que ya había */ }
 }
 
@@ -3779,9 +3807,13 @@ function renderFicharCard() {
                   : `Previsto terminar sobre las ${horaDe(abierto.previstaFin)}. Te avisaremos.`}
               </div>`;
             })() : ''}
-            <button class="btn btn-dark" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
-              <i class="fa-solid fa-${machine ? 'qrcode' : 'right-from-bracket'}"></i> ${machine ? 'Escanear y fichar salida' : 'Fichar salida'}
-            </button>
+            ${(() => {
+              const dela = machines.find(m => m.dbId === abierto.machineId) || null;
+              return `
+              <button class="btn btn-dark" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${dela ? 'abrirEscaneo()' : 'ficharAhora()'}">
+                <i class="fa-solid fa-${dela ? 'qrcode' : 'right-from-bracket'}"></i> ${dela ? 'Escanear y fichar salida' : 'Fichar salida'}
+              </button>`;
+            })()}
             <div style="font-size:12px;color:var(--steel);margin-top:10px;line-height:1.5;">
               Si cambias de ${t('s')}, ficha salida y vuelve a fichar entrada eligiendo la nueva. Así las horas quedan bien repartidas.
             </div>
@@ -3795,12 +3827,19 @@ function renderFicharCard() {
                 <i class="fa-solid fa-circle-notch fa-spin"></i> Esperando...
               </div>
             ` : `
-              <select class="form-select" id="fichaje-obra" style="margin-top:12px;text-align:center;font-size:15px;padding:12px;">
-                ${projects.map(p => `<option value="${p.dbId}" ${p.dbId === propuesta ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+              <select class="form-select" id="fichaje-obra" style="margin-top:12px;text-align:center;font-size:15px;padding:12px;" onchange="cambiarObraHoy(this.value)">
+                ${projects.map(p => `<option value="${esc(p.dbId)}" ${p.dbId === obraElegida() ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
               </select>
-              ${machine
-                ? `<div style="font-size:13px;color:var(--steel);margin-top:10px;"><i class="fa-solid fa-truck"></i> Con <span class="f-mono">${machine.id}</span> · ${esc(machine.type)}</div>`
-                : `<div style="font-size:12.5px;color:var(--steel);margin-top:10px;">Sin máquina asignada — puedes fichar igualmente.</div>`}
+              <div class="form-label" style="text-align:center;margin-top:18px;">¿Con qué vas a trabajar hoy?</div>
+              <select class="form-select" id="fichaje-maquina" style="margin-top:8px;text-align:center;font-size:15px;padding:12px;" onchange="cambiarMaquinaHoy(this.value)">
+                <option value="">A pie · sin máquina</option>
+                ${machines.map(m => `<option value="${esc(m.dbId)}" ${m.dbId === maquinaElegida() ? 'selected' : ''}>${esc(m.id)} · ${esc(m.type)}${machine && m.dbId === machine.dbId ? ' — la tuya' : ''}</option>`).join('')}
+              </select>
+              <div style="font-size:11.5px;color:var(--steel);margin-top:8px;line-height:1.45;">
+                ${machine
+                  ? `Normalmente llevas <span class="f-mono">${esc(machine.id)}</span>. Cámbialo si hoy haces otra cosa.`
+                  : `Si hoy coges una máquina, elígela en la lista.`}
+              </div>
 
               <div style="margin-top:18px;text-align:left;">
                 <div class="form-label" style="text-align:center;">¿Cuántas horas tienes previsto trabajar?</div>
@@ -3885,9 +3924,12 @@ async function ficharAhora() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...'; }
 
   try {
-    const machine = myAssignedMachine();
-    const selObra = document.getElementById('fichaje-obra');
-    const projectId = fichajeAbierto ? fichajeAbierto.projectId : (selObra ? selObra.value : null);
+    // La máquina de HOY, que puede no ser la habitual: un maquinista puede
+    // llevar el camión un día o ir a pie de peón.
+    const machine = fichajeAbierto
+      ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
+      : maquinaDeHoy();
+    const projectId = fichajeAbierto ? fichajeAbierto.projectId : (obraElegida() || null);
 
     const ficha = miFichaTrabajador();
     if (!ficha) throw new Error('No tienes ficha de trabajador para poder fichar.');
@@ -3904,6 +3946,7 @@ async function ficharAhora() {
           previstaFin: horasPrevistas ? new Date(Date.now() + horasPrevistas*3600000).toISOString() : null }
       : null;
     avisoJornadaMostrado = false;
+    if (accion === 'salida') { maquinaElegidaManual = undefined; obraElegidaManual = undefined; }
     if (accion === 'entrada' && horasPrevistas) pedirPermisoAvisos();
 
     await cargarFichajes();
@@ -3957,8 +4000,10 @@ async function abrirEscaneo() {
   // recoge aunque el aviso en vivo no haya llegado todavía.
   if (!fichajeAbierto) await refrescarAntesDeFichar();
 
-  const machine = myAssignedMachine();
-  if (!machine) { ficharAhora(); return; } // sin máquina, se ficha directo
+  const machine = fichajeAbierto
+    ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
+    : maquinaDeHoy();
+  if (!machine) { ficharAhora(); return; } // a pie: se ficha directo
 
   escanearError = '';
   modoEscaneo = 'qr';
@@ -3969,7 +4014,9 @@ async function abrirEscaneo() {
 }
 
 function pintarEscaneo() {
-  const machine = myAssignedMachine();
+  const machine = fichajeAbierto
+    ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
+    : maquinaDeHoy();
   const conNFC = nfcDisponible();
 
   document.getElementById('add-machine-modal').innerHTML = `
@@ -4096,7 +4143,9 @@ async function iniciarNFC() {
 function comprobarCodigo(texto) {
   stopQRScan(); stopNFCScan();
   escaneando = false;
-  const machine = myAssignedMachine();
+  const machine = fichajeAbierto
+    ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
+    : maquinaDeHoy();
   if (!machine || String(texto).trim() !== machine.qrCode) {
     escanearError = `Ese código no es el de tu máquina (${machine ? machine.id : '—'}). Comprueba que escaneas la etiqueta correcta.`;
     pintarEscaneo();
@@ -5325,14 +5374,43 @@ async function openAddWorkerModal() {
     </div>
     <div class="form-group">
       <label class="form-label">Puesto</label>
-      <input class="form-input" id="nw-role" list="roles-sugeridos" placeholder="Escribe el puesto, o elige de la lista" value="Operario">
+      <input class="form-input" id="nw-role" list="roles-sugeridos" maxlength="120" placeholder="Escribe el puesto, o elige de la lista" value="Operario">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Es informativo: no limita lo que puede hacer. Un maquinista puede fichar a pie o con otra máquina cualquier día.</span>
+      </div>
       <datalist id="roles-sugeridos">
-        <option>Operario</option><option>Maquinista</option><option>Conductor</option>
-        <option>Peón</option><option>Encargado</option><option>Jefe de equipo</option>
-        <option>Oficial 1ª</option><option>Oficial 2ª</option><option>Gruista</option>
-        <option>Repartidor</option><option>Instalador</option><option>Técnico</option>
-        <option>Electricista</option><option>Fontanero</option><option>Soldador</option>
-        <option>Topógrafo</option><option>Administrativo</option>
+        <optgroup label="Obra">
+          <option>Peón</option><option>Oficial 1ª</option><option>Oficial 2ª</option>
+          <option>Encargado de obra</option><option>Jefe de obra</option><option>Jefa de obra</option>
+          <option>Capataz</option><option>Ferrallista</option><option>Encofrador</option>
+          <option>Albañil</option><option>Soldador</option><option>Gruista</option>
+        </optgroup>
+        <optgroup label="Maquinaria">
+          <option>Maquinista</option><option>Operador de retroexcavadora</option>
+          <option>Operador de pala cargadora</option><option>Operador de dumper</option>
+          <option>Operador de grúa torre</option><option>Operador de plataforma</option>
+        </optgroup>
+        <optgroup label="Transporte">
+          <option>Conductor</option><option>Conductor de camión</option>
+          <option>Conductor de tráiler</option><option>Conductor de bañera</option>
+          <option>Conductor de hormigonera</option><option>Repartidor</option>
+          <option>Chófer</option>
+        </optgroup>
+        <optgroup label="Técnicos">
+          <option>Topógrafo</option><option>Aparejador</option><option>Arquitecto</option>
+          <option>Ingeniero</option><option>Delineante</option>
+          <option>Técnico de prevención</option><option>Jefe de producción</option>
+        </optgroup>
+        <optgroup label="Instalaciones">
+          <option>Electricista</option><option>Fontanero</option><option>Instalador</option>
+          <option>Climatización</option><option>Técnico de mantenimiento</option>
+        </optgroup>
+        <optgroup label="Oficina">
+          <option>Administrativo</option><option>Administrativa</option>
+          <option>Recursos Humanos</option><option>Jefe de compras</option>
+          <option>Almacenero</option><option>Comercial</option>
+        </optgroup>
       </datalist>
     </div>
     <div class="form-group">
@@ -5344,7 +5422,7 @@ async function openAddWorkerModal() {
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Máquina asignada (opcional)</label>
+      <label class="form-label">Máquina habitual (opcional)</label>
       <select class="form-select" id="nw-machine">
         <option value="">Sin máquina asignada</option>
         ${machines.map(m => `<option value="${m.dbId}">${esc(m.id)} · ${esc(m.type)}</option>`).join('')}
@@ -5693,7 +5771,10 @@ function openWorkerDrawer(id) {
     ${historialTrabajador(w)}
 
     <div class="doc-section-title" style="margin-top:6px;">
-      <span class="f-display" style="font-size:15px;">MÁQUINA ASIGNADA</span>
+      <span class="f-display" style="font-size:15px;">MÁQUINA HABITUAL</span>
+    </div>
+    <div style="font-size:12px;color:var(--steel);margin-bottom:6px;line-height:1.45;">
+      Es la que se le propone al fichar. Puede elegir otra o fichar a pie cualquier día.
     </div>
     <div class="vac-form">
       <select class="form-select" id="reassign-machine" style="padding:8px 10px;font-size:13px;">
