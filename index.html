@@ -861,16 +861,41 @@
     <div class="login-title">Tu periodo de prueba ha terminado</div>
     <div id="trial-expired-admin-msg" style="display:none;">
       <p style="font-size:14px;color:var(--steel);margin-top:10px;line-height:1.6;">
-        Tuviste 50 días de prueba gratuita con acceso completo a Opertra. Para seguir usando la app, activa la suscripción de tu empresa.
+        Has tenido 50 días con acceso completo. Para seguir usando Opertra, activa la suscripción de tu empresa.
       </p>
-      <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:12px;" onclick="alert('La gestión de pagos estará disponible próximamente.')">
-        Activar suscripción
+
+      <!-- Lo primero que piensa un cliente aquí es "¿y mis datos?". Se le
+           responde antes de que lo pregunte, y se le deja llevárselos. -->
+      <div class="plate" style="padding:14px;margin-top:16px;text-align:left;display:flex;gap:11px;align-items:flex-start;">
+        <i class="fa-solid fa-shield-halved" style="color:var(--success);margin-top:2px;"></i>
+        <div style="font-size:12.5px;color:var(--steel);line-height:1.55;">
+          <b style="color:var(--ink);">Tus datos siguen aquí, intactos.</b><br>
+          Fichajes, trabajadores, trabajos, documentos y cobros se conservan.
+          En cuanto actives la suscripción, lo recuperas todo tal y como lo dejaste.
+        </div>
+      </div>
+
+      <button class="btn btn-amber" style="width:100%;justify-content:center;padding:12px;margin-top:14px;" onclick="abrirSuscripcion()">
+        <i class="fa-solid fa-credit-card"></i> Activar suscripción
       </button>
+      <button class="btn btn-outline" id="btn-exportar-caducado" style="width:100%;justify-content:center;padding:12px;margin-top:8px;" onclick="exportarTodo()">
+        <i class="fa-solid fa-download"></i> Descargar todos mis datos
+      </button>
+      <div style="font-size:11.5px;color:var(--steel);margin-top:8px;line-height:1.5;">
+        Puedes llevarte tus datos en cualquier momento, decidas lo que decidas.
+      </div>
     </div>
     <div id="trial-expired-worker-msg" style="display:none;">
       <p style="font-size:14px;color:var(--steel);margin-top:10px;line-height:1.6;">
-        El periodo de prueba de tu empresa en Opertra ha terminado. Pide al administrador de tu cuenta que active la suscripción para poder seguir accediendo.
+        El periodo de prueba de tu empresa ha terminado y no puedes fichar hasta que se active la suscripción.
       </p>
+      <div class="plate" style="padding:14px;margin-top:14px;text-align:left;display:flex;gap:11px;align-items:flex-start;">
+        <i class="fa-solid fa-circle-info" style="color:var(--blue);margin-top:2px;"></i>
+        <div style="font-size:12.5px;color:var(--steel);line-height:1.55;">
+          <b style="color:var(--ink);">Avisa a tu responsable.</b><br>
+          Es quien puede activarla. Tus horas y tus fichajes anteriores están guardados y no se pierden.
+        </div>
+      </div>
     </div>
     <button class="btn btn-outline" style="width:100%;justify-content:center;padding:12px;margin-top:10px;" onclick="logout()">
       Cerrar sesión
@@ -6915,14 +6940,59 @@ function isTrialExpired() {
   const d = daysLeftInTrial();
   return d !== null && d <= 0;
 }
+/* El aviso de la prueba aparece con 20 días de margen, no con 10: una empresa
+   necesita tiempo para aprobar un gasto. Y cambia de tono según se acerca. */
 function renderTrialBanner() {
   const bar = document.getElementById('trial-banner');
   if (!bar) return;
   const d = daysLeftInTrial();
-  if (d === null || d > 10 || d <= 0) { bar.style.display = 'none'; return; }
+  // Si ya caducó, la app está bloqueada y el banner sobra
+  if (d === null || d > 20 || d < 0 || isTrialExpired()) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';        // que no quede el texto anterior colgado
+    return;
+  }
+
+  const urgente = d <= 5;
   bar.style.display = 'flex';
-  bar.innerHTML = `<i class="fa-solid fa-clock"></i> Te quedan ${d} día${d === 1 ? '' : 's'} de prueba gratuita.`
-    + (esAdministrador() ? ' <span style="text-decoration:underline;cursor:pointer;margin-left:6px;" onclick="alert(\'La gestión de pagos estará disponible próximamente.\')">Gestionar suscripción</span>' : '');
+  bar.style.background = urgente ? 'var(--danger)' : '';
+
+  const texto = d === 0
+    ? 'Hoy termina tu prueba gratuita.'
+    : `Te queda${d === 1 ? '' : 'n'} ${d} día${d === 1 ? '' : 's'} de prueba gratuita.`;
+
+  bar.innerHTML = `<i class="fa-solid fa-${urgente ? 'triangle-exclamation' : 'clock'}"></i> ${texto}`
+    + (esAdministrador()
+        ? ' <span style="text-decoration:underline;cursor:pointer;margin-left:6px;" onclick="abrirSuscripcion()">Activar suscripción</span>'
+        : '');
+}
+
+/* Qué pasa al pulsar "Activar suscripción". Hasta que Stripe esté montado,
+   se dan los datos de contacto en vez de un aviso vacío. */
+function abrirSuscripcion() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Activar suscripción</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="font-size:13.5px;color:var(--steel);margin-top:10px;line-height:1.6;">
+      Escríbenos y te preparamos el alta de <b>${esc(currentUser.company)}</b> con el plan que mejor
+      encaje según tus máquinas y trabajadores.
+    </div>
+    <div class="plate" style="padding:14px;margin-top:16px;">
+      <div style="font-size:12px;color:var(--steel);text-transform:uppercase;font-weight:600;">Contacto</div>
+      <div style="font-size:15px;margin-top:4px;">${DATOS_TITULAR.email}</div>
+    </div>
+    <div class="form-hint" style="margin-top:14px;">
+      <i class="fa-solid fa-shield" style="margin-top:1px;"></i>
+      <span>Tus datos siguen guardados. Al activar la suscripción los recuperas todos tal y como los dejaste.</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-amber" style="width:100%;justify-content:center;" onclick="closeAddMachineModal()">Entendido</button>
+    </div>
+  `;
+  document.getElementById('modal-overlay').classList.add('active');
+  marcarNavegacion();
 }
 function enterAppOrShowTrialExpired() {
   if (isTrialExpired()) {
