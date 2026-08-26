@@ -1074,6 +1074,14 @@ const BUCKET = 'opertra';
 /* Cualquier texto que escriba un usuario pasa por aquí antes de ir a la
    pantalla. Sin esto, un nombre con comillas rompe el diseño y uno con
    etiquetas HTML podría ejecutar código. */
+/* Iniciales para los avatares. Un nombre vacío o con espacios raros
+   reventaba la pantalla entera al intentar leer la primera letra. */
+function iniciales(nombre) {
+  const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return '?';
+  return partes.map(p => p[0]).join('').slice(0,2).toUpperCase();
+}
+
 function esc(txt) {
   if (txt === null || txt === undefined) return '';
   return String(txt)
@@ -1392,7 +1400,10 @@ function vacationStatus(v) {
 }
 const vacStatusLabel = { en_curso: "En curso", proxima: "Próximas", pasada: "Finalizada" };
 function fmtDate(iso) {
-  const [y,m,d] = iso.split('-');
+  if (!iso) return '—';
+  const partes = String(iso).slice(0,10).split('-');
+  if (partes.length !== 3) return '—';
+  const [y,m,d] = partes;
   const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   return `${d} ${meses[parseInt(m)-1]} ${y}`;
 }
@@ -1406,6 +1417,7 @@ function obraChip(status) {
 }
 /* % de plazo transcurrido: se calcula solo a partir de fecha inicio/fin, nadie tiene que tocarlo a mano */
 function obraSchedule(p) {
+  if (!p || !p.start || !p.end) return { pct: 0, daysLeft: null };
   const s = new Date(p.start), e = new Date(p.end);
   const totalDays = Math.round((e - s) / 86400000);
   const daysLeft = Math.round((e - TODAY) / 86400000);
@@ -1447,7 +1459,6 @@ const STORAGE_KEY = 'opertra_demo_v1';
    migre también, y por eso de momento se sigue guardando en este navegador. */
 /* Ya no se guarda nada en el navegador: todo vive en Supabase.
    Se mantiene la función vacía por si algún punto antiguo la llama. */
-function saveState() {}
 
 /* Ya nada se guarda en el navegador: todo vive en Supabase. Esta función
    solo limpia los restos de versiones antiguas, que si no sobrescribían
@@ -1639,6 +1650,30 @@ function obraCardHTML(p, detailed) {
 
 function buildCriticalAlerts() {
   const alerts = [];
+  const admin = esAdministrador();
+
+  // Lo más urgente del día a día: alguien que se fue sin fichar salida.
+  // Si no se avisa, aparece a fin de mes con 40 horas de más.
+  if (admin) {
+    const olvidadas = jornadasOlvidadas();
+    if (olvidadas.length > 0) {
+      alerts.push({
+        sev: 'red', icon: 'fa-user-clock',
+        text: `${olvidadas.length} jornada(s) llevan más de 14 h abiertas: ${olvidadas.slice(0,2).map(l => esc(l.worker)).join(', ')}${olvidadas.length>2?'...':''}`,
+        tab: 'fichaje',
+      });
+    }
+    // Máquina asignada a una obra ya terminada: casi siempre es un olvido
+    const obrasFin = projects.filter(p => p.status === 'finished').map(p => p.dbId);
+    const maquinasHuerfanas = machines.filter(m => m.projectDbId && obrasFin.includes(m.projectDbId));
+    if (maquinasHuerfanas.length > 0) {
+      alerts.push({
+        sev: 'yellow', icon: 'fa-truck-arrow-right',
+        text: `${maquinasHuerfanas.length} máquina(s) siguen asignadas a ${t('p')} finalizadas`,
+        tab: 'maquinaria',
+      });
+    }
+  }
   machines.forEach(m => {
     (m.documents || []).forEach(d => {
       if (d.status === 'caducado') alerts.push({ sev: 'red', icon: 'fa-file-circle-xmark', text: `${esc(d.name)} caducado — ${esc(m.type)} ${esc(m.id)}`, tab: 'maquinaria' });
@@ -1657,13 +1692,24 @@ function buildCriticalAlerts() {
   urgentIncidents.forEach(inc => {
     alerts.push({ sev: 'red', icon: 'fa-triangle-exclamation', text: `Incidencia de prioridad alta sin resolver: ${esc(inc.title)} (${inc.project||'sin obra'})`, tab: 'avisos' });
   });
-  invoices.filter(i => estadoCobro(i) === 'overdue').forEach(inv => {
+  if (admin) invoices.filter(i => estadoCobro(i) === 'overdue').forEach(inv => {
     const daysOverdue = Math.round((new Date() - new Date(inv.dueDate)) / 86400000);
-    alerts.push({ sev: 'red', icon: 'fa-file-invoice-dollar', text: `Cobro de ${inv.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} € vencido hace ${daysOverdue} días — ${inv.client || 'sin cliente'}`, tab: 'facturacion' });
+    alerts.push({ sev: 'red', icon: 'fa-file-invoice-dollar', text: `Cobro de ${inv.amount.toLocaleString('es-ES',{minimumFractionDigits:2})} € vencido hace ${daysOverdue} días — ${esc(inv.client) || 'sin cliente'}`, tab: 'facturacion' });
   });
 
   const sevOrder = { red: 0, orange: 1, yellow: 2 };
-  return alerts.filter(a => canAccess(a.tab)).sort((a,b) => sevOrder[a.sev] - sevOrder[b.sev]);
+  // Con flotas grandes podrían salir cientos de alertas y volver inútil el
+  // panel. Se muestran las 12 más graves y se indica cuántas quedan.
+  const visibles = alerts.filter(a => canAccess(a.tab)).sort((a,b) => sevOrder[a.sev] - sevOrder[b.sev]);
+  if (visibles.length > 12) {
+    const resto = visibles.length - 11;
+    return visibles.slice(0, 11).concat([{
+      sev: 'yellow', icon: 'fa-ellipsis',
+      text: `y ${resto} aviso(s) más — revisa cada sección para verlos todos`,
+      tab: 'dashboard',
+    }]);
+  }
+  return visibles;
 }
 
 function renderDashboard() {
@@ -1751,7 +1797,7 @@ function renderDashboard() {
           ${workers.map(w => `
             <div class="worker-row">
               <div class="worker-left">
-                <div class="worker-initials">${w.name.split(' ').map(n=>n[0]).join('')}</div>
+                <div class="worker-initials">${iniciales(w.name)}</div>
                 <div><div class="worker-name">${esc(w.name)}</div><div class="worker-meta">${esc(w.role)} · ${w.machine !== '—' ? w.machine : 'sin asignar'}</div></div>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
@@ -1763,12 +1809,12 @@ function renderDashboard() {
             ${machines.filter(m => m.device.linked).sort((a,b) => a.gpsAge.localeCompare(b.gpsAge)).slice(0,1).map(m => `
               <div class="activity-feed-row">
                 <div class="activity-icon" style="background:var(--success-bg);color:var(--success);"><i class="fa-solid fa-satellite"></i></div>
-                <div><div style="font-size:13px;">${esc(m.id)} actualizó su posición · ${esc(m.location)}</div><div style="font-size:11px;color:var(--steel);">${m.gpsAge}</div></div>
+                <div><div style="font-size:13px;">${esc(m.id)} actualizó su posición · ${esc(m.location)}</div><div style="font-size:11px;color:var(--steel);">${esc(m.gpsAge)}</div></div>
               </div>`).join('')}
             ${machines.filter(m => m.status === 'maintenance').map(m => `
               <div class="activity-feed-row">
                 <div class="activity-icon" style="background:var(--danger-bg);color:var(--danger);"><i class="fa-solid fa-wrench"></i></div>
-                <div><div style="font-size:13px;">${esc(m.id)} está en mantenimiento · ${esc(m.location)}</div><div style="font-size:11px;color:var(--steel);">última señal ${m.gpsAge}</div></div>
+                <div><div style="font-size:13px;">${esc(m.id)} está en mantenimiento · ${esc(m.location)}</div><div style="font-size:11px;color:var(--steel);">última señal ${esc(m.gpsAge)}</div></div>
               </div>`).join('')}
           </div>
         </div>
@@ -1930,12 +1976,12 @@ async function openHistorialModal() {
         <div style="display:flex;gap:10px;min-width:0;">
           <i class="fa-solid ${iconos[a.action] || 'fa-circle-info'}" style="color:var(--steel);margin-top:3px;width:14px;"></i>
           <div style="min-width:0;">
-            <div class="doc-name">${esc(a.entity)}: ${a.entity_name || ''}</div>
+            <div class="doc-name">${esc(a.entity)}: ${esc(a.entity_name) || ''}</div>
             <div class="doc-expiry" style="font-family:'Manrope',sans-serif;">
               ${esc(a.action)}${a.detail ? ' · ' + a.detail : ''}
             </div>
             <div class="doc-expiry f-mono" style="margin-top:2px;">
-              ${a.actor_name || 'alguien'} · ${new Date(a.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+              ${esc(a.actor_name) || 'alguien'} · ${new Date(a.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
             </div>
           </div>
         </div>
@@ -2136,7 +2182,7 @@ async function pintarListaUsuarios() {
       <div class="doc-row" style="${activo ? '' : 'opacity:.55;'}">
         <div style="min-width:0;">
           <div class="doc-name">${esc(u.name)}${soyYo ? ' <span style="font-size:11px;color:var(--steel);font-weight:400;">(tú)</span>' : ''}</div>
-          <div class="doc-expiry">${u.role || 'Administrador'}${activo ? '' : ' · acceso revocado'}</div>
+          <div class="doc-expiry">${esc(u.role) || 'Administrador'}${activo ? '' : ' · acceso revocado'}</div>
         </div>
         ${soyYo
           ? `<span class="chip status-vigente"><span class="dot"></span>Activo</span>`
@@ -2432,7 +2478,7 @@ function compartirAcceso(workerCode) {
   const w = workers.find(x => x.id === workerCode);
   if (!w || !esAdministrador()) return;
 
-  const texto = `Hola ${w.name}, ya puedes fichar con Opertra:\n\n`
+  const texto = `Hola ${esc(w.name)}, ya puedes fichar con Opertra:\n\n`
     + `1. Entra en https://opertra.vercel.app desde el móvil\n`
     + `2. Pulsa "Con PIN"\n`
     + `3. Código de empresa: ${currentUser.accessCode}\n`
@@ -2950,7 +2996,7 @@ function openObraDrawer(id) {
       ${pIncidents.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:6px 0;">Sin incidencias registradas.</div>` :
         pIncidents.slice(0,5).map(i => `
         <div class="doc-row">
-          <div><div class="doc-name">${i.title}</div><div class="doc-expiry f-mono">${i.worker} · ${timeAgo(i.time)}</div></div>
+          <div><div class="doc-name">${esc(i.title)}</div><div class="doc-expiry f-mono">${esc(i.worker)} · ${timeAgo(i.time)}</div></div>
           ${i.resolved ? `<span class="chip status-vigente"><span class="dot"></span>Resuelta</span>` : `<span class="chip status-caducado"><span class="dot"></span>Abierta</span>`}
         </div>`).join('')}
     </div>
@@ -3112,10 +3158,6 @@ function horaFin(horas) {
 }   // { logId, entrada, projectId, machineId }
 let fichajeCargando = false;
 
-function nowHHMM() {
-  const d = new Date();
-  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-}
 function horaDe(iso) {
   const d = new Date(iso);
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
@@ -3392,7 +3434,7 @@ function renderFicharCard() {
                 ${projects.map(p => `<option value="${p.dbId}" ${p.dbId === propuesta ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
               </select>
               ${machine
-                ? `<div style="font-size:13px;color:var(--steel);margin-top:10px;"><i class="fa-solid fa-truck"></i> Con <span class="f-mono">${machine.id}</span> · ${machine.type}</div>`
+                ? `<div style="font-size:13px;color:var(--steel);margin-top:10px;"><i class="fa-solid fa-truck"></i> Con <span class="f-mono">${machine.id}</span> · ${esc(machine.type)}</div>`
                 : `<div style="font-size:12.5px;color:var(--steel);margin-top:10px;">Sin máquina asignada — puedes fichar igualmente.</div>`}
 
               <div style="margin-top:18px;text-align:left;">
@@ -4007,7 +4049,7 @@ function renderRegistroHoras() {
                 </td>
                 <td class="f-mono" style="font-size:12.5px;font-weight:600;">
                   ${l.checkOut === '—' ? 'en curso' : l.hours.toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1}) + ' h'}
-                  ${l.editedBy ? `<i class="fa-solid fa-pen" style="font-size:9px;color:var(--amber-deep);margin-left:4px;" title="Corregido por ${l.editedBy}: ${l.editReason || ''}"></i>` : ''}
+                  ${l.editedBy ? `<i class="fa-solid fa-pen" style="font-size:9px;color:var(--amber-deep);margin-left:4px;" title="Corregido por ${esc(l.editedBy)}: ${esc(l.editReason)}"></i>` : ''}
                   ${l.autoClosed ? `<i class="fa-solid fa-robot" style="font-size:9px;color:var(--danger);margin-left:4px;" title="Cerrada automáticamente — revisa la hora real"></i>` : ''}
                 </td>
                 ${esAdmin ? `<td><button class="btn-ghost" onclick="openEditFichajeModal('${l.dbId}')" title="Corregir">corregir</button></td>` : ''}
@@ -4073,17 +4115,17 @@ function machineCardHTML(m) {
           <div class="machine-meta">
             <span>${esc(m.model)}</span>
             ${m.plate !== '—' ? `<span class="plate-badge">${esc(m.plate)}</span>` : ''}
-            ${m.project ? `<span class="plate-badge" style="color:var(--amber-deep);">${m.project}</span>` : `<span class="plate-badge" style="color:var(--steel);">Sin obra</span>`}
+            ${m.project ? `<span class="plate-badge" style="color:var(--amber-deep);">${esc(m.project)}</span>` : `<span class="plate-badge" style="color:var(--steel);">Sin obra</span>`}
           </div>
         </div>
       </div>
       <div class="machine-loc-row">
         <span><i class="fa-solid fa-location-dot"></i> ${esc(m.location)}</span>
-        <span class="gps-age"><i class="fa-solid fa-satellite"></i> GPS ${m.gpsAge}</span>
+        <span class="gps-age"><i class="fa-solid fa-satellite"></i> GPS ${esc(m.gpsAge)}</span>
       </div>
       <div class="machine-footer">
         <span><i class="fa-solid fa-gas-pump"></i> ${m.fuel}%</span>
-        <span>${m.operator !== '—' ? 'Operado por ' + m.operator : 'Sin operario'}</span>
+        <span>${m.operator && m.operator !== '—' ? 'Operado por ' + esc(m.operator) : 'Sin operario'}</span>
         <i class="fa-solid fa-chevron-right"></i>
       </div>
     </div>`;
@@ -4214,8 +4256,8 @@ function openDrawer(id) {
     </div>
     <div class="drawer-rows">
       <div class="drawer-row"><span>Ubicación</span><span>${esc(m.location)}</span></div>
-      <div class="drawer-row"><span>Última señal GPS</span><span class="f-mono"><i class="fa-solid fa-satellite" style="color:var(--success);margin-right:4px;"></i>${m.gpsAge}</span></div>
-      <div class="drawer-row"><span>Operario actual</span><span>${m.operator}</span></div>
+      <div class="drawer-row"><span>Última señal GPS</span><span class="f-mono"><i class="fa-solid fa-satellite" style="color:var(--success);margin-right:4px;"></i>${esc(m.gpsAge)}</span></div>
+      <div class="drawer-row"><span>Operario actual</span><span>${esc(m.operator)}</span></div>
       <div class="drawer-row"><span>Combustible</span><span class="f-mono">${m.fuel}%</span></div>
     </div>
 
@@ -4223,7 +4265,7 @@ function openDrawer(id) {
       <i class="fa-solid ${m.device.linked ? 'fa-microchip' : 'fa-triangle-exclamation'}" style="color:${m.device.linked ? 'var(--steel)' : 'var(--amber-deep)'};"></i>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:500;">${m.device.linked ? (m.lat ? 'Enviando ubicación' : 'Dispositivo registrado, sin señal todavía') : 'Sin dispositivo vinculado'}</div>
-        <div class="f-mono" style="font-size:11px;color:var(--steel);margin-top:2px;">${m.device.linked ? m.device.id + ' · ' + m.device.model : 'Esta máquina aún no envía ubicación'}</div>
+        <div class="f-mono" style="font-size:11px;color:var(--steel);margin-top:2px;">${m.device.linked ? esc(m.device.id) + ' · ' + esc(m.device.model) : 'Esta máquina aún no envía ubicación'}</div>
         ${m.device.linked && !m.lat ? `<div style="font-size:11.5px;color:var(--amber-deep);margin-top:6px;line-height:1.45;"><i class="fa-solid fa-triangle-exclamation"></i> El código está guardado, pero todavía no llega ninguna señal. Comprueba que el dispositivo esté instalado y configurado para enviar datos.</div>` : ''}
       </div>
       <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="openLinkDeviceModal('${esc(m.id)}')">${m.device.linked ? 'Cambiar' : 'Vincular'}</button>
@@ -4233,7 +4275,7 @@ function openDrawer(id) {
     <div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
         <span class="minimap-dot" style="animation:pulse 2s infinite;"></span>
-        <span style="font-size:11px;font-weight:700;color:var(--success);">EN VIVO · ${m.gpsAge}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--success);">EN VIVO · ${esc(m.gpsAge)}</span>
       </div>
       <div id="drawer-map" class="minimap"></div>
       <div class="maps-btn-row">
@@ -4281,11 +4323,31 @@ function openDrawer(id) {
   document.getElementById('overlay').classList.add('active');
   marcarNavegacion();
   if (m.photoUrl) pintarImagen('drawer-photo-' + m.id, m.photoUrl, m.type);
+  // El QR se genera con una librería externa. Si viene con la conexión lenta
+  // o falla, la ficha debe abrirse igual: antes reventaba entera.
   const qrHolder = document.getElementById('qr-render-' + m.id);
-  if (qrHolder && window.QRCode) {
-    new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M });
+  if (qrHolder) {
+    try {
+      if (window.QRCode && QRCode.CorrectLevel) {
+        new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M });
+      } else if (window.QRCode) {
+        new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84 });
+      } else {
+        qrHolder.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">Cargando código...</div>`;
+        // Reintento cuando termine de cargar la librería
+        setTimeout(() => {
+          const h = document.getElementById('qr-render-' + m.id);
+          if (h && window.QRCode) {
+            h.innerHTML = '';
+            try { new QRCode(h, { text: m.qrCode, width: 84, height: 84 }); } catch (e) {}
+          }
+        }, 1500);
+      }
+    } catch (e) {
+      qrHolder.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">No se pudo generar</div>`;
+    }
   }
-  if (m.device.linked) initDrawerMap(m);
+  if (m.device.linked) { try { initDrawerMap(m); } catch (e) {} }
 }
 
 let drawerMap = null;
@@ -4397,7 +4459,7 @@ function mostrarFotoMaquinaNueva(event) {
   lector.onload = e => {
     document.getElementById('nm-photo-box').innerHTML =
       `<img src="${e.target.result}" style="max-height:120px;border-radius:6px;">
-       <div style="font-size:12px;color:var(--steel);margin-top:6px;">${f.name} — toca para cambiar</div>`;
+       <div style="font-size:12px;color:var(--steel);margin-top:6px;">${esc(f.name)} — toca para cambiar</div>`;
   };
   lector.readAsDataURL(f);
 }
@@ -4635,7 +4697,7 @@ function openAddDocModal(tipo, ownerDbId, ownerCode) {
 function mostrarNombreArchivo(event) {
   const f = event.target.files[0];
   if (f) document.getElementById('nd-file-box').innerHTML =
-    `<i class="fa-solid fa-file-circle-check" style="margin-right:6px;color:var(--success);"></i>${f.name}`;
+    `<i class="fa-solid fa-file-circle-check" style="margin-right:6px;color:var(--success);"></i>${esc(f.name)}`;
 }
 
 function estadoCaducidad(fechaISO) {
@@ -5051,7 +5113,7 @@ function renderTrabajadores() {
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
         ${upcoming.slice(0,6).map(v => `
           <div class="vac-row" style="margin-bottom:0;min-width:220px;flex:1;">
-            <div><div class="vac-dates">${v.worker}</div><div class="vac-days">${fmtDate(v.start)} → ${fmtDate(v.end)} · ${v.days}d</div></div>
+            <div><div class="vac-dates">${esc(v.worker)}</div><div class="vac-days">${fmtDate(v.start)} → ${fmtDate(v.end)} · ${v.days}d</div></div>
             <span class="chip status-${v.status}"><span class="dot"></span>${vacStatusLabel[v.status]}</span>
           </div>`).join('')}
       </div>
@@ -5804,10 +5866,10 @@ function renderFacturacion() {
               const e = estadoCobro(i);
               return `
               <tr>
-                <td class="f-mono" style="font-size:12.5px;">${i.reference || '—'}</td>
-                <td style="font-weight:500;">${i.client || '—'}</td>
-                <td style="font-size:12.5px;color:var(--steel);">${i.projectName || '—'}</td>
-                <td style="font-size:12.5px;color:var(--steel);">${i.concept || '—'}</td>
+                <td class="f-mono" style="font-size:12.5px;">${esc(i.reference) || '—'}</td>
+                <td style="font-weight:500;">${esc(i.client) || '—'}</td>
+                <td style="font-size:12.5px;color:var(--steel);">${esc(i.projectName) || '—'}</td>
+                <td style="font-size:12.5px;color:var(--steel);">${esc(i.concept) || '—'}</td>
                 <td class="f-mono" style="font-weight:600;">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</td>
                 <td class="f-mono" style="font-size:12.5px;color:${e==='overdue'?'var(--danger)':'var(--steel)'};">${fmtDate(i.dueDate)}</td>
                 <td>${invStatusChip(e)}</td>
@@ -6031,7 +6093,9 @@ let mesInforme = new Date().toISOString().slice(0,7);
 function cambiarMesInforme(m) { mesInforme = m; renderInformes(); }
 
 function nombreMes(iso) {
-  const [a, m] = iso.split('-');
+  if (!iso) return '—';
+  const [a, m] = String(iso).split('-');
+  if (!a || !m) return '—';
   return new Date(Number(a), Number(m) - 1, 1)
     .toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 }
@@ -6736,7 +6800,7 @@ async function guardarAjustesCuenta() {
     const { error } = await sb.from(tabla).update({ name: nombre }).eq('id', currentUser.id);
     if (error) throw error;
     currentUser.name = nombre;
-    currentUser.initials = nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    currentUser.initials = iniciales(nombre);
     if (currentUser.isWorker) {
       const w = workers.find(x => x.dbId === currentUser.id);
       if (w) w.name = nombre;
@@ -6996,10 +7060,6 @@ function decidirCookies(aceptaTodo) {
   document.getElementById('cookie-banner').classList.add('hidden');
 }
 
-function preferenciasCookies() {
-  try { return JSON.parse(localStorage.getItem(COOKIE_KEY) || 'null'); } catch (e) { return null; }
-}
-
 /* Permite cambiar de opinión desde Ajustes */
 function reabrirCookies() {
   closeAddMachineModal();
@@ -7010,7 +7070,7 @@ function openLegal(type) {
   const c = LEGAL_CONTENT[type];
   document.getElementById('legal-modal').innerHTML = `
     <div class="modal-top">
-      <h2>${c.title}</h2>
+      <h2>${esc(c.title)}</h2>
       <button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="legal-updated">Última actualización: 5 de agosto de 2026</div>
