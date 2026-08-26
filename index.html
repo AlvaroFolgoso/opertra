@@ -1410,6 +1410,15 @@ async function loadCompanyData() {
     arrancarContador();
     suscribirCambios();
     window.__ultimaCarga = Date.now();
+
+    // Limpieza del histórico: como mucho una vez al día por navegador
+    try {
+      const hoy = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem('opertra_limpieza') !== hoy) {
+        localStorage.setItem('opertra_limpieza', hoy);
+        limpiarHistoricoAntiguo();
+      }
+    } catch (e) {}
     if (['obras','maquinaria','trabajadores'].includes(currentTab)) switchTab(currentTab);
   } catch (err) {
     console.error('Error cargando datos de la empresa:', err);
@@ -3206,7 +3215,13 @@ async function borrarObra(code) {
   try {
     const { error } = await getSupabase().from('projects').delete().eq('id', p.dbId);
     if (error) throw error;
-    registrarEnHistorial('eliminación', t('S'), p.name, '');
+    registrarEnHistorial('eliminación', t('S'), p.name,
+      conFichajes ? 'Tenía fichajes asociados' : '');
+
+    // Quitar la referencia en máquinas y trabajadores que la tenían asignada
+    machines.forEach(m => { if (m.projectDbId === p.dbId) { m.projectDbId = null; m.project = null; m.location = 'Almacén / sin asignar'; } });
+    workers.forEach(w => { if (w.projectDbId === p.dbId) { w.projectDbId = null; w.project = null; } });
+    _totalesObra = null;
     projects = projects.filter(x => x.dbId !== p.dbId);
     closeAddMachineModal();
     closeDrawer();
@@ -6055,8 +6070,11 @@ function renderIncidenciasList(lista, esHistorico) {
           <div class="incident-desc">${esc(inc.description)}</div>
         </div>
         ${!esHistorico
-          ? `<button class="resolve-btn" onclick="pedirConfirmacionResolver('${inc.dbId}')"><i class="fa-solid fa-check"></i> Marcar resuelta</button>`
-          : `<span class="chip status-vigente" style="white-space:nowrap;"><span class="dot"></span>Resuelta</span>`}
+          ? `<button class="resolve-btn" onclick="pedirConfirmacionResolver('${esc(inc.dbId)}')"><i class="fa-solid fa-check"></i> Marcar resuelta</button>`
+          : `<div style="display:flex;align-items:center;gap:8px;white-space:nowrap;">
+               <span class="chip status-vigente"><span class="dot"></span>Resuelta</span>
+               ${esAdministrador() ? `<button class="vac-delete" onclick="borrarIncidencia('${esc(inc.dbId)}')" title="Borrar del histórico"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+             </div>`}
       </div>
       <div class="incident-meta">
         <span><i class="fa-solid fa-user"></i> ${esc(inc.worker)}</span>
@@ -6178,6 +6196,39 @@ async function resolveIncident(dbId) {
     alert('No se pudo marcar como resuelta: ' + mensajeError(err));
     setButtonLoading('res-submit', false, '', '<i class="fa-solid fa-check"></i> Sí, está resuelta');
   }
+}
+
+/* Borrar una incidencia del histórico, con su foto.
+   Sin esto, las fotos se quedaban en el almacén ocupando sitio para siempre. */
+async function borrarIncidencia(dbId) {
+  const inc = incidents.find(i => i.dbId === dbId);
+  if (!inc || !esAdministrador()) return;
+  if (!confirm(`¿Borrar definitivamente "${inc.title}"?\n\nSe eliminará también su foto. Esta acción no se puede deshacer.`)) return;
+  try {
+    const { error } = await getSupabase().from('incidents').delete().eq('id', dbId);
+    if (error) throw error;
+    if (inc.photoPath) borrarArchivo(inc.photoPath);
+    registrarEnHistorial('eliminación', 'Incidencia', inc.title, '');
+    incidents = incidents.filter(i => i.dbId !== dbId);
+    renderAvisos(); renderNav();
+  } catch (err) {
+    alert('No se pudo borrar: ' + mensajeError(err));
+  }
+}
+
+/* Limpieza periódica: las incidencias resueltas hace más de seis meses se
+   eliminan junto con sus fotos, para que el almacén no crezca sin control. */
+async function limpiarHistoricoAntiguo() {
+  if (!esAdministrador()) return;
+  try {
+    const { data, error } = await getSupabase().rpc('limpiar_incidencias_antiguas');
+    if (error) throw error;
+    // Borrar del almacén las fotos de las que se han eliminado
+    (data || []).forEach(fila => {
+      const ruta = typeof fila === 'string' ? fila : fila.archivos_a_borrar;
+      if (ruta) borrarArchivo(ruta);
+    });
+  } catch (e) { /* la limpieza no debe molestar si falla */ }
 }
 
 async function cargarIncidencias() {
@@ -7364,6 +7415,7 @@ function openUserSettings() {
         <span>Todo se guarda en la base de datos de tu empresa: sobrevive a cerrar sesión, cambiar de móvil o de ordenador, y solo tu empresa puede verlo.</span>
       </div>
       ${!esTrabajador ? `
+      <div id="uso-almacen" style="font-size:12px;color:var(--steel);margin-top:8px;line-height:1.5;"></div>
       <button class="btn btn-outline" id="btn-exportar-todo" style="margin-top:8px;font-size:12.5px;" onclick="exportarTodo()">
         <i class="fa-solid fa-download"></i> Descargar todos mis datos
       </button>
@@ -7383,6 +7435,28 @@ function openUserSettings() {
   document.getElementById('modal-overlay').classList.add('active');
   marcarNavegacion();
   if (currentUser.photoPath) pintarImagen('settings-avatar', currentUser.photoPath, currentUser.name);
+  if (!currentUser.isWorker) mostrarUsoAlmacen();
+}
+
+/* Cuántos archivos tiene guardados la empresa. Da tranquilidad al cliente
+   saber que sus fotos y documentos están ahí y cuántos son. */
+async function mostrarUsoAlmacen() {
+  const el = document.getElementById('uso-almacen');
+  if (!el) return;
+  try {
+    const { data, error } = await getSupabase().rpc('uso_almacenamiento', { p_company_id: currentUser.companyId });
+    if (error || !data || !data[0]) return;
+    const u = data[0];
+    const total = Number(u.fotos_maquinas) + Number(u.fotos_trabajadores)
+                + Number(u.documentos) + Number(u.fotos_incidencias);
+    if (total === 0) { el.textContent = 'Todavía no has subido ninguna foto ni documento.'; return; }
+    const partes = [];
+    if (u.fotos_maquinas > 0) partes.push(`${u.fotos_maquinas} foto(s) de máquina`);
+    if (u.fotos_trabajadores > 0) partes.push(`${u.fotos_trabajadores} foto(s) de personal`);
+    if (u.documentos > 0) partes.push(`${u.documentos} documento(s)`);
+    if (u.fotos_incidencias > 0) partes.push(`${u.fotos_incidencias} foto(s) de incidencias`);
+    el.innerHTML = `<i class="fa-solid fa-folder-open"></i> Tienes guardados: ${partes.join(', ')}.`;
+  } catch (e) {}
 }
 
 async function subirFotoPerfil(event) {
