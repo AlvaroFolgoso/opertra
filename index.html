@@ -3175,7 +3175,16 @@ function horasDecimales(desdeISO, hastaISO) {
 /* Ficha de trabajador de quien esté conectado: puede ser alguien que entró con
    PIN, o un admin que se ha dado de alta a sí mismo como trabajador. */
 function miFichaTrabajador() {
-  if (currentUser.isWorker) return workers.find(x => x.dbId === currentUser.id) || null;
+  if (currentUser.isWorker) {
+    // Si la lista de trabajadores aún no ha cargado, se reconstruye la ficha
+    // con lo que ya sabemos de la sesión: sin esto, el trabajador no podía
+    // fichar durante los primeros segundos tras entrar.
+    return workers.find(x => x.dbId === currentUser.id)
+        || (currentUser.id && currentUser.pin
+            ? { dbId: currentUser.id, pin: currentUser.pin, name: currentUser.name,
+                role: currentUser.role, machineDbId: null, projectDbId: null }
+            : null);
+  }
   return workers.find(x => x.profileId === currentUser.id) || null;
 }
 function puedoFichar() { return !!miFichaTrabajador(); }
@@ -3196,7 +3205,7 @@ function obraPropuesta() {
 
 async function cargarEstadoFichaje() {
   const ficha = miFichaTrabajador();
-  if (!ficha) { fichajeAbierto = null; return; }
+  if (!ficha || !ficha.dbId || !ficha.pin) { fichajeAbierto = null; return; }
   try {
     const { data, error } = await getSupabase().rpc('worker_estado', {
       p_worker_id: ficha.dbId, p_pin: ficha.pin,
@@ -5648,8 +5657,12 @@ async function cargarIncidencias() {
     const sb = getSupabase();
     let data, error;
     if (currentUser.isWorker) {
-      const ficha = miFichaTrabajador();
-      ({ data, error } = await sb.rpc('worker_incidencias', { p_worker_id: ficha.dbId, p_pin: ficha.pin }));
+      // Se usan los datos de la sesión, no la lista de trabajadores: al entrar
+      // con PIN esa lista todavía está vacía y fallaba la carga.
+      const idFicha = currentUser.id;
+      const pinFicha = currentUser.pin;
+      if (!idFicha || !pinFicha) { incidents = []; return; }
+      ({ data, error } = await sb.rpc('worker_incidencias', { p_worker_id: idFicha, p_pin: pinFicha }));
     } else {
       // Todas las abiertas siempre, y solo las 30 resueltas más recientes
       const [abiertas, resueltas] = await Promise.all([
