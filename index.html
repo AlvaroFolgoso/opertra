@@ -2549,6 +2549,7 @@ function generarPassword() {
 }
 
 async function crearUsuario() {
+  if (!esAdministrador()) return;
   const name = document.getElementById('nu-name').value.trim();
   const role = document.getElementById('nu-role').value.trim() || 'Administrador';
   const email = document.getElementById('nu-email').value.trim();
@@ -2589,6 +2590,7 @@ async function crearUsuario() {
 }
 
 async function revocarAcceso(userId, nombre) {
+  if (!esAdministrador()) return;
   if (!confirm(`¿Revocar el acceso de ${esc(nombre)}?\n\nNo podrá entrar hasta que lo restaures. Sus datos y su actividad se conservan.`)) return;
   try {
     const { error } = await getSupabase().from('profiles').update({ active: false }).eq('id', userId);
@@ -2601,6 +2603,7 @@ async function revocarAcceso(userId, nombre) {
 }
 
 async function restaurarAcceso(userId) {
+  if (!esAdministrador()) return;
   try {
     const { error } = await getSupabase().from('profiles').update({ active: true }).eq('id', userId);
     if (error) throw error;
@@ -2908,6 +2911,7 @@ function toggleEditTipo() {
 }
 
 async function guardarMaquina(code) {
+  if (!esAdministrador()) return;
   const m = machines.find(x => x.id === code);
   const sel = document.getElementById('em-type').value;
   const type = sel === '__otro__'
@@ -2947,6 +2951,7 @@ async function guardarMaquina(code) {
 }
 
 async function borrarMaquina(code) {
+  if (!esAdministrador()) return;
   const m = machines.find(x => x.id === code);
   if (!m) return;
   if (!confirm(`¿Eliminar ${esc(m.id)} (${esc(m.type)})?\n\nSus documentos y su foto se borrarán también. Los fichajes hechos con ella se conservan.`)) return;
@@ -3011,6 +3016,7 @@ function openEditWorkerModal(code) {
 }
 
 async function guardarTrabajador(code) {
+  if (!esAdministrador()) return;
   const w = workers.find(x => x.id === code);
   const name = document.getElementById('ew-name').value.trim();
   const role = document.getElementById('ew-role').value.trim() || 'Operario';
@@ -3055,6 +3061,7 @@ async function guardarTrabajador(code) {
 /* Los trabajadores no se borran: se dan de baja. Así sus fichajes y su
    historial siguen disponibles, que es lo que exige la ley laboral. */
 async function darDeBajaTrabajador(code) {
+  if (!esAdministrador()) return;
   const w = workers.find(x => x.id === code);
   if (!w) return;
   if (!confirm(`¿Dar de baja a ${esc(w.name)}?\n\nDejará de poder fichar y no aparecerá en las listas, pero sus horas y su historial se conservan.`)) return;
@@ -3132,6 +3139,7 @@ function openEditObraModal(code) {
 }
 
 async function guardarObra(code) {
+  if (!esAdministrador()) return;
   const p = projects.find(x => x.id === code);
   const name = document.getElementById('eo-name').value.trim();
   const client = document.getElementById('eo-client').value.trim();
@@ -3205,6 +3213,7 @@ async function guardarObra(code) {
 }
 
 async function borrarObra(code) {
+  if (!esAdministrador()) return;
   const p = projects.find(x => x.id === code);
   if (!p) return;
   const conFichajes = timeLogs.some(l => l.projectDbId === p.dbId);
@@ -3336,6 +3345,7 @@ function openObraDrawer(id) {
 }
 
 async function assignWorkerToObra(projId) {
+  if (!esAdministrador()) return;
   const code = document.getElementById('assign-worker-select').value;
   if (!code) return;
   const w = workers.find(x => x.id === code);
@@ -3404,6 +3414,7 @@ function openAddObraModal() {
   marcarNavegacion();
 }
 async function submitAddObra() {
+  if (!esAdministrador()) return;
   if (!hayConexion()) return;
   const name = document.getElementById('no-name').value.trim();
   const client = document.getElementById('no-client').value.trim() || 'Sin especificar';
@@ -4270,6 +4281,7 @@ function openEditFichajeModal(dbId) {
 }
 
 async function guardarCorreccionFichaje(dbId) {
+  if (!esAdministrador()) return;
   if (!hayConexion()) return;
   const l = (resultadosFiltro !== null ? resultadosFiltro : timeLogs).find(x => x.dbId === dbId);
   const entrada = document.getElementById('ef-in').value;
@@ -4339,6 +4351,7 @@ function jornadasOlvidadas() {
 }
 
 async function cerrarOlvidadas() {
+  if (!esAdministrador()) return;
   const olvidadas = jornadasOlvidadas();
   if (olvidadas.length === 0) return;
   if (!confirm(`Se van a cerrar ${olvidadas.length} jornada(s) que llevan más de 14 horas abiertas.\n\nQuedarán marcadas como "cerradas automáticamente" para que las revises y pongas la hora real.\n\n¿Continuar?`)) return;
@@ -4941,6 +4954,7 @@ function toggleCustomMachineType() {
 }
 
 async function submitAddMachine() {
+  if (!esAdministrador()) return;
   if (!hayConexion()) return;
   const sel = document.getElementById('nm-type').value;
   const type = sel === '__otro__'
@@ -4987,6 +5001,7 @@ async function submitAddMachine() {
 }
 
 async function reasignarOperario(machineCode) {
+  if (!esAdministrador()) return;
   const m = machines.find(x => x.id === machineCode);
   const workerDbId = document.getElementById('reassign-operator').value || null;
   try {
@@ -5112,6 +5127,7 @@ async function siguienteCodigo(entidad, prefijo, digitos) {
 /* ============ SUBIDA DE ARCHIVOS ============ */
 
 async function subirFotoMaquina(machineCode, event) {
+  if (!esAdministrador()) return;
   const file = event.target.files[0];
   if (!file) return;
   const m = machines.find(x => x.id === machineCode);
@@ -5134,6 +5150,7 @@ async function subirFotoMaquina(machineCode, event) {
 }
 
 async function subirFotoTrabajador(workerCode, event) {
+  if (!esAdministrador()) return;
   const file = event.target.files[0];
   if (!file) return;
   const w = workers.find(x => x.id === workerCode);
@@ -5219,6 +5236,7 @@ function estadoCaducidad(fechaISO) {
 }
 
 async function submitAddDoc(tipo, ownerDbId, ownerCode) {
+  if (!esAdministrador()) return;
   const name = document.getElementById('nd-name').value.trim();
   const expiry = document.getElementById('nd-expiry').value || null;
   const file = document.getElementById('nd-file').files[0];
@@ -5324,6 +5342,7 @@ function openLinkDeviceModal(machineCode) {
 }
 
 async function submitLinkDevice(machineCode) {
+  if (!esAdministrador()) return;
   const id = document.getElementById('ld-id').value.trim();
   const model = document.getElementById('ld-model').value;
   const errBox = document.getElementById('ld-error');
@@ -5355,6 +5374,7 @@ async function submitLinkDevice(machineCode) {
 }
 
 async function desvincularDispositivo(machineCode) {
+  if (!esAdministrador()) return;
   const m = machines.find(x => x.id === machineCode);
   if (!confirm(`¿Desvincular el dispositivo GPS de ${esc(m.id)}? Dejará de mostrarse en el mapa.`)) return;
   try {
@@ -5496,6 +5516,7 @@ async function openAddWorkerModal() {
 }
 
 async function submitAddWorker() {
+  if (!esAdministrador()) return;
   if (!hayConexion()) return;
   const name = document.getElementById('nw-name').value.trim();
   const role = document.getElementById('nw-role').value.trim() || 'Operario';
@@ -5839,6 +5860,7 @@ function openWorkerDrawer(id) {
 }
 
 async function reasignarMaquina(workerCode) {
+  if (!esAdministrador()) return;
   const w = workers.find(x => x.id === workerCode);
   const machineDbId = document.getElementById('reassign-machine').value || null;
   try {
@@ -5880,6 +5902,7 @@ function renderVacList(w) {
 }
 
 async function addVacation(workerId) {
+  if (!esAdministrador()) return;
   const w = workers.find(x => x.id === workerId);
   const start = document.getElementById('vac-start').value;
   const end = document.getElementById('vac-end').value;
@@ -5910,6 +5933,7 @@ async function addVacation(workerId) {
 }
 
 async function deleteVacation(workerId, vacId) {
+  if (!esAdministrador()) return;
   const w = workers.find(x => x.id === workerId);
   try {
     const { error } = await getSupabase().from('vacations').delete().eq('id', vacId);
@@ -6500,6 +6524,7 @@ function renderFacturacion() {
 }
 
 async function markInvoicePaid(dbId) {
+  if (!esAdministrador()) return;
   try {
     const { error } = await getSupabase().from('invoices')
       .update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', dbId);
@@ -6513,6 +6538,7 @@ async function markInvoicePaid(dbId) {
 }
 
 async function markInvoicePending(dbId) {
+  if (!esAdministrador()) return;
   try {
     const { error } = await getSupabase().from('invoices')
       .update({ status: 'pending', paid_at: null }).eq('id', dbId);
@@ -6526,6 +6552,7 @@ async function markInvoicePending(dbId) {
 }
 
 async function borrarCobro(dbId) {
+  if (!esAdministrador()) return;
   const inv = invoices.find(i => i.dbId === dbId);
   if (!inv) return;
   if (!confirm('¿Borrar este apunte de cobro? Esta acción no se puede deshacer.')) return;
@@ -6600,6 +6627,7 @@ function openAddInvoiceModal() {
 }
 
 async function submitAddInvoice() {
+  if (!esAdministrador()) return;
   if (!hayConexion()) return;
   const projectId = document.getElementById('ni-project').value || null;
   const client = document.getElementById('ni-client').value.trim();
