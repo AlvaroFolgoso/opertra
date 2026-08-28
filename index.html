@@ -1216,7 +1216,7 @@ async function pintarImagen(elId, ruta, alt) {
     const url = await urlArchivo(ruta);
     if (!el) return;
     if (url) {
-      el.innerHTML = `<img src="${url}" alt="${alt||''}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+      el.innerHTML = `<img src="${url}" alt="${esc(alt||'')}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
     } else {
       // Si no se pudo obtener el enlace, no dejamos un spinner girando para siempre
       el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);" title="No se pudo cargar la imagen"></i>`;
@@ -1224,6 +1224,33 @@ async function pintarImagen(elId, ruta, alt) {
   } catch (e) {
     if (el) el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);"></i>`;
   }
+}
+
+/* Carga diferida de imágenes en listas.
+   Sin esto, entrar en Maquinaria con 300 máquinas pedía 300 enlaces firmados y
+   descargaba 300 fotos de golpe: lento para el usuario y caro en tráfico.
+   Ahora cada foto se pide solo cuando su tarjeta aparece en pantalla. */
+let observadorFotos = null;
+function pintarImagenDiferida(elId, ruta, alt) {
+  if (!ruta) return;
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  // Si el navegador no soporta IntersectionObserver, cargamos directamente
+  if (!('IntersectionObserver' in window)) { pintarImagen(elId, ruta, alt); return; }
+
+  if (!observadorFotos) {
+    observadorFotos = new IntersectionObserver((entradas) => {
+      entradas.forEach(e => {
+        if (!e.isIntersecting) return;
+        observadorFotos.unobserve(e.target);
+        pintarImagen(e.target.id, e.target.dataset.ruta, e.target.dataset.alt);
+      });
+    }, { rootMargin: '300px' }); // se adelanta un poco para que no se vea el hueco
+  }
+  el.dataset.ruta = ruta;
+  el.dataset.alt = alt || '';
+  observadorFotos.observe(el);
 }
 
 /* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
@@ -3768,14 +3795,29 @@ async function cargarFichajes() {
       .limit(300);
     if (error) throw error;
     timeLogs = (data || []).map(mapearFichaje);
-    // Un trabajador con jornada abierta cuenta como "trabajando"
-    const abiertos = new Set((data || []).filter(l => !l.check_out).map(l => l.worker_id));
-    workers.forEach(w => {
-      w.status = abiertos.has(w.dbId) ? 'working' : 'off';
-      const suyo = (data || []).find(l => l.worker_id === w.dbId && !l.check_out);
-      w.since = suyo ? horaDe(suyo.check_in) : '—';
-    });
+    await cargarJornadasAbiertas();
   } catch (e) { console.error('Error cargando fichajes:', e); }
+}
+
+// Quién está trabajando AHORA. Va en consulta aparte a propósito: el histórico
+// se lee limitado (300 filas) y con mucho volumen esas 300 no cubren ni medio día,
+// así que calcular el estado desde ahí daría trabajadores "sin fichar" que sí están.
+// Las jornadas abiertas son siempre pocas (nunca más que nº de trabajadores).
+async function cargarJornadasAbiertas() {
+  try {
+    const { data, error } = await getSupabase()
+      .from('time_logs').select('worker_id,check_in')
+      .is('check_out', null)
+      .limit(5000);
+    if (error) throw error;
+    const abiertos = new Map();
+    (data || []).forEach(l => { if (!abiertos.has(l.worker_id)) abiertos.set(l.worker_id, l.check_in); });
+    workers.forEach(w => {
+      const desde = abiertos.get(w.dbId);
+      w.status = desde ? 'working' : 'off';
+      w.since = desde ? horaDe(desde) : '—';
+    });
+  } catch (e) { console.error('Error cargando jornadas abiertas:', e); }
 }
 
 function renderFichaje() {
@@ -4169,11 +4211,23 @@ async function iniciarQR() {
     };
     qrAnimFrame = requestAnimationFrame(mirar);
   } catch (err) {
-    escanearError = err.name === 'NotAllowedError'
-      ? 'Has denegado el permiso de cámara. Actívalo en los ajustes del navegador para este sitio.'
-      : 'No se pudo abrir la cámara: ' + mensajeError(err);
+    escanearError = mensajeCamara(err);
     pintarEscaneo();
   }
+}
+
+// Traduce cada tipo de fallo de cámara a algo que un operario entienda y pueda resolver
+function mensajeCamara(err) {
+  const n = (err && err.name) || '';
+  if (n === 'NotAllowedError' || n === 'SecurityError')
+    return 'No has dado permiso para usar la cámara. Ábrelo en los ajustes del navegador para esta web y vuelve a intentarlo. Mientras tanto puedes fichar sin escanear.';
+  if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError')
+    return 'La cámara está siendo usada por otra aplicación. Cierra la cámara, WhatsApp o videollamadas y vuelve a intentarlo. Mientras tanto puedes fichar sin escanear.';
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError')
+    return 'Este dispositivo no tiene cámara disponible. Usa la opción de fichar sin escanear.';
+  if (n === 'OverconstrainedError' || n === 'ConstraintNotSatisfiedError')
+    return 'No se ha podido usar la cámara trasera de este dispositivo. Prueba de nuevo o ficha sin escanear.';
+  return 'No se ha podido abrir la cámara. ' + mensajeError(err) + ' Puedes fichar sin escanear.';
 }
 
 async function iniciarNFC() {
@@ -4660,7 +4714,7 @@ function renderMaquinaria() {
     `}
   `;
   if (maquinariaView === 'mapa') setTimeout(initFleetMap, 0);
-  else machines.forEach(m => { if (m.photoUrl) pintarImagen('card-photo-' + m.id, m.photoUrl, m.type); });
+  else machines.forEach(m => { if (m.photoUrl) pintarImagenDiferida('card-photo-' + m.id, m.photoUrl, m.type); });
 }
 
 function initFleetMap() {
@@ -5977,7 +6031,7 @@ function renderAvisos() {
       : avisosSubTab === 'resueltas' ? renderIncidenciasList(resueltas, true)
       : renderIncidenciasList(abiertas, false)}
   `;
-  incidents.forEach(i => { if (i.photoPath) pintarImagen('inc-thumb-' + i.dbId, i.photoPath, i.title); });
+  incidents.forEach(i => { if (i.photoPath) pintarImagenDiferida('inc-thumb-' + i.dbId, i.photoPath, i.title); });
 }
 
 let incPhotoFile = null;
