@@ -834,6 +834,13 @@
         <label class="form-label">Repite la contraseña</label>
         <input class="form-input" id="signup-password2" placeholder="••••••••" type="password">
       </div>
+      <label style="display:flex;gap:10px;align-items:flex-start;margin-top:18px;cursor:pointer;font-size:12.5px;color:var(--steel);line-height:1.5;">
+        <input type="checkbox" id="signup-acepto" style="margin-top:2px;width:17px;height:17px;flex-shrink:0;cursor:pointer;">
+        <span>He leído y acepto los <a onclick="event.preventDefault();event.stopPropagation();openLegal('terminos')" style="color:var(--blue);text-decoration:underline;">Términos de uso</a>,
+        la <a onclick="event.preventDefault();event.stopPropagation();openLegal('privacidad')" style="color:var(--blue);text-decoration:underline;">Política de privacidad</a>
+        y las condiciones de tratamiento de datos, y declaro tener capacidad para obligar a mi empresa.</span>
+      </label>
+
       <div id="signup-error" class="login-error" style="display:none;"><i class="fa-solid fa-circle-exclamation"></i> <span id="signup-error-text"></span></div>
 
       <button class="btn btn-amber" id="signup-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:16px;" onclick="handleSignup()">
@@ -7158,6 +7165,14 @@ function mostrarPlazoBorrado() {
     + `tal y como exige la normativa de protección de datos. Puedes descargarlos cuando quieras.</span>`;
 }
 
+/* Deja constancia de que esta empresa acepto los terminos, si aun no constaba.
+   Solo escribe la primera vez; nunca pisa una aceptacion anterior. */
+async function registrarAceptacionLegal() {
+  if (!esAdministrador()) return;
+  try { await getSupabase().rpc('registrar_aceptacion_legal', { p_version: VERSION_LEGAL }); }
+  catch (e) { /* no debe bloquear la entrada a la app */ }
+}
+
 function enterAppOrShowTrialExpired() {
   if (isTrialExpired()) {
     showScreen('trial-expired');
@@ -7166,6 +7181,7 @@ function enterAppOrShowTrialExpired() {
     mostrarPlazoBorrado();
   } else {
     showScreen('app');
+    registrarAceptacionLegal();
     renderTopbarUser(); renderNav(); renderTrialBanner();
     switchTab(currentUser.isWorker ? 'fichaje' : 'dashboard');
     loadCompanyData().then(() => comprobarTutorialTrabajador());
@@ -7272,6 +7288,10 @@ async function handleSignup() {
     document.getElementById('signup-error-text').textContent = 'Las contraseñas no coinciden.';
     errBox.style.display = 'flex'; return;
   }
+  const acepto = document.getElementById('signup-acepto');
+  if (!acepto || !acepto.checked) {
+    return fallo('Para crear la cuenta tienes que aceptar los términos y la política de privacidad.');
+  }
 
   setButtonLoading('signup-submit-btn', true, 'Creando cuenta...', 'Crear empresa y cuenta');
   try {
@@ -7282,7 +7302,7 @@ async function handleSignup() {
     // aunque confirmen el correo desde otro dispositivo distinto al del registro.
     const { data: signUpData, error: signUpError } = await sb.auth.signUp({
       email, password: pass,
-      options: { data: { pending_company_name: companyName, pending_cif: cif || null, pending_admin_name: name, pending_business_type: businessType } },
+      options: { data: { pending_company_name: companyName, pending_cif: cif || null, pending_admin_name: name, pending_business_type: businessType, pending_terms_accepted_at: new Date().toISOString(), pending_terms_version: VERSION_LEGAL } },
     });
     if (signUpError) throw signUpError;
     const user = signUpData.user;
@@ -7641,6 +7661,11 @@ async function guardarAjustesCuenta() {
    el RGPD y la LOPDGDD, pero conviene que un asesor legal los revise
    antes de la puesta en producción.
    ====================================================================== */
+/* Version de los textos legales. Si cambias terminos o privacidad, sube este
+   numero: asi queda constancia de QUE version acepto cada cliente y cuando.
+   El RGPD (art. 5.2) exige poder demostrarlo, no basta con cumplirlo. */
+const VERSION_LEGAL = '2026-01';
+
 const DATOS_TITULAR = {
   nombre: '[NOMBRE DEL TITULAR]',
   nif: '[NIF]',
