@@ -872,6 +872,7 @@
           <b style="color:var(--ink);">Tus datos siguen aquí, intactos.</b><br>
           Fichajes, trabajadores, trabajos, documentos y cobros se conservan.
           En cuanto actives la suscripción, lo recuperas todo tal y como lo dejaste.
+          <span id="aviso-borrado-datos"></span>
         </div>
       </div>
 
@@ -7028,7 +7029,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
   for (let i = 0; i < intentos; i++) {
     const res = await getSupabase()
       .from('profiles')
-      .select('id, name, role, access_level, has_photo, photo_url, company_id, active, companies(name, trial_ends_at, access_code, business_type)')
+      .select('id, name, role, access_level, has_photo, photo_url, company_id, active, companies(name, trial_ends_at, access_code, business_type, borrar_datos_el)')
       .eq('id', authUser.id)
       .maybeSingle();
     profile = res.data; error = res.error;
@@ -7048,6 +7049,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     company: profile.companies ? profile.companies.name : '',
     companyId: profile.company_id,
     trialEndsAt: profile.companies ? profile.companies.trial_ends_at : null,
+    borrarDatosEl: profile.companies ? profile.companies.borrar_datos_el : null,
     accessCode: profile.companies ? profile.companies.access_code : null,
     businessType: profile.companies ? profile.companies.business_type : 'construccion',
     initials: (profile.name||'?').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0,2).toUpperCase() || '?',
@@ -7127,11 +7129,32 @@ function abrirSuscripcion() {
   document.getElementById('modal-overlay').classList.add('active');
   marcarNavegacion();
 }
+/* Cuánto tiempo se conservan los datos si no se reactiva la suscripción.
+   Informarlo no es solo comercial: el RGPD obliga a decir cuánto se guardan
+   los datos y qué pasa con ellos al terminar el servicio. */
+function mostrarPlazoBorrado() {
+  const el = document.getElementById('aviso-borrado-datos');
+  if (!el) return;
+  if (!currentUser.borrarDatosEl) { el.innerHTML = ''; return; }
+
+  const dias = Math.ceil((new Date(currentUser.borrarDatosEl) - new Date()) / 86400000);
+  if (dias <= 0) { el.innerHTML = ''; return; }
+
+  const meses = Math.floor(dias / 30);
+  const cuanto = meses >= 2 ? `${meses} meses` : `${dias} día${dias === 1 ? '' : 's'}`;
+  const urge = dias <= 30;
+
+  el.innerHTML = `<br><br><span style="color:${urge ? 'var(--danger)' : 'var(--steel)'};font-weight:${urge ? '600' : '400'};">`
+    + `Se conservan ${cuanto} más. Pasado ese plazo se eliminarán de forma definitiva, `
+    + `tal y como exige la normativa de protección de datos. Puedes descargarlos cuando quieras.</span>`;
+}
+
 function enterAppOrShowTrialExpired() {
   if (isTrialExpired()) {
     showScreen('trial-expired');
     document.getElementById('trial-expired-admin-msg').style.display = esAdministrador() ? 'block' : 'none';
     document.getElementById('trial-expired-worker-msg').style.display = currentUser.accessLevel === 'trabajador' ? 'block' : 'none';
+    mostrarPlazoBorrado();
   } else {
     showScreen('app');
     renderTopbarUser(); renderNav(); renderTrialBanner();
