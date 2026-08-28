@@ -4552,7 +4552,16 @@ function renderRegistroHoras() {
         <span><b>${lista.length}</b> fichaje${lista.length!==1?'s':''}</span>
         <span><b>${totalHoras.toLocaleString('es-ES',{maximumFractionDigits:1})} h</b> en total</span>
       </div>
-    </div>` : ''}
+    </div>` : `
+    <div class="plate" style="padding:14px 16px;margin-bottom:14px;">${rivets}
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;">
+          <div style="font-size:13px;"><b>${lista.length}</b> fichaje${lista.length!==1?'s':''} · <b>${totalHoras.toLocaleString('es-ES',{maximumFractionDigits:1})} h</b> en total</div>
+          <div style="font-size:12px;color:var(--steel);margin-top:3px;">Tienes derecho a una copia de tu registro de jornada.</div>
+        </div>
+        <button class="btn btn-outline" style="padding:9px 14px;" onclick="exportarFichajes()"><i class="fa-solid fa-file-arrow-down"></i> Descargar mis horas</button>
+      </div>
+    </div>`}
 
     <div class="plate" style="padding:0;overflow:hidden;">${rivets}
       <div class="panel-header" style="font-size:14px;">
