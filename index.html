@@ -1377,6 +1377,8 @@ function pintarPestanaActual() {
   if (!canAccess(currentTab)) { currentTab = 'dashboard'; }
   const pintar = pintores[currentTab];
   if (pintar) pintar();
+  // Las horas del mes las calcula la base de datos: se piden al entrar
+  if (currentTab === 'informes' && horasDelMes === null && !cargandoInforme) cargarHorasDelMes();
   // El panel general muestra avisos y cobros, así que necesita esos datos al día
   if (currentTab !== 'dashboard' && currentTab !== 'avisos') renderNav();
 }
@@ -2363,16 +2365,25 @@ let exportacionTruncada = [];
 async function todasLasFilas(tabla, orden) {
   const sb = getSupabase();
   const TAM = 1000;
-  let desde = 0, todo = [];
+  let todo = [], ultimoId = null;
+  // Se pagina por identificador, no por posicion. Con "saltar N filas" Postgres
+  // tiene que recorrer y descartar todas las anteriores: medido con 500.000
+  // fichajes, cada pagina tardaba 1,4 segundos y una exportacion entera pasaba
+  // de 12 minutos. Asi cada pagina cuesta lo mismo, sea la primera o la 500.
   for (;;) {
-    let q = sb.from(tabla).select('*').range(desde, desde + TAM - 1);
-    if (orden) q = q.order(orden);
+    let q = sb.from(tabla).select('*').order('id').limit(TAM);
+    if (ultimoId) q = q.gt('id', ultimoId);
     const { data, error } = await q;
     if (error) throw error;
-    todo = todo.concat(data || []);
-    if (!data || data.length < TAM) break;
-    desde += TAM;
+    if (!data || data.length === 0) break;
+    todo = todo.concat(data);
+    ultimoId = data[data.length - 1].id;
+    if (data.length < TAM) break;
     if (todo.length >= TOPE_EXPORTACION) { exportacionTruncada.push(tabla); break; }
+  }
+  // El orden bonito para el archivo se hace aqui, que es gratis
+  if (orden) {
+    todo.sort((a, b) => String(a[orden] || '').localeCompare(String(b[orden] || '')));
   }
   return { data: todo };
 }
@@ -6928,7 +6939,29 @@ function reportBar(label, value, max, fmt, color) {
 
 /* Meses disponibles para consultar en los informes */
 let mesInforme = new Date().toISOString().slice(0,7);
-function cambiarMesInforme(m) { mesInforme = m; renderInformes(); }
+let horasDelMes = null;        // lo devuelve la base de datos
+let cargandoInforme = false;
+
+function cambiarMesInforme(m) { mesInforme = m; horasDelMes = null; cargarHorasDelMes(); }
+
+/* Las horas del mes las calcula Postgres sobre TODOS los fichajes.
+   Antes se sumaban los que hubiera en memoria (los ultimos 300), asi que
+   con volumen real el informe daba cifras equivocadas. */
+async function cargarHorasDelMes() {
+  if (cargandoInforme) return;
+  cargandoInforme = true;
+  renderInformes();
+  try {
+    const { data, error } = await getSupabase().rpc('resumen_horas_mes', { p_mes: mesInforme });
+    if (error) throw error;
+    horasDelMes = (data || []).map(r => ({ name: r.nombre, hours: Number(r.horas) || 0, dias: Number(r.dias) || 0 }));
+  } catch (e) {
+    console.error('Error cargando horas del mes:', e);
+    horasDelMes = [];
+  }
+  cargandoInforme = false;
+  renderInformes();
+}
 
 function nombreMes(iso) {
   if (!iso) return '—';
@@ -6941,10 +6974,7 @@ function nombreMes(iso) {
 function renderInformes() {
   // Solo se muestran trabajadores con horas: una lista de 200 nombres a cero
   // no informa de nada y hace la pantalla ilegible.
-  const hoursByWorker = workers.map(w => ({
-    name: w.name,
-    hours: timeLogs.filter(l => l.workerId === w.dbId && l.date.startsWith(mesInforme)).reduce((s,l) => s + l.hours, 0),
-  })).filter(h => h.hours > 0).sort((a,b) => b.hours - a.hours).slice(0, 25);
+  const hoursByWorker = (horasDelMes || []).slice(0, 25);
   const maxHours = Math.max(1, ...hoursByWorker.map(h => h.hours));
   const totalHoras = hoursByWorker.reduce((s,h) => s + h.hours, 0);
 
@@ -6993,7 +7023,9 @@ function renderInformes() {
           ${totalHoras.toLocaleString('es-ES',{maximumFractionDigits:1})} h en total${hoursByWorker.length >= 25 ? ' · mostrando los 25 con más horas' : ''}
         </div>
         <div style="margin-top:12px;">
-          ${hoursByWorker.length === 0
+          ${cargandoInforme
+            ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;"><i class="fa-solid fa-circle-notch fa-spin"></i> Calculando horas del mes...</div>`
+            : hoursByWorker.length === 0
             ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Sin fichajes en ${nombreMes(mesInforme)}.</div>`
             : hoursByWorker.map(h => reportBar(esc(h.name), h.hours, maxHours, h.hours.toLocaleString('es-ES',{maximumFractionDigits:1})+' h')).join('')}
         </div>
