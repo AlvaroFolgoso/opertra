@@ -7961,6 +7961,42 @@ const LEGAL_CONTENT = {
 let promptInstalacion = null;
 const INSTALL_KEY = 'opertra_install_v1';
 
+/* Guarda la app en el movil: abre al instante y no se descarga entera cada
+   vez. Con miles de trabajadores fichando dos veces al dia, esto es la
+   diferencia entre cientos de GB de trafico al mes y casi ninguno.
+   Si hay version nueva, se avisa en vez de cambiarla de golpe mientras
+   alguien esta fichando. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const nuevo = reg.installing;
+        if (!nuevo) return;
+        nuevo.addEventListener('statechange', () => {
+          if (nuevo.state === 'installed' && navigator.serviceWorker.controller) {
+            avisarVersionNueva();
+          }
+        });
+      });
+    }).catch(() => {});
+  });
+}
+
+function avisarVersionNueva() {
+  if (document.getElementById('aviso-version')) return;
+  const av = document.createElement('div');
+  av.id = 'aviso-version';
+  av.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:200;'
+    + 'background:var(--graphite);color:white;padding:12px 16px;border-radius:12px;font-size:13px;'
+    + 'box-shadow:0 4px 16px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;max-width:92vw;';
+  av.innerHTML = '<span>Hay una versión nueva de Opertra.</span>'
+    + '<button style="background:var(--amber);color:var(--graphite);border:none;padding:7px 12px;'
+    + 'border-radius:8px;font-weight:600;font-size:12.5px;cursor:pointer;" onclick="location.reload()">Actualizar</button>'
+    + '<button style="background:none;border:none;color:#B7BCC1;cursor:pointer;font-size:16px;" '
+    + 'onclick="this.parentNode.remove()">&times;</button>';
+  document.body.appendChild(av);
+}
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   promptInstalacion = e;
