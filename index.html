@@ -1176,10 +1176,23 @@ async function comprimirImagen(file, maxLado = 1600, calidad = 0.82) {
   }
 }
 
+/* Tamano segun para que sirve la foto. Las de perfil y maquinaria se ven
+   pequenas en tarjetas y fichas: guardarlas a 1600px es tirar espacio (y
+   dinero) sin ganar nada. Las de incidencias si necesitan detalle, porque
+   sirven para ver una averia o una pieza rota. Los documentos van intactos. */
+const TAMANOS_FOTO = {
+  'profiles': { lado: 640,  calidad: 0.80 },
+  'workers':  { lado: 640,  calidad: 0.80 },
+  'machines': { lado: 1100, calidad: 0.80 },
+  'incidents':{ lado: 1600, calidad: 0.82 },
+};
+
 async function subirArchivo(file, carpeta) {
   if (!file) return null;
 
-  const archivo = await comprimirImagen(file);
+  const tipo = String(carpeta).split('/')[0];
+  const cfg = TAMANOS_FOTO[tipo] || { lado: 1600, calidad: 0.82 };
+  const archivo = await comprimirImagen(file, cfg.lado, cfg.calidad);
 
   if (archivo.size > 50 * 1024 * 1024) {
     throw new Error('El archivo pesa ' + (archivo.size/1024/1024).toFixed(1) + ' MB y el máximo son 50 MB.');
@@ -2341,6 +2354,29 @@ async function openHistorialModal() {
    único archivo con todo, legible tanto por una persona como por otro
    programa.
    ====================================================================== */
+/* Trae una tabla entera por paginas de 1.000 filas.
+   El tope protege la memoria del navegador: 200.000 filas ya son unos 50 MB
+   de CSV. Si se supera, se avisa dentro del propio archivo. */
+const TOPE_EXPORTACION = 200000;
+let exportacionTruncada = [];
+
+async function todasLasFilas(tabla, orden) {
+  const sb = getSupabase();
+  const TAM = 1000;
+  let desde = 0, todo = [];
+  for (;;) {
+    let q = sb.from(tabla).select('*').range(desde, desde + TAM - 1);
+    if (orden) q = q.order(orden);
+    const { data, error } = await q;
+    if (error) throw error;
+    todo = todo.concat(data || []);
+    if (!data || data.length < TAM) break;
+    desde += TAM;
+    if (todo.length >= TOPE_EXPORTACION) { exportacionTruncada.push(tabla); break; }
+  }
+  return { data: todo };
+}
+
 async function exportarTodo() {
   if (currentUser.isWorker) return;
   if (!confirm('Se va a descargar un archivo con TODOS los datos de tu empresa: trabajadores, ' + t('p') + ', maquinaria, fichajes, incidencias y cobros.\n\nPuede tardar unos segundos si hay mucho histórico. ¿Continuar?')) return;
@@ -2349,18 +2385,20 @@ async function exportarTodo() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Preparando...'; }
 
   try {
-    const sb = getSupabase();
-    // Se piden todos los históricos completos, sin los límites que usa la app
+    exportacionTruncada = [];
+    // Por paginas: Supabase devuelve como mucho 1.000 filas por consulta, asi que
+    // sin paginar una empresa con anos de fichajes se descargaria un fichero
+    // incompleto creyendo que lo tiene todo.
     const [proj, mach, work, logs, inc, inv, docs, vac, audit] = await Promise.all([
-      sb.from('projects').select('*'),
-      sb.from('machines').select('*'),
-      sb.from('workers').select('*'),
-      sb.from('time_logs').select('*').order('check_in'),
-      sb.from('incidents').select('*').order('created_at'),
-      sb.from('invoices').select('*').order('due_date'),
-      sb.from('documents').select('*'),
-      sb.from('vacations').select('*'),
-      sb.from('audit_log').select('*').order('created_at'),
+      todasLasFilas('projects'),
+      todasLasFilas('machines'),
+      todasLasFilas('workers'),
+      todasLasFilas('time_logs', 'check_in'),
+      todasLasFilas('incidents', 'created_at'),
+      todasLasFilas('invoices', 'due_date'),
+      todasLasFilas('documents'),
+      todasLasFilas('vacations'),
+      todasLasFilas('audit_log', 'created_at'),
     ]);
 
     const nombreObra = (id) => (proj.data || []).find(p => p.id === id)?.name || '';
@@ -2444,7 +2482,11 @@ async function exportarTodo() {
     let csv = `"OPERTRA · EXPORTACIÓN DE DATOS"\n`;
     csv += `"Empresa";${esc(currentUser.company)}\n`;
     csv += `"Fecha";${esc(new Date().toLocaleString('es-ES'))}\n`;
-    csv += `"Generado por";${esc(currentUser.name)}\n\n`;
+    csv += `"Generado por";${esc(currentUser.name)}\n`;
+    if (exportacionTruncada.length) {
+      csv += `"AVISO";"Este archivo esta INCOMPLETO. Se ha alcanzado el limite de ${TOPE_EXPORTACION} filas en: ${exportacionTruncada.join(', ')}. Para el historico completo, usa el filtro por fechas del registro de horas y expórtalo por periodos."\n`;
+    }
+    csv += `\n`;
 
     hojas.forEach(h => {
       csv += `\n"${h.titulo} (${h.filas.length})"\n`;
@@ -4478,6 +4520,7 @@ function fichajesFiltrados() {
 
 /* Los filtros consultan la base de datos, no la memoria: así se pueden pedir
    fichajes de hace dos años sin tenerlos cargados todo el rato. */
+let filtroTruncado = false;
 let resultadosFiltro = null;   // null = usar los que ya hay en memoria
 let filtrando = false;
 
@@ -4506,6 +4549,9 @@ async function aplicarFiltroFichaje() {
     const { data, error } = await q;
     if (error) throw error;
     resultadosFiltro = (data || []).map(mapearFichaje);
+    // Si se llega al tope, el usuario tiene que saberlo: creer que ve todo
+    // cuando faltan fichajes es peligroso en un registro de jornada.
+    filtroTruncado = resultadosFiltro.length >= 2000;
   } catch (e) {
     alert('No se pudieron cargar los fichajes: ' + mensajeError(e));
     resultadosFiltro = [];
@@ -4603,6 +4649,12 @@ function renderRegistroHoras() {
         <button class="btn btn-outline" style="padding:9px 14px;" onclick="exportarFichajes()"><i class="fa-solid fa-file-arrow-down"></i> Descargar mis horas</button>
       </div>
     </div>`}
+
+    ${filtroTruncado && resultadosFiltro !== null ? `
+    <div class="plate" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start;background:var(--amber-bg);">
+      <i class="fa-solid fa-circle-exclamation" style="color:var(--amber-deep);margin-top:2px;"></i>
+      <div style="font-size:12.5px;color:var(--ink);">Hay más fichajes de los que caben en una búsqueda. Se muestran los 2.000 más recientes del periodo elegido: <b>acota más las fechas</b> para verlos todos.</div>
+    </div>` : ''}
 
     <div class="plate" style="padding:0;overflow:hidden;">${rivets}
       <div class="panel-header" style="font-size:14px;">
