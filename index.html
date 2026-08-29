@@ -4029,6 +4029,10 @@ function renderFichaje() {
 }
 
 async function darmeDeAltaComoTrabajador() {
+  // El boton solo se ensena a administradores, pero la funcion se protege
+  // tambien a si misma: quien entra con PIN ya tiene ficha, y sin esto
+  // podria crearse una duplicada llamando a la funcion por su cuenta.
+  if (currentUser.isWorker || !esAdministrador()) return;
   const btn = document.getElementById('btn-autoalta');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...'; }
   if (!empezarOperacion('autoalta')) return;
@@ -5223,7 +5227,7 @@ function mostrarFotoMaquinaNueva(event) {
   const lector = new FileReader();
   lector.onload = e => {
     document.getElementById('nm-photo-box').innerHTML =
-      `<img src="${e.target.result}" style="max-height:120px;border-radius:6px;">
+      `<img src="${e.target.result}" alt="Vista previa de la foto" style="max-height:120px;border-radius:6px;">
        <div style="font-size:12px;color:var(--steel);margin-top:6px;">${esc(f.name)} — toca para cambiar</div>`;
   };
   lector.readAsDataURL(f);
@@ -6336,7 +6340,7 @@ function handleIncPhoto(event) {
   const lector = new FileReader();
   lector.onload = e => {
     document.getElementById('inc-photo-box').innerHTML =
-      `<img src="${e.target.result}" class="photo-preview">
+      `<img src="${e.target.result}" alt="Vista previa de la foto" class="photo-preview">
        <div style="font-size:12px;color:var(--steel);margin-top:6px;">Toca para cambiar la foto</div>`;
   };
   lector.readAsDataURL(file);
@@ -6347,7 +6351,7 @@ async function viewIncidentPhoto(ruta) {
   if (!url) { alert('No se pudo abrir la foto.'); return; }
   document.getElementById('legal-modal').innerHTML = `
     <div class="modal-top"><h2 style="font-size:15px;">Foto de la incidencia</h2><button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button></div>
-    <img src="${url}" style="width:100%;border-radius:8px;margin-top:10px;">
+    <img src="${url}" alt="Foto de la incidencia" style="width:100%;border-radius:8px;margin-top:10px;">
   `;
   document.getElementById('legal-overlay').classList.add('active');
   marcarNavegacion();
