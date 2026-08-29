@@ -2397,38 +2397,28 @@ async function todasLasFilas(tabla, orden) {
     return { data: todo };
   }
 
-  // Tablas grandes: se recorren por fecha. Se usa "mayor o igual" y se
-  // descartan repetidos por identificador, porque puede haber varias filas
-  // con la misma hora exacta (500 personas fichando a la vez) y con "mayor
-  // estricto" se perderian fichajes. En un registro de jornada eso es grave.
-  const vistos = new Set();
-  let cursor = null;
+  // Tablas grandes: se recorren por fecha MAS identificador.
+  // Solo por fecha no vale: si 1.000 fichajes comparten la misma hora exacta
+  // (500 personas fichando a la vez es normal a las 7 de la manana), al pasar
+  // de pagina se perderian los que quedan de esa hora. Comprobado: se perdian
+  // 500 de 5.000. En un registro de jornada eso es inaceptable.
+  let ultimaFecha = null, ultimoId = null;
   for (;;) {
-    let q = sb.from(tabla).select('*').order(col).limit(TAM);
-    if (cursor) q = q.gte(col, cursor);
+    let q = sb.from(tabla).select('*').order(col).order('id').limit(TAM);
+    if (ultimaFecha) {
+      // "posterior a esa hora, O misma hora pero identificador mayor"
+      q = q.or(`${col}.gt.${ultimaFecha},and(${col}.eq.${ultimaFecha},id.gt.${ultimoId})`);
+    }
     const { data, error } = await q;
     if (error) throw error;
     if (!data || data.length === 0) break;
 
-    let nuevas = 0;
-    for (const fila of data) {
-      if (vistos.has(fila.id)) continue;
-      vistos.add(fila.id);
-      todo.push(fila);
-      nuevas++;
-    }
+    todo = todo.concat(data);
+    ultimaFecha = data[data.length - 1][col];
+    ultimoId = data[data.length - 1].id;
 
-    const ultimaFecha = data[data.length - 1][col];
     if (data.length < TAM) break;
     if (todo.length >= TOPE_EXPORTACION) { exportacionTruncada.push(tabla); break; }
-
-    // Si toda la pagina eran repetidos, hay mas de 1.000 filas con la misma
-    // hora exacta: se avanza un milisegundo para no quedarse dando vueltas.
-    if (nuevas === 0) {
-      cursor = new Date(new Date(ultimaFecha).getTime() + 1).toISOString();
-    } else {
-      cursor = ultimaFecha;
-    }
   }
   return { data: todo };
 }
@@ -4197,6 +4187,20 @@ async function ficharAhora() {
     if (error) throw error;
 
     const accion = data && data[0] ? data[0].accion : null;
+
+    // Doble toque: en obra con mala cobertura es normal que alguien toque dos
+    // veces al no ver respuesta. La base de datos no cierra una jornada abierta
+    // hace menos de 2 minutos, y avisa de que la entrada ya estaba registrada.
+    if (accion === 'ya_fichado') {
+      const desde = data[0].hora ? horaDe(data[0].hora) : '';
+      alert('Ya tenías la entrada registrada' + (desde ? ' a las ' + desde : '') + '.\n\n'
+          + 'No hace falta volver a fichar. Cuando termines la jornada, ficha la salida.');
+      if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+      await cargarFichajes();
+      renderFichaje();
+      return;
+    }
+
     fichajeAbierto = accion === 'entrada'
       ? { logId: data[0].log_id, entrada: data[0].hora, projectId, machineId: machine ? machine.dbId : null,
           previstaFin: horasPrevistas ? new Date(Date.now() + horasPrevistas*3600000).toISOString() : null }
