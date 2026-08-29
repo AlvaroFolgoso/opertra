@@ -7427,6 +7427,7 @@ function enterAppOrShowTrialExpired() {
   } else {
     showScreen('app');
     registrarAceptacionLegal();
+    comprobarSiSoyDueno();
     renderTopbarUser(); renderNav(); renderTrialBanner();
     switchTab(currentUser.isWorker ? 'fichaje' : 'dashboard');
     loadCompanyData().then(() => comprobarTutorialTrabajador());
@@ -7741,6 +7742,142 @@ function toggleUserDropdown(e) {
 }
 function closeUserDropdown() { document.getElementById('user-dropdown').classList.remove('active'); }
 
+/* ======================================================================
+   PANEL OPERTRA · solo para el dueno del negocio
+   Ver todas las empresas cliente, quien paga, cuando vence, y renovar.
+   El permiso se comprueba en la base de datos (tabla opertra_admins),
+   no aqui: ocultar el boton no protegeria nada por si solo.
+   ====================================================================== */
+let soyDuenoOpertra = false;
+let empresasPanel = [];
+
+async function comprobarSiSoyDueno() {
+  if (currentUser.isWorker) return;
+  try {
+    const { data } = await getSupabase().rpc('soy_opertra_admin');
+    soyDuenoOpertra = data === true;
+  } catch (e) { soyDuenoOpertra = false; }
+}
+
+async function abrirPanelOpertra() {
+  closeUserDropdown();
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;"><i class="fa-solid fa-crown" style="color:var(--amber-deep);"></i> Panel Opertra</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="panel-opertra-cuerpo" style="margin-top:14px;">
+      <div style="font-size:13px;color:var(--steel);padding:20px 0;text-align:center;">
+        <i class="fa-solid fa-circle-notch fa-spin"></i> Cargando empresas...
+      </div>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('active');
+
+  try {
+    const { data, error } = await getSupabase().rpc('panel_empresas');
+    if (error) throw error;
+    empresasPanel = data || [];
+    pintarPanelOpertra();
+  } catch (e) {
+    document.getElementById('panel-opertra-cuerpo').innerHTML =
+      `<div class="login-error" style="display:flex;">No se pudo cargar: ${esc(mensajeError(e))}</div>`;
+  }
+}
+
+function pintarPanelOpertra() {
+  const el = document.getElementById('panel-opertra-cuerpo');
+  if (!el) return;
+
+  const activas = empresasPanel.filter(e => e.estado === 'activa').length;
+  const pronto  = empresasPanel.filter(e => e.estado === 'vence_pronto').length;
+  const caducadas = empresasPanel.filter(e => e.estado === 'caducada').length;
+
+  const color = { activa: 'var(--success)', vence_pronto: 'var(--amber-deep)', caducada: 'var(--danger)' };
+  const texto = { activa: 'Al día', vence_pronto: 'Vence pronto', caducada: 'Caducada' };
+
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <div class="plate" style="flex:1;min-width:90px;padding:10px 12px;text-align:center;">
+        <div class="f-display" style="font-size:22px;color:var(--success);">${activas}</div>
+        <div style="font-size:11px;color:var(--steel);">al día</div>
+      </div>
+      <div class="plate" style="flex:1;min-width:90px;padding:10px 12px;text-align:center;">
+        <div class="f-display" style="font-size:22px;color:var(--amber-deep);">${pronto}</div>
+        <div style="font-size:11px;color:var(--steel);">vencen pronto</div>
+      </div>
+      <div class="plate" style="flex:1;min-width:90px;padding:10px 12px;text-align:center;">
+        <div class="f-display" style="font-size:22px;color:var(--danger);">${caducadas}</div>
+        <div style="font-size:11px;color:var(--steel);">caducadas</div>
+      </div>
+    </div>
+
+    ${empresasPanel.length === 0 ? `
+      <div style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Todavía no hay empresas.</div>` :
+    empresasPanel.map(e => `
+      <div class="plate" style="padding:13px 15px;margin-bottom:9px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14.5px;font-weight:700;">${esc(e.nombre)}</div>
+            <div style="font-size:11.5px;color:var(--steel);margin-top:2px;">
+              ${e.trabajadores} trabajadores · ${e.maquinas} máquinas · ${e.fichajes_mes} fichajes este mes
+            </div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${color[e.estado]};white-space:nowrap;">
+            ${texto[e.estado]}
+          </span>
+        </div>
+        <div style="font-size:12px;color:var(--steel);margin-top:7px;">
+          Paga hasta el <b style="color:var(--ink);">${new Date(e.paga_hasta).toLocaleDateString('es-ES')}</b>
+          ${e.dias_restantes >= 0 ? ` · quedan ${e.dias_restantes} días` : ` · caducó hace ${Math.abs(e.dias_restantes)} días`}
+          ${e.borrar_el ? `<br><span style="color:var(--danger);">Datos se borran el ${new Date(e.borrar_el).toLocaleDateString('es-ES')}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn btn-outline" style="padding:6px 11px;font-size:12px;" onclick="renovarEmpresa('${e.id}', 1)">+1 mes</button>
+          <button class="btn btn-outline" style="padding:6px 11px;font-size:12px;" onclick="renovarEmpresa('${e.id}', 3)">+3 meses</button>
+          <button class="btn btn-amber" style="padding:6px 11px;font-size:12px;" onclick="renovarEmpresa('${e.id}', 12)">+1 año</button>
+        </div>
+      </div>`).join('')}
+
+    <button class="btn btn-outline" style="width:100%;justify-content:center;margin-top:6px;" onclick="exportarEmpresasCSV()">
+      <i class="fa-solid fa-file-arrow-down"></i> Descargar listado (para tu gestoría)
+    </button>`;
+}
+
+async function renovarEmpresa(id, meses) {
+  const e = empresasPanel.find(x => x.id === id);
+  if (!e) return;
+  if (!confirm(`¿Renovar ${e.nombre} ${meses} mes${meses > 1 ? 'es' : ''}?\n\n`
+    + `Hazlo solo cuando hayas recibido el pago.`)) return;
+  try {
+    const { data, error } = await getSupabase().rpc('renovar_empresa', { p_company_id: id, p_meses: meses });
+    if (error) throw error;
+    alert(data);
+    abrirPanelOpertra();
+  } catch (err) {
+    alert('No se pudo renovar: ' + mensajeError(err));
+  }
+}
+
+/* Listado para pasarle a la gestoria: quien es cliente y hasta cuando paga. */
+function exportarEmpresasCSV() {
+  const esc2 = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  let csv = '\ufeff' + ['Empresa','Sector','Alta','Paga hasta','Estado','Trabajadores','Maquinas','Fichajes del mes']
+    .map(esc2).join(';') + '\n';
+  empresasPanel.forEach(e => {
+    csv += [e.nombre, e.sector,
+      new Date(e.alta).toLocaleDateString('es-ES'),
+      new Date(e.paga_hasta).toLocaleDateString('es-ES'),
+      e.estado === 'activa' ? 'Al dia' : e.estado === 'caducada' ? 'Caducada' : 'Vence pronto',
+      e.trabajadores, e.maquinas, e.fichajes_mes].map(esc2).join(';') + '\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `opertra-clientes-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function renderUserDropdown() {
   const dd = document.getElementById('user-dropdown');
   dd.innerHTML = `
@@ -7760,6 +7897,7 @@ function renderUserDropdown() {
     ${!currentUser.isWorker ? `<button class="dropdown-item" onclick="openUsuariosModal()"><i class="fa-solid fa-users-gear"></i> Usuarios con acceso</button>` : ''}
     ${!currentUser.isWorker ? `<button class="dropdown-item" onclick="openHistorialModal()"><i class="fa-solid fa-clock-rotate-left"></i> Historial de cambios</button>` : ''}
     <button class="dropdown-item" onclick="openUserSettings()"><i class="fa-solid fa-building"></i> Ajustes de empresa</button>
+    ${soyDuenoOpertra ? `<button class="dropdown-item" onclick="abrirPanelOpertra()" style="color:var(--amber-deep);"><i class="fa-solid fa-crown" style="color:var(--amber-deep);"></i> Panel Opertra</button>` : ''}
     <button class="dropdown-item" onclick="openLegal('privacidad'); closeUserDropdown();"><i class="fa-solid fa-shield-halved"></i> Privacidad y legal</button>
     <div class="dropdown-divider"></div>
     <button class="dropdown-item danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
