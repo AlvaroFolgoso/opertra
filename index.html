@@ -3043,9 +3043,18 @@ async function borrarMaquina(code) {
   if (!m) return;
   if (!confirm(`¿Eliminar ${esc(m.id)} (${esc(m.type)})?\n\nSus documentos y su foto se borrarán también. Los fichajes hechos con ella se conservan.`)) return;
   try {
+    // Los documentos de una maquina no se borran solos: la columna owner_id es
+    // generica (vale para maquinas y trabajadores) y no tiene regla de borrado
+    // en cascada. Sin esto, sus filas y sus archivos quedaban para siempre y el
+    // limpiador de huerfanos no los detectaba, porque la fila seguia existiendo.
+    const rutasDocs = (m.documents || []).map(d => d.filePath).filter(Boolean);
+    await getSupabase().from('documents').delete()
+      .eq('owner_type', 'machine').eq('owner_id', m.dbId);
+
     const { error } = await getSupabase().from('machines').delete().eq('id', m.dbId);
     if (error) throw error;
     if (m.photoUrl) borrarArchivo(m.photoUrl);
+    rutasDocs.forEach(r => borrarArchivo(r));
     registrarEnHistorial('eliminación', 'Máquina', `${esc(m.id)} · ${esc(m.type)}`, '');
     machines = machines.filter(x => x.dbId !== m.dbId);
     closeAddMachineModal(); closeDrawer();
