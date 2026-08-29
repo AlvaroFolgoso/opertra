@@ -7430,6 +7430,7 @@ async function handleWorkerLogin() {
       trialEndsAt: w.trial_ends_at, businessType: w.business_type || 'construccion',
       initials: (w.worker_name||'?').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0,2).toUpperCase() || '?',
       hasPhoto: false, email: '', isWorker: true, pin: pin, photoPath: w.photo_path || null,
+      accessCode: code, sesionDesde: Date.now(),
     };
     try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
     enterAppOrShowTrialExpired();
@@ -7624,15 +7625,56 @@ async function handleAuthRedirect() {
   }
 }
 
+/* Cuanto dura la sesion de un trabajador sin volver a pedir el PIN.
+   No puede ser para siempre: un movil olvidado en un camion, o el telefono de
+   alguien a quien ya han dado de baja, permitirian fichar en su nombre. Y esto
+   es un registro de jornada con valor legal. 30 dias equilibra no molestar
+   cada dia con no dejar la puerta abierta indefinidamente. */
+const DIAS_SESION_TRABAJADOR = 30;
+
+/* Comprueba por detras, sin molestar, que el trabajador sigue dado de alta.
+   Si le han dado de baja, su movil deja de tener acceso aunque no haya
+   cerrado sesion. Si no hay conexion no se echa a nadie: en obra es normal. */
+async function revalidarTrabajador() {
+  if (!currentUser.isWorker || !currentUser.accessCode || !currentUser.pin) return;
+  try {
+    const { data, error } = await getSupabase().rpc('worker_login', {
+      p_access_code: currentUser.accessCode, p_pin: currentUser.pin,
+    });
+    if (error) return;
+    if (!data || data.length === 0) {
+      try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
+      alert('Tu acceso ya no está activo. Habla con tu responsable.');
+      location.reload();
+    }
+  } catch (e) { /* sin conexion: se sigue trabajando */ }
+}
+
 async function checkExistingSession() {
   // Sesión de trabajador (entró con PIN, no tiene cuenta de Supabase Auth)
   try {
     const raw = localStorage.getItem('opertra_worker_session');
     if (raw) {
       const w = JSON.parse(raw);
-      if (w && w.id && w.companyId) {
+      const caducada = !w.sesionDesde ||
+        (Date.now() - w.sesionDesde) > DIAS_SESION_TRABAJADOR * 86400000;
+
+      if (w && w.id && w.companyId && !caducada) {
         currentUser = w;
         enterAppOrShowTrialExpired();
+        revalidarTrabajador();
+        return;
+      }
+      if (caducada) {
+        try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
+        showScreen('login');
+        showAuthPanel('pin');
+        const err = document.getElementById('pin-error-text');
+        if (err) {
+          err.textContent = 'Por seguridad, vuelve a introducir tu PIN.';
+          const caja = document.getElementById('pin-error');
+          if (caja) caja.style.display = 'flex';
+        }
         return;
       }
     }
