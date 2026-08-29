@@ -1388,9 +1388,9 @@ async function loadCompanyData() {
   try {
     const [projRes, machRes, docRes, workRes, vacRes] = await Promise.all([
       sb.from('projects').select('id,code,name,client,status,start_date,end_date,notes,updated_at').order('created_at'),
-      sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked').order('created_at'),
+      sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,updated_at').order('created_at'),
       sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
-      sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
+      sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id,updated_at' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
       // Las vacaciones no se borran nunca. Sin filtro, a los años se arrastrarían
       // miles de filas en cada carga. Un año atrás cubre lo operativo (en curso,
       // próximas y las recientes); el histórico completo sale en la exportación.
@@ -1427,6 +1427,7 @@ async function loadCompanyData() {
       location: m.project_id && codeByProjectDbId[m.project_id] ? (projects.find(p => p.dbId === m.project_id)?.name || 'Sin ubicación') : 'Almacén / sin asignar',
       fuel: m.fuel || 0, since: '—',
       gpsAge: m.gps_updated_at ? timeAgo(new Date(m.gps_updated_at).getTime()) : 'sin datos',
+      updatedAt: m.updated_at,
       hasPhoto: m.has_photo, photoUrl: m.photo_url, lat: m.lat, lng: m.lng,
       device: { id: m.device_id, model: m.device_model, linked: m.device_linked },
       documents: docsByMachine[m.id] || [],
@@ -1442,7 +1443,7 @@ async function loadCompanyData() {
       project: w.project_id ? (codeByProjectDbId[w.project_id] || null) : null,
       projectDbId: w.project_id,
       status: 'off', since: '—', // se calculará con los fichajes reales
-      photoPath: w.photo_path, profileId: w.profile_id,
+      photoPath: w.photo_path, profileId: w.profile_id, updatedAt: w.updated_at,
       documents: docsByWorker[w.id] || [],
       vacations: (vacRes.data || []).filter(v => v.worker_id === w.id).map(v => ({
         dbId: v.id, id: v.id, start: v.start_date, end: v.end_date,
@@ -3059,6 +3060,23 @@ async function guardarMaquina(code) {
 
   setButtonLoading('em-submit', true, 'Guardando...', 'Guardar');
   try {
+    // Si otra persona ha tocado esta ficha mientras la editabas, se avisa antes
+    // de pisar su trabajo: al guardar se escriben TODOS los campos, asi que sin
+    // esto su cambio desapareceria sin que nadie se entere.
+    const { data: actual } = await getSupabase().from('machines')
+      .select('updated_at').eq('id', m.dbId).single();
+    if (actual && m.updatedAt && actual.updated_at && actual.updated_at !== m.updatedAt) {
+      const seguir = confirm(
+        'Otra persona ha modificado esta máquina mientras la editabas.\n\n' +
+        'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
+      if (!seguir) {
+        setButtonLoading('em-submit', false, '', 'Guardar');
+        closeAddMachineModal();
+        await loadCompanyData();
+        return;
+      }
+    }
+
     const { error } = await getSupabase().from('machines').update({
       type, model, plate: plate || null, status, project_id: projectId, fuel,
     }).eq('id', m.dbId);
@@ -3183,6 +3201,22 @@ async function guardarTrabajador(code) {
 
   setButtonLoading('ew-submit', true, 'Guardando...', 'Guardar');
   try {
+    // Igual que en maquinas: al guardar se escriben todos los campos, asi que
+    // hay que avisar si otra persona ha tocado la ficha mientras tanto.
+    const { data: actual } = await getSupabase().from('workers')
+      .select('updated_at').eq('id', w.dbId).single();
+    if (actual && w.updatedAt && actual.updated_at && actual.updated_at !== w.updatedAt) {
+      const seguir = confirm(
+        'Otra persona ha modificado esta ficha mientras la editabas.\n\n' +
+        'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
+      if (!seguir) {
+        setButtonLoading('ew-submit', false, '', 'Guardar');
+        closeAddMachineModal();
+        await loadCompanyData();
+        return;
+      }
+    }
+
     const { error } = await getSupabase().from('workers').update({
       name, role, pin, project_id: projectId,
     }).eq('id', w.dbId);
