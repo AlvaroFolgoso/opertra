@@ -1358,6 +1358,10 @@ function pintarPestanaActual() {
     avisos: renderAvisos, clientes: renderClientes,
     facturacion: renderFacturacion, informes: renderInformes,
   };
+  // Segunda barrera de permisos: switchTab ya filtra, pero esta funcion tambien
+  // se llama desde refrescos automaticos. Si no se comprueba aqui, un trabajador
+  // podria acabar viendo pantallas de facturacion o clientes por un refresco.
+  if (!canAccess(currentTab)) { currentTab = 'dashboard'; }
   const pintar = pintores[currentTab];
   if (pintar) pintar();
   // El panel general muestra avisos y cobros, así que necesita esos datos al día
@@ -1372,7 +1376,12 @@ async function loadCompanyData() {
       sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked').order('created_at'),
       sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
       sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
-      sb.from('vacations').select('id,worker_id,start_date,end_date').order('start_date'),
+      // Las vacaciones no se borran nunca. Sin filtro, a los años se arrastrarían
+      // miles de filas en cada carga. Un año atrás cubre lo operativo (en curso,
+      // próximas y las recientes); el histórico completo sale en la exportación.
+      sb.from('vacations').select('id,worker_id,start_date,end_date')
+        .gte('end_date', new Date(Date.now() - 365 * 86400000).toISOString().slice(0,10))
+        .order('start_date'),
     ]);
     if (projRes.error) throw projRes.error;
     if (machRes.error) throw machRes.error;
@@ -1566,7 +1575,7 @@ function projectMachines(id) { return totalesDe(id).machines; }
 function projectInvoices(id) { return totalesDe(id).invoices; }
 function projectOpenIncidents(id) {
   const p = projects.find(x => x.id === id);
-  return p ? incidents.filter(i => !i.resolved && i.project === p.name) : [];
+  return p ? incidents.filter(i => !i.resolved && i.projectDbId === p.dbId) : [];
 }
 function projectHoursThisMonth(id) { return totalesDe(id).hours; }
 
@@ -3293,7 +3302,7 @@ function openObraDrawer(id) {
   const pWorkers = projectWorkers(id);
   const pMachines = projectMachines(id);
   const pInvoices = projectInvoices(id);
-  const pIncidents = incidents.filter(i => i.project === p.name).sort((a,b) => b.time - a.time);
+  const pIncidents = incidents.filter(i => i.projectDbId === p.dbId).sort((a,b) => b.time - a.time);
   const hours = projectHoursThisMonth(id);
 
   const freeWorkers = workers.filter(w => w.project !== id);
@@ -3738,7 +3747,7 @@ function suscribirCambios() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'machines', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'workers', filter: filtro }, recargarEnBreve)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, recargarEnBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, refrescoLigeroFichajes)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: filtro }, recargarEnBreve)
     .subscribe();
@@ -3760,8 +3769,31 @@ function avisarCambioExterno() {
   setTimeout(() => { const e = document.getElementById('aviso-cambios'); if (e) e.remove(); }, 3500);
 }
 
+/* Los fichajes llegan constantemente (500 al día por empresa = uno cada minuto
+   en horario de obra, y decenas juntos a primera hora). Recargar TODOS los datos
+   de la empresa cada vez colapsaría la cuenta y haría parpadear la pantalla del
+   jefe sin parar. Aquí solo se actualiza lo que de verdad cambia: quién está
+   trabajando ahora, que es una consulta pequeña y de coste fijo. */
+let refrescoFichajesPendiente = null;
+function refrescoLigeroFichajes() {
+  clearTimeout(refrescoFichajesPendiente);
+  refrescoFichajesPendiente = setTimeout(async () => {
+    if (document.hidden) return;              // en segundo plano no gastamos nada
+    await cargarJornadasAbiertas();
+    // Solo repintamos donde se nota el cambio de "quién está trabajando"
+    if (currentTab === 'dashboard' || currentTab === 'fichaje' || currentTab === 'trabajadores') {
+      pintarPestanaActual();
+    }
+  }, 3000);
+}
+
+/* Recarga completa: solo para cambios de verdad estructurales (alta de obra,
+   máquina, trabajador...). Con tope de una recarga cada 15 segundos como
+   máximo, para que un admin haciendo cambios rápidos no dispare diez recargas. */
+let ultimaRecarga = 0;
 function recargarEnBreve() {
   clearTimeout(recargaPendiente);
+  const espera = Math.max(800, 15000 - (Date.now() - ultimaRecarga));
   recargaPendiente = setTimeout(() => {
     // Si está con un desplegable abierto o escribiendo, no le interrumpimos
     const activo = document.activeElement;
@@ -3769,8 +3801,10 @@ function recargarEnBreve() {
       recargarEnBreve();
       return;
     }
+    if (document.hidden) return;
+    ultimaRecarga = Date.now();
     loadCompanyData().then(() => avisarCambioExterno());
-  }, 800);
+  }, espera);
 }
 
 /* Si la app queda en segundo plano un buen rato, se suelta la conexión para
@@ -6358,7 +6392,7 @@ async function cargarIncidencias() {
       return {
         dbId: i.id, title: i.title, description: i.description, priority: i.priority,
         photoPath: i.photo_path, worker: w ? w.name : 'Alguien del equipo',
-        machine: m ? m.id : '—', project: p ? p.name : null,
+        machine: m ? m.id : '—', project: p ? p.name : null, projectDbId: i.project_id,
         time: new Date(i.created_at).getTime(), resolved: i.resolved, resolvedAt: i.resolved_at,
       };
     });
@@ -6841,8 +6875,8 @@ function renderInformes() {
   // Incidencias por obra (abiertas + resueltas, total histórico)
   const incByProject = projects.map(p => ({
     name: p.id,
-    count: incidents.filter(i => i.project === p.name).length,
-    open: incidents.filter(i => i.project === p.name && !i.resolved).length,
+    count: incidents.filter(i => i.projectDbId === p.dbId).length,
+    open: incidents.filter(i => i.projectDbId === p.dbId && !i.resolved).length,
   })).filter(i => i.count > 0).sort((a,b) => b.count - a.count).slice(0, 15);
   const maxInc = Math.max(1, ...incByProject.map(i => i.count));
 
