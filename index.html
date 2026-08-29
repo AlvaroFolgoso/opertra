@@ -2997,6 +2997,7 @@ function toggleEditTipo() {
 }
 
 async function guardarMaquina(code) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const m = machines.find(x => x.id === code);
   const sel = document.getElementById('em-type').value;
@@ -3102,6 +3103,7 @@ function openEditWorkerModal(code) {
 }
 
 async function guardarTrabajador(code) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const w = workers.find(x => x.id === code);
   const name = document.getElementById('ew-name').value.trim();
@@ -3225,6 +3227,7 @@ function openEditObraModal(code) {
 }
 
 async function guardarObra(code) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const p = projects.find(x => x.id === code);
   const name = document.getElementById('eo-name').value.trim();
@@ -3340,6 +3343,7 @@ async function registrarEnHistorial(accion, entidad, nombre, detalle) {
 
 function openObraDrawer(id) {
   const p = projects.find(x => x.id === id);
+  if (!p) return fichaNoDisponible('Esta ' + t('s'));
   const { pct, daysLeft } = obraSchedule(p);
   const pWorkers = projectWorkers(id);
   const pMachines = projectMachines(id);
@@ -3450,6 +3454,7 @@ async function assignWorkerToObra(projId) {
   }
 }
 async function assignMachineToObra(projId) {
+  if (!esAdministrador()) return;
   const code = document.getElementById('assign-machine-select').value;
   if (!code) return;
   const m = machines.find(x => x.id === code);
@@ -4871,8 +4876,26 @@ function initFleetMap() {
   });
 }
 
+/* Si el registro ya no existe (otro administrador lo borro mientras esta
+   pantalla estaba abierta) se avisa en vez de dejar la app en blanco. */
+function fichaNoDisponible(queEra) {
+  document.getElementById('drawer').innerHTML = `
+    <div class="drawer-top">
+      <div class="drawer-top-left"><span class="f-mono" style="font-size:12px;color:var(--steel);">NO DISPONIBLE</span></div>
+      <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="empty-state" style="padding:40px 20px;">
+      <i class="fa-solid fa-circle-question"></i>
+      <div style="font-size:14px;font-weight:600;color:var(--ink);">Ya no existe</div>
+      <div style="font-size:13px;margin-top:4px;">${esc(queEra)} se ha eliminado o cambiado desde otro dispositivo.</div>
+      <button class="btn btn-outline" style="margin-top:16px;" onclick="closeDrawer();loadCompanyData();">Actualizar datos</button>
+    </div>`;
+  document.getElementById('overlay').classList.add('active');
+}
+
 function openDrawer(id) {
   const m = machines.find(x => x.id === id);
+  if (!m) return fichaNoDisponible('Esta maquina');
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
       <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${esc(m.id)}</span></div>
@@ -5158,6 +5181,7 @@ async function submitAddMachine() {
 }
 
 async function reasignarOperario(machineCode) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const m = machines.find(x => x.id === machineCode);
   const workerDbId = document.getElementById('reassign-operator').value || null;
@@ -5393,6 +5417,7 @@ function estadoCaducidad(fechaISO) {
 }
 
 async function submitAddDoc(tipo, ownerDbId, ownerCode) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const name = document.getElementById('nd-name').value.trim();
   const expiry = document.getElementById('nd-expiry').value || null;
@@ -5936,6 +5961,7 @@ function verHorasDe(workerDbId) {
 
 function openWorkerDrawer(id) {
   const w = workers.find(x => x.id === id);
+  if (!w) return fichaNoDisponible('Este trabajador');
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
       <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${esc(w.id)}</span></div>
@@ -6017,6 +6043,7 @@ function openWorkerDrawer(id) {
 }
 
 async function reasignarMaquina(workerCode) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const w = workers.find(x => x.id === workerCode);
   const machineDbId = document.getElementById('reassign-machine').value || null;
@@ -6059,6 +6086,7 @@ function renderVacList(w) {
 }
 
 async function addVacation(workerId) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const w = workers.find(x => x.id === workerId);
   const start = document.getElementById('vac-start').value;
@@ -6513,6 +6541,7 @@ function renderClientes() {
 
 function openClientDrawer(name) {
   const c = clientList().find(x => x.name === name);
+  if (!c) return fichaNoDisponible('Este cliente');
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
       <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">CLIENTE</span></div>
@@ -6681,6 +6710,7 @@ function renderFacturacion() {
 }
 
 async function markInvoicePaid(dbId) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   try {
     const { error } = await getSupabase().from('invoices')
@@ -6695,6 +6725,7 @@ async function markInvoicePaid(dbId) {
 }
 
 async function markInvoicePending(dbId) {
+  if (!hayConexion()) return;
   if (!esAdministrador()) return;
   try {
     const { error } = await getSupabase().from('invoices')
