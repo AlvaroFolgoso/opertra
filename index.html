@@ -8963,6 +8963,14 @@ const INSTALL_KEY = 'opertra_install_v1';
    alguien esta fichando. */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // El service worker avisa cuando ha guardado una version nueva de la
+    // app. Antes esto dependia solo de 'updatefound', que solo salta si
+    // cambia el propio sw.js: como no cambiaba nunca, el cartel de
+    // "hay version nueva" no llegaba a aparecer jamas.
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.tipo === 'opertra-version-nueva') avisarVersionNueva();
+    });
+
     navigator.serviceWorker.register('/sw.js').then(reg => {
       reg.addEventListener('updatefound', () => {
         const nuevo = reg.installing;
