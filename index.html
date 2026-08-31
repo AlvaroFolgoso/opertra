@@ -4712,7 +4712,15 @@ function openEditFichajeModal(dbId) {
   const l = (resultadosFiltro !== null ? resultadosFiltro : timeLogs).find(x => x.dbId === dbId);
   if (!l) return;
 
-  const fechaHora = (iso) => iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+  // El desfase horario tiene que ser el DEL DIA DEL FICHAJE, no el de hoy:
+  // si no, al corregir en julio un fichaje de enero salia una hora mas
+  // tarde de la real, y al guardar sin tocar nada se corrompia la hora.
+  const fechaHora = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
 
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
@@ -6148,6 +6156,12 @@ function applyWorkerFilters() {
   tbody.innerHTML = results.length ? results.map(workerRowHTML).join('') :
     `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Sin resultados.</td></tr>`;
 }
+/* Quién está de vacaciones HOY. Se usa para el resumen y para el filtro. */
+function enVacacionesHoy() {
+  const hoy = fechaLocalHoy();
+  return workers.filter(w => (w.vacations || []).some(v => v.start <= hoy && hoy <= v.end));
+}
+
 function setWorkerFilter(f) { workerFilter = f; trabajadoresVisibles = 50; renderTrabajadores(); }
 function searchWorkers(q) { workerQuery = q; applyWorkerFilters(); }
 
@@ -6155,7 +6169,9 @@ function renderTrabajadores() {
   const upcoming = [];
   workers.forEach(w => (w.vacations||[]).forEach(v => {
     const st = vacationStatus(v);
-    if (st === 'proxima' || st === 'en_curso') upcoming.push({ ...v, worker: w.name, status: st });
+    if (st === 'proxima' || st === 'en_curso') {
+      upcoming.push({ ...v, worker: w.name, workerCode: w.id, status: st });
+    }
   }));
   upcoming.sort((a,b) => new Date(a.start) - new Date(b.start));
 
@@ -6192,14 +6208,22 @@ function renderTrabajadores() {
 
     ${upcoming.length > 0 ? `
     <div class="plate" style="padding:16px;margin-bottom:16px;">${rivets}
-      <span class="f-display" style="font-size:14px;">PRÓXIMAS VACACIONES DEL EQUIPO</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="f-display" style="font-size:14px;">VACACIONES DEL EQUIPO</span>
+        <span style="font-size:12px;color:var(--steel);">
+          ${enVacacionesHoy().length} de vacaciones hoy · ${upcoming.length} periodo(s) por venir
+        </span>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
         ${upcoming.slice(0,6).map(v => `
-          <div class="vac-row" style="margin-bottom:0;min-width:220px;flex:1;">
+          <div class="vac-row" style="margin-bottom:0;min-width:220px;flex:1;cursor:pointer;"
+               onclick="openWorkerDrawer('${esc(v.workerCode || '')}')">
             <div><div class="vac-dates">${esc(v.worker)}</div><div class="vac-days">${fmtDate(v.start)} → ${fmtDate(v.end)} · ${v.days}d</div></div>
             <span class="chip status-${v.status}"><span class="dot"></span>${vacStatusLabel[v.status]}</span>
           </div>`).join('')}
       </div>
+      ${upcoming.length > 6 ? `<div style="font-size:12px;color:var(--steel);margin-top:8px;">
+        y ${upcoming.length - 6} más. Cada trabajador tiene las suyas en su ficha.</div>` : ''}
     </div>` : ''}
 
     <div class="plate" style="padding:0;overflow:hidden;">${rivets}
