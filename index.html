@@ -1582,11 +1582,16 @@ function timeAgo(ts) {
   return `hace ${Math.floor(diff / 86400)} d`;
 }
 
-const TODAY = new Date();
+/* Antes esto era una constante que se calculaba al abrir la página. Un
+   móvil con la app abierta varios días (lo normal en obra) se quedaba
+   pensando que seguía siendo el día que la abrió. Ahora se pregunta la
+   fecha cada vez que hace falta: ver fechaLocalHoy(). */
+/* Las vacaciones incluyen el día de fin: quien vuelve el lunes está de
+   vacaciones todo el domingo. Antes el último día ya salía como pasado. */
 function vacationStatus(v) {
-  const s = new Date(v.start), e = new Date(v.end);
-  if (e < TODAY) return "pasada";
-  if (s <= TODAY && TODAY <= e) return "en_curso";
+  const hoy = fechaLocalHoy();
+  if (v.end < hoy) return "pasada";
+  if (v.start <= hoy) return "en_curso";
   return "proxima";
 }
 const vacStatusLabel = { en_curso: "En curso", proxima: "Próximas", pasada: "Finalizada" };
@@ -1657,13 +1662,16 @@ function obraChip(status) {
 /* % de plazo transcurrido: se calcula solo a partir de fecha inicio/fin, nadie tiene que tocarlo a mano */
 function obraSchedule(p) {
   if (!p || !p.start || !p.end) return { pct: 0, daysLeft: null };
-  const s = new Date(p.start), e = new Date(p.end);
-  const totalDays = Math.round((e - s) / 86400000);
-  const daysLeft = Math.round((e - TODAY) / 86400000);
+  const hoy = fechaLocalHoy();
+  const totalDays = diasEntre(p.start, p.end);
+  // Si la obra acaba hoy, quedan 0 días. Antes decía -1, y el día antes
+  // de terminar decía que ya quedaba 0.
+  const daysLeft = diasEntre(hoy, p.end);
   let pct;
-  if (TODAY < s) pct = 0;
-  else if (TODAY > e) pct = 100;
-  else pct = Math.round((TODAY - s) / (e - s) * 100);
+  if (hoy < p.start) pct = 0;
+  else if (hoy > p.end) pct = 100;
+  else if (totalDays <= 0) pct = 100;          // obra de un solo día
+  else pct = Math.round(diasEntre(p.start, hoy) / totalDays * 100);
   return { pct, daysLeft, totalDays };
 }
 
@@ -5756,12 +5764,27 @@ function mostrarNombreArchivo(event) {
     `<i class="fa-solid fa-file-circle-check" style="margin-right:6px;color:var(--success);"></i>${esc(f.name)}`;
 }
 
+/* Un papel caduca AL FINAL del día que pone, no al principio: una ITV
+   con fecha de hoy es válida hoy. Antes se comparaba la fecha con la
+   hora exacta y a media mañana ya salía caducada. */
 function estadoCaducidad(fechaISO) {
   if (!fechaISO) return 'vigente';
-  const dias = Math.round((new Date(fechaISO) - new Date()) / 86400000);
-  if (dias < 0) return 'caducado';
-  if (dias <= 45) return 'proximo';
+  const fecha = String(fechaISO).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return 'vigente';
+  const hoy = fechaLocalHoy();
+  if (fecha < hoy) return 'caducado';
+  if (diasEntre(hoy, fecha) <= 45) return 'proximo';
   return 'vigente';
+}
+
+/* Días completos entre dos fechas escritas como 2026-07-05. Se cuentan a
+   mediodía para que el cambio de hora de marzo y octubre no reste ni
+   sume un día de más. */
+function diasEntre(desde, hasta) {
+  const a = new Date(desde + 'T12:00:00');
+  const b = new Date(hasta + 'T12:00:00');
+  if (isNaN(a) || isNaN(b)) return 0;
+  return Math.round((b - a) / 86400000);
 }
 
 async function submitAddDoc(tipo, ownerDbId, ownerCode) {
