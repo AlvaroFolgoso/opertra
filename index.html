@@ -6707,6 +6707,35 @@ async function limpiarHistoricoAntiguo() {
       if (ruta) borrarArchivo(ruta);
     });
   } catch (e) { /* la limpieza no debe molestar si falla */ }
+
+  limpiarArchivosSobrantes();
+}
+
+/* Archivos que ya no usa nadie: la foto vieja de una máquina a la que se le
+   cambió la foto, los documentos de una máquina eliminada, la foto de un
+   trabajador dado de baja hace años.
+
+   Esto NO se puede hacer con SQL: Supabase bloquea el borrado directo del
+   almacén y hay que pedírselo a su API. Por eso la base de datos solo dice
+   cuáles sobran, y el borrado se hace aquí. Va de 300 en 300 para no
+   entretener a nadie; si queda más, se sigue mañana. */
+async function limpiarArchivosSobrantes() {
+  if (!esAdministrador()) return;
+  try {
+    const { data, error } = await getSupabase().rpc('archivos_huerfanos', { p_limite: 300 });
+    if (error) throw error;
+    const rutas = (data || [])
+      .map(f => (typeof f === 'string' ? f : f.ruta))
+      .filter(Boolean);
+    if (rutas.length === 0) return;
+
+    // De 50 en 50: una sola petición con cientos de rutas puede rechazarse
+    for (let i = 0; i < rutas.length; i += 50) {
+      const { error: errBorrado } = await getSupabase().storage.from(BUCKET)
+        .remove(rutas.slice(i, i + 50));
+      if (errBorrado) break;   // si el almacén se queja, se deja para mañana
+    }
+  } catch (e) { /* la limpieza no debe molestar si falla */ }
 }
 
 async function cargarIncidencias() {
