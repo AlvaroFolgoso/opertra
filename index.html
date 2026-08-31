@@ -1549,7 +1549,7 @@ async function loadCompanyData() {
 
     // Limpieza del histórico: como mucho una vez al día por navegador
     try {
-      const hoy = new Date().toISOString().slice(0,10);
+      const hoy = fechaLocalHoy();
       if (localStorage.getItem('opertra_limpieza') !== hoy) {
         localStorage.setItem('opertra_limpieza', hoy);
         limpiarHistoricoAntiguo();
@@ -1683,7 +1683,7 @@ function totalesPorObra() {
   const sello = `${projects.length}|${workers.length}|${machines.length}|${timeLogs.length}|${incidents.length}|${invoices.length}`;
   if (_totalesObra && _totalesSello === sello) return _totalesObra;
 
-  const mes = new Date().toISOString().slice(0,7);
+  const mes = mesLocalActual();
   const t = {};
   projects.forEach(p => {
     t[p.id] = { workers: [], machines: [], invoices: [], openInc: 0, hours: 0, dbId: p.dbId, name: p.name };
@@ -2172,7 +2172,7 @@ function renderDashboard() {
   const workingNow = workers.filter(w => w.status === 'working').length;
   const obrasActivas = projects.filter(p => p.status === 'active').length;
   const unresolvedCount = incidents.filter(i => !i.resolved).length;
-  const hoyISO = new Date().toISOString().slice(0,10);
+  const hoyISO = fechaLocalHoy();
   const todayLogs = timeLogs.filter(l => l.date === hoyISO);
   const openToday = todayLogs.filter(l => l.checkOut === '—').length;
   const closedToday = todayLogs.length - openToday;
@@ -2611,6 +2611,7 @@ async function exportarTodo() {
         cab: ['Trabajador',t('S'),tm('S'),'Fecha','Entrada','Salida','Horas','Corregido por','Motivo'],
         filas: (logs.data || []).map(l => {
           const horas = l.check_out ? ((new Date(l.check_out) - new Date(l.check_in)) / 3600000) : null;
+          const diaLocal = fechaLocal(l.check_in);
           return [
             nombreTrab(l.worker_id), nombreObra(l.project_id), codMaquina(l.machine_id),
             l.check_in.slice(0,10), horaDe(l.check_in), l.check_out ? horaDe(l.check_out) : 'sin cerrar',
@@ -2634,7 +2635,7 @@ async function exportarTodo() {
         filas: (inv.data || []).map(i => [
           i.reference, i.client_id ? nombreCli(i) : (i.client || clienteDeObraExp(i.project_id)), nombreObra(i.project_id), i.concept,
           Number(i.amount).toFixed(2).replace('.',','), i.due_date,
-          i.status === 'paid' ? 'Cobrado' : (i.due_date < new Date().toISOString().slice(0,10) ? 'Vencido' : 'Pendiente'),
+          i.status === 'paid' ? 'Cobrado' : (i.due_date < fechaLocalHoy() ? 'Vencido' : 'Pendiente'),
         ]),
       },
       {
@@ -2789,13 +2790,9 @@ function openNuevoUsuarioModal() {
       <label class="form-label">Correo electrónico</label>
       <input class="form-input" id="nu-email" type="email" placeholder="persona@empresa.com">
     </div>
-    <div class="form-group">
-      <label class="form-label">Contraseña temporal</label>
-      <input class="form-input f-mono" id="nu-pass" value="${generarPassword()}">
-      <div class="form-hint">
-        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-        <span>Apúntala antes de guardar: no se volverá a mostrar. Dile que la cambie al entrar.</span>
-      </div>
+    <div class="form-hint" style="margin-top:14px;">
+      <i class="fa-solid fa-envelope" style="margin-top:1px;"></i>
+      <span>Recibirá un correo para crear su propia contraseña. Tú no llegas a verla en ningún momento.</span>
     </div>
     <div id="nu-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="nu-error-text"></span></div>
 
@@ -2824,14 +2821,17 @@ async function crearUsuario() {
   const name = document.getElementById('nu-name').value.trim();
   const role = document.getElementById('nu-role').value.trim() || 'Administrador';
   const email = document.getElementById('nu-email').value.trim();
-  const pass = document.getElementById('nu-pass').value.trim();
   const errBox = document.getElementById('nu-error');
   errBox.style.display = 'none';
   const fallo = (t) => { document.getElementById('nu-error-text').textContent = t; errBox.style.display = 'flex'; };
 
   if (!name) return fallo('Escribe el nombre.');
   if (!correoValido(email)) return fallo('Ese correo no parece válido. Comprueba que esté bien escrito.');
-  if (pass.length < 8) return fallo('La contraseña debe tener al menos 8 caracteres.');
+
+  // La contraseña no la elige nadie: se genera una larga al azar que no se
+  // enseña, y a la persona se le manda un correo para que ponga la suya.
+  // Antes el administrador tenía que inventarla y dictársela por teléfono.
+  const pass = contrasenaAlAzar();
 
   setButtonLoading('nu-submit', true, 'Creando...', 'Crear acceso');
   if (!empezarOperacion('crear-usuario')) return;
@@ -2848,7 +2848,19 @@ async function crearUsuario() {
 
     registrarEnHistorial('alta de usuario', 'Usuario', name, email);
 
-    alert(`Acceso creado para ${name}.\n\nCorreo: ${email}\nContraseña: ${pass}\n\nApunta estos datos y pásaselos. La contraseña no se volverá a mostrar.`);
+    // Correo para que elija su contraseña. Si esto falla, la cuenta ya
+    // existe igualmente y siempre puede usar "he olvidado mi contraseña".
+    let correoEnviado = true;
+    try {
+      const { error: errCorreo } = await getSupabase().auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/?accion=nueva-contrasena',
+      });
+      if (errCorreo) correoEnviado = false;
+    } catch (e) { correoEnviado = false; }
+
+    alert(correoEnviado
+      ? `Acceso creado para ${name}.\n\nLe hemos enviado un correo a ${email} para que cree su contraseña.\n\nDile que mire también la carpeta de correo no deseado.`
+      : `Acceso creado para ${name}, pero no se ha podido enviar el correo.\n\nDile que entre en Opertra, escriba ${email} y pulse "¿Has olvidado tu contraseña?".`);
     openUsuariosModal();
   } catch (err) {
     const msg = mensajeError(err);
@@ -2858,6 +2870,19 @@ async function crearUsuario() {
   } finally {
     terminarOperacion('crear-usuario');
   }
+}
+
+/* A esta persona le acaban de quitar el acceso mientras tenía la app
+   abierta. Se le saca de inmediato: si no, seguiría viendo y tocando
+   datos de una empresa que ya no es la suya. */
+let expulsando = false;
+async function expulsarPorRevocacion() {
+  if (expulsando) return;
+  expulsando = true;
+  try { await getSupabase().auth.signOut(); } catch (e) {}
+  try { localStorage.removeItem('opertra_worker_session'); } catch (e) {}
+  alert('Tu acceso a esta empresa acaba de ser revocado.\n\nHabla con el administrador si crees que es un error.');
+  location.reload();
 }
 
 async function revocarAcceso(userId, nombre) {
@@ -3509,7 +3534,7 @@ async function guardarObra(code) {
     }
 
     const cambios = { name, status, start_date: start, end_date: end, notes: notes || null, ...cambiosDeCliente(elegido.valor) };
-    if (status === 'finished' && p.status !== 'finished') cambios.finished_at = new Date().toISOString().slice(0,10);
+    if (status === 'finished' && p.status !== 'finished') cambios.finished_at = fechaLocalHoy();
     if (status !== 'finished') cambios.finished_at = null;
 
     const { error } = await getSupabase().from('projects').update(cambios).eq('id', p.dbId);
@@ -3814,6 +3839,26 @@ function horaFin(horas) {
 }   // { logId, entrada, projectId, machineId }
 let fichajeCargando = false;
 
+/* Fecha de un momento concreto, en la hora del sitio donde se esta.
+   'sv-SE' se usa porque es el idioma que escribe la fecha como
+   2026-07-05, que es el formato con el que trabaja toda la app. */
+function fechaLocal(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('sv-SE');
+}
+
+/* Que dia es hoy aqui. Antes se preguntaba la fecha en Londres: entre
+   medianoche y las 2 de la madrugada devolvia el dia anterior. */
+function fechaLocalHoy() {
+  return new Date().toLocaleDateString('sv-SE');
+}
+
+/* Y el mes: 2026-07 */
+function mesLocalActual() {
+  return fechaLocalHoy().slice(0, 7);
+}
+
 function horaDe(iso) {
   const d = new Date(iso);
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
@@ -4041,6 +4086,14 @@ function suscribirCambios() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'clients', filter: filtro }, recargarEnBreve)
+    // Si a alguien le revocan el acceso, se entera al momento y no cuando
+    // le apetezca actualizar la página.
+    .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + currentUser.id },
+        (payload) => {
+          const p = payload && payload.new;
+          if (p && p.active === false) expulsarPorRevocacion();
+        })
     .subscribe();
 }
 
@@ -4864,8 +4917,11 @@ function mapearFichaje(l) {
     projectDbId: l.project_id, project: p ? p.name : '—', projectCode: p ? p.id : '—',
     machine: m ? m.id : '—',
     checkInISO: l.check_in, checkOutISO: l.check_out,
-    date: l.check_in.slice(0,10),  // la jornada pertenece al día en que empezó
-    cruzaMedianoche: l.check_out ? l.check_in.slice(0,10) !== l.check_out.slice(0,10) : false,
+    // La jornada pertenece al día en que empezó, contado en hora de aquí.
+    // Antes se usaba la hora universal y un fichaje de las 00:30 se
+    // guardaba en el día anterior.
+    date: fechaLocal(l.check_in),
+    cruzaMedianoche: l.check_out ? fechaLocal(l.check_in) !== fechaLocal(l.check_out) : false,
     checkIn: horaDe(l.check_in), checkOut: l.check_out ? horaDe(l.check_out) : '—',
     hours: l.check_out ? horasDecimales(l.check_in, l.check_out) : 0,
     editedBy: l.edited_by, editedAt: l.edited_at, editReason: l.edit_reason,
@@ -6171,7 +6227,7 @@ async function cargarResumenTrabajador(workerDbId) {
     }
     const horasTotal = data.reduce((s,r) => s + Number(r.horas || 0), 0);
     const jornadas = data.reduce((s,r) => s + Number(r.jornadas || 0), 0);
-    const mesActual = new Date().toISOString().slice(0,7);
+    const mesActual = mesLocalActual();
     const horasMes = timeLogs
       .filter(l => l.workerId === workerDbId && l.checkOutISO && l.date.startsWith(mesActual))
       .reduce((s,l) => s + l.hours, 0);
@@ -7390,7 +7446,7 @@ function cambiosDeCliente(valor) {
    ====================================================================== */
 function estadoCobro(inv) {
   if (inv.status === 'paid') return 'paid';
-  const hoy = new Date().toISOString().slice(0,10);
+  const hoy = fechaLocalHoy();
   return inv.dueDate < hoy ? 'overdue' : 'pending';
 }
 
@@ -7573,7 +7629,7 @@ function autoRellenarCliente() {
 
 function openAddInvoiceModal() {
   if (!esAdministrador()) return;
-  const en30 = new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+  const en30 = fechaLocal(Date.now() + 30*86400000);
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
       <span class="f-display" style="font-size:18px;">Anotar cobro</span>
@@ -7718,7 +7774,7 @@ function reportBar(label, value, max, fmt, color) {
 }
 
 /* Meses disponibles para consultar en los informes */
-let mesInforme = new Date().toISOString().slice(0,7);
+let mesInforme = mesLocalActual();
 let horasDelMes = null;        // lo devuelve la base de datos
 let cargandoInforme = false;
 
@@ -7764,7 +7820,7 @@ function renderInformes() {
     const d = new Date();
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
-    meses.push(d.toISOString().slice(0,7));
+    meses.push(fechaLocal(d).slice(0,7));
   }
 
   // Facturación por obra
@@ -8269,6 +8325,89 @@ async function handleSignup() {
   }
 }
 
+/* Contraseña larga al azar. No se enseña a nadie: solo sirve para crear
+   la cuenta hasta que su dueño ponga la suya desde el correo. */
+function contrasenaAlAzar() {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*';
+  const n = new Uint32Array(24);
+  crypto.getRandomValues(n);
+  return Array.from(n, x => abc[x % abc.length]).join('');
+}
+
+/* Ventana obligatoria para poner contraseña nueva. Aparece al entrar desde
+   el enlace del correo. No se puede cerrar sin ponerla: si se pudiera, la
+   persona se quedaría dentro sin saber su contraseña, que es justo lo que
+   pasaba antes. */
+function mostrarModalNuevaContrasena() {
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Crea tu contraseña</span>
+    </div>
+    <div style="font-size:13px;color:var(--steel);margin-top:4px;line-height:1.6;">
+      Elige la contraseña con la que entrarás a partir de ahora. Solo la sabrás tú:
+      no la ve ni tu empresa ni Opertra.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña nueva</label>
+      <input class="form-input" type="password" id="np-pass" maxlength="72" autocomplete="new-password">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Al menos 8 caracteres. Mejor una frase que recuerdes que algo corto y raro.</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Repítela</label>
+      <input class="form-input" type="password" id="np-pass2" maxlength="72" autocomplete="new-password">
+    </div>
+    <div id="np-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="np-error-text"></span></div>
+    <div class="modal-actions">
+      <button class="btn btn-amber" id="np-submit" onclick="guardarNuevaContrasena(true)">Guardar y entrar</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+async function guardarNuevaContrasena(esObligatoria) {
+  const p1 = document.getElementById('np-pass').value;
+  const p2 = document.getElementById('np-pass2').value;
+  const errBox = document.getElementById('np-error');
+  const fallo = (t) => {
+    document.getElementById('np-error-text').textContent = t;
+    errBox.style.display = 'flex';
+  };
+  errBox.style.display = 'none';
+
+  if (p1.length < 8) return fallo('La contraseña debe tener al menos 8 caracteres.');
+  if (p1 !== p2) return fallo('Las dos contraseñas no coinciden.');
+
+  setButtonLoading('np-submit', true, 'Guardando...', esObligatoria ? 'Guardar y entrar' : 'Cambiar contraseña');
+  try {
+    const { error } = await getSupabase().auth.updateUser({ password: p1 });
+    if (error) throw error;
+    closeAddMachineModal();
+    alert('Contraseña guardada. Es la que usarás para entrar a partir de ahora.');
+    if (!esObligatoria) openUserSettings();
+  } catch (err) {
+    fallo(authErrorMessage(err));
+    setButtonLoading('np-submit', false, '', esObligatoria ? 'Guardar y entrar' : 'Cambiar contraseña');
+  }
+}
+
+/* Cambiar la contraseña desde Ajustes (aquí sí se puede cancelar) */
+function abrirCambiarContrasena() {
+  if (currentUser.isWorker) return;
+  mostrarModalNuevaContrasena();
+  const cab = document.querySelector('#add-machine-modal .modal-top');
+  if (cab) {
+    cab.innerHTML = '<span class="f-display" style="font-size:18px;">Cambiar contraseña</span>'
+      + '<button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>';
+  }
+  const acciones = document.querySelector('#add-machine-modal .modal-actions');
+  if (acciones) {
+    acciones.innerHTML = '<button class="btn btn-outline" onclick="openUserSettings()">Cancelar</button>'
+      + '<button class="btn btn-amber" id="np-submit" onclick="guardarNuevaContrasena(false)">Cambiar contraseña</button>';
+  }
+}
+
 async function handleForgotPassword() {
   const email = document.getElementById('login-email').value.trim();
   const errBox = document.getElementById('login-error');
@@ -8283,7 +8422,9 @@ async function handleForgotPassword() {
     return;
   }
   try {
-    const { error } = await getSupabase().auth.resetPasswordForEmail(email);
+    const { error } = await getSupabase().auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/?accion=nueva-contrasena',
+    });
     if (error) throw error;
     document.getElementById('login-error-text').textContent = 'Te hemos enviado un correo con instrucciones para recuperar tu contraseña.';
     errBox.style.display = 'flex';
@@ -8339,10 +8480,15 @@ async function handleAuthRedirect() {
       return;
     }
 
+    // El enlace de "crea tu contraseña" trae esta marca, que ponemos
+    // nosotros al enviar el correo. Sin ella no había forma de saber que
+    // la persona venía a cambiarla y se la dejaba dentro sin contraseña.
+    const vieneACambiarContrasena = url.searchParams.get('accion') === 'nueva-contrasena';
+
     if (code) {
       await getSupabase().auth.exchangeCodeForSession(window.location.href);
       window.history.replaceState({}, document.title, window.location.pathname);
-      return;
+      return vieneACambiarContrasena ? 'nueva-contrasena' : undefined;
     }
     if (hashParams && hashParams.get('access_token')) {
       const access_token = hashParams.get('access_token');
@@ -8350,6 +8496,9 @@ async function handleAuthRedirect() {
       if (access_token && refresh_token) {
         await getSupabase().auth.setSession({ access_token, refresh_token });
         window.history.replaceState({}, document.title, window.location.pathname);
+        if (vieneACambiarContrasena || hashParams.get('type') === 'recovery') {
+          return 'nueva-contrasena';
+        }
       }
     }
   } catch (err) {
@@ -8605,79 +8754,100 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#user-block')) closeUserDropdown();
 });
 
+function filaAjuste(etiqueta, valor, extra) {
+  return `<div class="drawer-row"><span>${etiqueta}</span><span${extra || ''}>${esc(valor || '—')}</span></div>`;
+}
+
 function openUserSettings() {
   closeUserDropdown();
   const esTrabajador = !!currentUser.isWorker;
+
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
       <span class="f-display" style="font-size:18px;">Ajustes de cuenta</span>
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div style="display:flex;align-items:center;gap:14px;margin-top:16px;">
-      <div class="user-avatar" style="width:56px;height:56px;font-size:16px;overflow:hidden;" id="settings-avatar">
+
+    <!-- ---------- Quién eres ---------- -->
+    <div style="display:flex;align-items:center;gap:14px;margin-top:18px;">
+      <div class="user-avatar" style="width:60px;height:60px;font-size:17px;overflow:hidden;flex-shrink:0;" id="settings-avatar">
         ${currentUser.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}
       </div>
-      <input type="file" accept="image/*" id="settings-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoPerfil(event)">
-      <label class="btn btn-outline" for="settings-photo" style="font-size:13px;">
-        <i class="fa-solid fa-camera"></i> ${currentUser.photoPath ? 'Cambiar foto' : 'Subir foto'}
-      </label>
+      <div style="min-width:0;flex:1;">
+        <div class="f-display" style="font-size:17px;">${esc(currentUser.name)}</div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:2px;">
+          ${esc(currentUser.role || '')}${currentUser.email ? ' · ' + esc(currentUser.email) : ''}
+        </div>
+        <input type="file" accept="image/*" id="settings-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoPerfil(event)">
+        <label class="btn-ghost" for="settings-photo" style="font-size:12.5px;color:var(--blue);cursor:pointer;display:inline-block;margin-top:6px;">
+          <i class="fa-solid fa-camera"></i> ${currentUser.photoPath ? 'Cambiar foto' : 'Subir foto'}
+        </label>
+      </div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" style="margin-top:18px;">
       <label class="form-label">Nombre completo</label>
-      <input class="form-input" id="settings-name" value="${esc(currentUser.name)}">
+      <input class="form-input" id="settings-name" value="${esc(currentUser.name)}" maxlength="120">
     </div>
-    <div class="form-group">
-      <label class="form-label">Puesto</label>
-      <input class="form-input" value="${esc(currentUser.role)}" disabled style="background:var(--surface);color:var(--steel);">
+
+    <div class="drawer-rows" style="margin-top:4px;">
+      ${filaAjuste('Puesto', currentUser.role)}
+      ${filaAjuste('Empresa', currentUser.company)}
     </div>
-    <div class="form-group">
-      <label class="form-label">Empresa</label>
-      <input class="form-input" value="${esc(currentUser.company)}" disabled style="background:var(--surface);color:var(--steel);">
-    </div>
-    ${!esTrabajador ? `
-    <div class="form-group">
-      <label class="form-label">Código de acceso para tu equipo</label>
-      <input class="form-input f-mono" value="${currentUser.accessCode || '—'}" disabled style="background:var(--surface);color:var(--amber-deep);font-size:16px;letter-spacing:2px;">
-      <div class="form-hint">
-        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-        <span>Tus trabajadores entran con este código y su PIN personal.</span>
+
+    <!-- ---------- Seguridad ---------- -->
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">SEGURIDAD</span></div>
+    ${esTrabajador ? `
+      <div class="form-hint" style="margin-top:0;">
+        <i class="fa-solid fa-key" style="margin-top:1px;"></i>
+        <span>Tú entras con el código de tu empresa y tu PIN. Si has olvidado el PIN, pídeselo a tu encargado.</span>
+      </div>` : `
+      <div class="drawer-rows">
+        ${filaAjuste('Contraseña', '••••••••')}
       </div>
+      <button class="btn btn-outline" style="margin-top:10px;font-size:12.5px;" onclick="abrirCambiarContrasena()">
+        <i class="fa-solid fa-key"></i> Cambiar contraseña
+      </button>
+      <div class="form-group" style="margin-top:16px;">
+        <label class="form-label">Código de acceso para tu equipo</label>
+        <input class="form-input f-mono" value="${esc(currentUser.accessCode || '—')}" disabled
+               style="background:var(--surface);color:var(--amber-deep);font-size:16px;letter-spacing:2px;">
+        <div class="form-hint">
+          <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+          <span>Tus trabajadores entran con este código y su PIN personal.</span>
+        </div>
+      </div>`}
+
+    <!-- ---------- Tus datos ---------- -->
+    ${!esTrabajador ? `
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">TUS DATOS</span></div>
+    <div id="uso-almacen" style="font-size:12.5px;color:var(--steel);line-height:1.55;"></div>
+    <button class="btn btn-outline" id="btn-exportar-todo" style="margin-top:10px;font-size:12.5px;" onclick="exportarTodo()">
+      <i class="fa-solid fa-download"></i> Descargar todos mis datos
+    </button>
+    <div class="form-hint" style="margin-top:6px;">
+      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+      <span>Un archivo para Excel con todo: clientes, trabajadores, ${t('p')}, ${tm('p')}, registro de jornada, incidencias y cobros.</span>
     </div>` : ''}
 
-    <div class="form-group">
-      <label class="form-label">Cookies</label>
-      <div class="form-hint" style="margin-top:0;">
-        <i class="fa-solid fa-cookie-bite" style="margin-top:1px;"></i>
-        <span>Opertra solo usa cookies técnicas para mantener tu sesión. No hay seguimiento ni publicidad.</span>
-      </div>
-      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="reabrirCookies()">
-        <i class="fa-solid fa-rotate-left"></i> Revisar preferencias de cookies
-      </button>
+    <!-- ---------- Ayuda ---------- -->
+    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">AYUDA</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
       ${!esTrabajador ? `
-      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="mostrarPrimerosPasos()">
-        <i class="fa-solid fa-list-check"></i> Volver a ver los primeros pasos
-      </button>` : `
-      <button class="btn btn-outline" style="margin-top:8px;font-size:12.5px;" onclick="repetirTutorial()">
-        <i class="fa-solid fa-circle-question"></i> Ver cómo se ficha
-      </button>`}
+        <button class="btn btn-outline" style="font-size:12.5px;" onclick="mostrarPrimerosPasos()">
+          <i class="fa-solid fa-list-check"></i> Primeros pasos
+        </button>` : `
+        <button class="btn btn-outline" style="font-size:12.5px;" onclick="repetirTutorial()">
+          <i class="fa-solid fa-circle-question"></i> Cómo se ficha
+        </button>`}
+      <button class="btn btn-outline" style="font-size:12.5px;" onclick="reabrirCookies()">
+        <i class="fa-solid fa-cookie-bite"></i> Cookies
+      </button>
     </div>
-
-    <div class="form-group">
-      <label class="form-label">Tus datos</label>
-      <div class="form-hint" style="margin-top:0;">
-        <i class="fa-solid fa-database" style="margin-top:1px;"></i>
-        <span>Todo se guarda en la base de datos de tu empresa: sobrevive a cerrar sesión, cambiar de móvil o de ordenador, y solo tu empresa puede verlo.</span>
-      </div>
-      ${!esTrabajador ? `
-      <div id="uso-almacen" style="font-size:12px;color:var(--steel);margin-top:8px;line-height:1.5;"></div>
-      <button class="btn btn-outline" id="btn-exportar-todo" style="margin-top:8px;font-size:12.5px;" onclick="exportarTodo()">
-        <i class="fa-solid fa-download"></i> Descargar todos mis datos
-      </button>
-      <div class="form-hint" style="margin-top:6px;">
-        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-        <span>Un archivo con todo: trabajadores, ${t('p')}, ${tm('p')}, registro de jornada, incidencias y cobros. Se abre en Excel.</span>
-      </div>` : ''}
+    <div class="form-hint" style="margin-top:8px;">
+      <i class="fa-solid fa-shield-halved" style="margin-top:1px;"></i>
+      <span>Opertra solo usa cookies técnicas para mantener tu sesión: no hay seguimiento ni publicidad.
+      Todo se guarda en la base de datos de tu empresa y solo tu empresa puede verlo.</span>
     </div>
 
     <div id="settings-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="settings-error-text"></span></div>
@@ -8690,28 +8860,7 @@ function openUserSettings() {
   document.getElementById('modal-overlay').classList.add('active');
   marcarNavegacion();
   if (currentUser.photoPath) pintarImagen('settings-avatar', currentUser.photoPath, currentUser.name);
-  if (!currentUser.isWorker) mostrarUsoAlmacen();
-}
-
-/* Cuántos archivos tiene guardados la empresa. Da tranquilidad al cliente
-   saber que sus fotos y documentos están ahí y cuántos son. */
-async function mostrarUsoAlmacen() {
-  const el = document.getElementById('uso-almacen');
-  if (!el) return;
-  try {
-    const { data, error } = await getSupabase().rpc('uso_almacenamiento', { p_company_id: currentUser.companyId });
-    if (error || !data || !data[0]) return;
-    const u = data[0];
-    const total = Number(u.fotos_maquinas) + Number(u.fotos_trabajadores)
-                + Number(u.documentos) + Number(u.fotos_incidencias);
-    if (total === 0) { el.textContent = 'Todavía no has subido ninguna foto ni documento.'; return; }
-    const partes = [];
-    if (u.fotos_maquinas > 0) partes.push(`${u.fotos_maquinas} foto(s) de ${tm('s')}`);
-    if (u.fotos_trabajadores > 0) partes.push(`${u.fotos_trabajadores} foto(s) de personal`);
-    if (u.documentos > 0) partes.push(`${u.documentos} documento(s)`);
-    if (u.fotos_incidencias > 0) partes.push(`${u.fotos_incidencias} foto(s) de incidencias`);
-    el.innerHTML = `<i class="fa-solid fa-folder-open"></i> Tienes guardados: ${partes.join(', ')}.`;
-  } catch (e) {}
+  if (!esTrabajador) mostrarUsoAlmacen();
 }
 
 async function subirFotoPerfil(event) {
@@ -8742,6 +8891,25 @@ async function subirFotoPerfil(event) {
     alert('No se pudo subir la foto: ' + mensajeError(err));
     openUserSettings();
   }
+}
+
+async function mostrarUsoAlmacen() {
+  const el = document.getElementById('uso-almacen');
+  if (!el) return;
+  try {
+    const { data, error } = await getSupabase().rpc('uso_almacenamiento', { p_company_id: currentUser.companyId });
+    if (error || !data || !data[0]) return;
+    const u = data[0];
+    const total = Number(u.fotos_maquinas) + Number(u.fotos_trabajadores)
+                + Number(u.documentos) + Number(u.fotos_incidencias);
+    if (total === 0) { el.textContent = 'Todavía no has subido ninguna foto ni documento.'; return; }
+    const partes = [];
+    if (u.fotos_maquinas > 0) partes.push(`${u.fotos_maquinas} foto(s) de ${tm('s')}`);
+    if (u.fotos_trabajadores > 0) partes.push(`${u.fotos_trabajadores} foto(s) de personal`);
+    if (u.documentos > 0) partes.push(`${u.documentos} documento(s)`);
+    if (u.fotos_incidencias > 0) partes.push(`${u.fotos_incidencias} foto(s) de incidencias`);
+    el.innerHTML = `<i class="fa-solid fa-folder-open"></i> Tienes guardados: ${partes.join(', ')}.`;
+  } catch (e) {}
 }
 
 async function guardarAjustesCuenta() {
@@ -9114,7 +9282,11 @@ comprobarCookies();
 comprobarInstalacion();
 vigilarSesion();
 avisarSinConexion(navigator.onLine !== false);
-handleAuthRedirect().then(checkExistingSession); // procesa el enlace del correo (si lo hay) y luego decide qué pantalla mostrar
+handleAuthRedirect().then(async (motivo) => {
+  await checkExistingSession();
+  // Ya dentro, se le obliga a poner contraseña antes de nada
+  if (motivo === 'nueva-contrasena' && !currentUser.isWorker) mostrarModalNuevaContrasena();
+}); // procesa el enlace del correo (si lo hay) y luego decide qué pantalla mostrar
 
 document.addEventListener('click', (e) => {
   const navBtn = e.target.closest('.nav-item[data-tab]');
