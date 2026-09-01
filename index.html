@@ -105,7 +105,7 @@
     display: flex; flex-direction: column; padding: 16px 12px;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
-  .brand-icon { width: 32px; height: 32px; border-radius: 6px; background: var(--amber); display: flex; align-items: center; justify-content: center; color: var(--graphite); }
+  .brand-icon { width: 32px; height: 32px; border-radius: 6px; background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22 width=%22128%22 height=%22128%22 role=%22img%22 aria-label=%22Opertra%22%3E%3Cdefs%3E%3ClinearGradient id=%22op-placa%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23FBB114%22/%3E%3Cstop offset=%221%22 stop-color=%22%23EF9800%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 fill=%22%231C2126%22/%3E%3Crect x=%2226.5%22 y=%2226.5%22 width=%2275%22 height=%2275%22 rx=%2210%22 fill=%22url(%23op-placa)%22/%3E%3Cpath fill=%22%231C2126%22 fill-rule=%22evenodd%22 d=%22M55 39 h18 a16 16 0 0 1 16 16 v18 a16 16 0 0 1 -16 16 h-18 a16 16 0 0 1 -16 -16 v-18 a16 16 0 0 1 16 -16 z M58.5 51.5 h11 a7 7 0 0 1 7 7 v11 a7 7 0 0 1 -7 7 h-11 a7 7 0 0 1 -7 -7 v-11 a7 7 0 0 1 7 -7 z%22/%3E%3Cg transform=%22rotate(-45 64 64)%22 fill=%22url(%23op-placa)%22%3E%3Crect x=%2233%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3Crect x=%2277%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3C/g%3E%3Cg fill=%22%231C2126%22%3E%3Ccircle cx=%2234%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2234%22 cy=%2294%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2294%22 r=%222.8%22/%3E%3C/g%3E%3C/svg%3E"); background-size: contain; background-position: center; background-repeat: no-repeat; flex-shrink: 0; }
   .brand-name { color: white; font-size: 15px; font-weight: 600; line-height: 1; }
   .brand-sub { color: #7C838A; font-size: 10px; margin-top: 3px; }
 
@@ -617,7 +617,7 @@
 <div id="landing">
   <header class="land-nav">
     <div class="land-nav-brand">
-      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <span class="login-brand-name" style="color:white;">OPERTRA</span>
     </div>
     <div class="land-nav-links">
@@ -748,7 +748,7 @@
   </section>
 
   <footer class="land-footer">
-    <div class="land-footer-brand"><div class="brand-icon"><i class="fa-solid fa-truck"></i></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
+    <div class="land-footer-brand"><div class="brand-icon" role="img" aria-label="Opertra"></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
     <div class="land-footer-links">
       <button onclick="openLegal('aviso')">Aviso legal</button>
       <button onclick="openLegal('privacidad')">Privacidad</button>
@@ -764,7 +764,7 @@
   <div class="login-box">
     <button class="btn-ghost" id="auth-back-btn" style="margin-bottom:12px;" onclick="authGoBack()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
     <div class="login-brand">
-      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <span class="login-brand-name">OPERTRA</span>
     </div>
 
@@ -903,7 +903,7 @@
 <div id="trial-expired-screen" class="hidden">
   <div class="login-box" style="text-align:center;">
     <div class="login-brand" style="justify-content:center;">
-      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <span class="login-brand-name">OPERTRA</span>
     </div>
     <div style="width:56px;height:56px;border-radius:50%;background:var(--amber-bg,#FDF1DC);color:var(--amber-deep);display:flex;align-items:center;justify-content:center;font-size:22px;margin:8px auto 16px;">
@@ -958,7 +958,7 @@
 <div id="app" class="hidden">
   <nav id="sidebar">
     <div class="brand">
-      <div class="brand-icon"><i class="fa-solid fa-truck"></i></div>
+      <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <div>
         <div class="brand-name">OPERTRA</div>
         <div class="brand-sub">Gestión de flota</div>
@@ -1028,7 +1028,7 @@
 
 <div id="install-banner" class="hidden">
   <div id="install-banner-inner">
-    <div class="brand-icon" style="width:38px;height:38px;flex-shrink:0;"><i class="fa-solid fa-truck"></i></div>
+    <div class="brand-icon" style="width:38px;height:38px;" role="img" aria-label="Opertra"></div>
     <div style="flex:1;min-width:180px;">
       <div style="font-size:13.5px;font-weight:700;color:white;">Instala Opertra en tu móvil</div>
       <div id="install-texto" style="font-size:12px;color:#C7CBD0;margin-top:2px;line-height:1.45;"></div>
@@ -3025,13 +3025,17 @@ function imprimirQR(machineCode) {
       @page { size: A4; margin: 20mm; }
       body { font-family: system-ui, sans-serif; text-align: center; padding: 0; margin: 0; }
       .etiqueta { border: 3px solid #1C2126; border-radius: 12px; padding: 28px; max-width: 420px; margin: 40px auto; }
-      .marca { font-size: 13px; letter-spacing: 3px; color: #6B7280; font-weight: 700; }
+      .marca { font-size: 13px; letter-spacing: 3px; color: #6B7280; font-weight: 700;
+               display: flex; align-items: center; justify-content: center; gap: 8px; }
+      .marca::before { content: ""; width: 22px; height: 22px; flex-shrink: 0;
+               background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22 width=%22128%22 height=%22128%22 role=%22img%22 aria-label=%22Opertra%22%3E%3Cdefs%3E%3ClinearGradient id=%22op-placa%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23FBB114%22/%3E%3Cstop offset=%221%22 stop-color=%22%23EF9800%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 fill=%22%231C2126%22/%3E%3Crect x=%2226.5%22 y=%2226.5%22 width=%2275%22 height=%2275%22 rx=%2210%22 fill=%22url(%23op-placa)%22/%3E%3Cpath fill=%22%231C2126%22 fill-rule=%22evenodd%22 d=%22M55 39 h18 a16 16 0 0 1 16 16 v18 a16 16 0 0 1 -16 16 h-18 a16 16 0 0 1 -16 -16 v-18 a16 16 0 0 1 16 -16 z M58.5 51.5 h11 a7 7 0 0 1 7 7 v11 a7 7 0 0 1 -7 7 h-11 a7 7 0 0 1 -7 -7 v-11 a7 7 0 0 1 7 -7 z%22/%3E%3Cg transform=%22rotate(-45 64 64)%22 fill=%22url(%23op-placa)%22%3E%3Crect x=%2233%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3Crect x=%2277%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3C/g%3E%3Cg fill=%22%231C2126%22%3E%3Ccircle cx=%2234%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2234%22 cy=%2294%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2294%22 r=%222.8%22/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat; }
       .codigo { font-size: 40px; font-weight: 800; margin: 6px 0 2px; font-family: ui-monospace, monospace; }
       .tipo { font-size: 17px; color: #444; margin-bottom: 18px; }
       img { width: 260px; height: 260px; }
       .pie { font-size: 13px; color: #444; margin-top: 16px; line-height: 1.5; }
       .empresa { font-size: 12px; color: #888; margin-top: 14px; }
-      @media print { .nota { display: none; } }
+      @media print { .nota { display: none; }
+        .marca::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style></head><body>
       <div class="etiqueta">
         <div class="marca">OPERTRA</div>
@@ -3065,7 +3069,10 @@ function imprimirTodasLasEtiquetas() {
       body { font-family: system-ui, sans-serif; margin: 0; }
       .hoja { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
       .et { border: 2px solid #1C2126; border-radius: 10px; padding: 14px; text-align: center; break-inside: avoid; }
-      .marca { font-size: 10px; letter-spacing: 2px; color: #6B7280; font-weight: 700; }
+      .marca { font-size: 10px; letter-spacing: 2px; color: #6B7280; font-weight: 700;
+               display: flex; align-items: center; justify-content: center; gap: 6px; }
+      .marca::before { content: ""; width: 16px; height: 16px; flex-shrink: 0;
+               background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22 width=%22128%22 height=%22128%22 role=%22img%22 aria-label=%22Opertra%22%3E%3Cdefs%3E%3ClinearGradient id=%22op-placa%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23FBB114%22/%3E%3Cstop offset=%221%22 stop-color=%22%23EF9800%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 fill=%22%231C2126%22/%3E%3Crect x=%2226.5%22 y=%2226.5%22 width=%2275%22 height=%2275%22 rx=%2210%22 fill=%22url(%23op-placa)%22/%3E%3Cpath fill=%22%231C2126%22 fill-rule=%22evenodd%22 d=%22M55 39 h18 a16 16 0 0 1 16 16 v18 a16 16 0 0 1 -16 16 h-18 a16 16 0 0 1 -16 -16 v-18 a16 16 0 0 1 16 -16 z M58.5 51.5 h11 a7 7 0 0 1 7 7 v11 a7 7 0 0 1 -7 7 h-11 a7 7 0 0 1 -7 -7 v-11 a7 7 0 0 1 7 -7 z%22/%3E%3Cg transform=%22rotate(-45 64 64)%22 fill=%22url(%23op-placa)%22%3E%3Crect x=%2233%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3Crect x=%2277%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3C/g%3E%3Cg fill=%22%231C2126%22%3E%3Ccircle cx=%2234%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2234%22 cy=%2294%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2294%22 r=%222.8%22/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat; }
       .cod { font-size: 24px; font-weight: 800; margin: 3px 0; font-family: ui-monospace, monospace; }
       .tip { font-size: 12px; color: #444; margin-bottom: 8px; }
       .qr { display: flex; justify-content: center; }
