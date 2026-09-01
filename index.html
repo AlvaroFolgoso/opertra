@@ -305,7 +305,71 @@
   .textarea { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); font-family: 'Manrope', sans-serif; font-size: 14px; resize: vertical; min-height: 90px; }
   .success-banner { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 8px; background: var(--success-bg); color: var(--success); font-size: 13.5px; font-weight: 600; margin-bottom: 16px; }
 
-  .btn { border: none; border-radius: 6px; font-family: 'Manrope', sans-serif; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn {
+    border: none; border-radius: 6px; font-family: 'Manrope', sans-serif; font-weight: 500;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    position: relative; overflow: hidden; isolation: isolate;
+    transition: transform .09s ease, filter .14s ease, box-shadow .14s ease;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .btn:hover:not(:disabled) { filter: brightness(1.06); }
+  /* Se hunde al pulsar: es la señal de que ha llegado el toque */
+  .btn:active:not(:disabled) { transform: scale(.96); filter: brightness(.94); }
+  .btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .btn:disabled { cursor: default; opacity: .72; }
+
+  /* Lo mismo para el resto de cosas que se pulsan: sin respuesta visual,
+     en el movil se piensa que no ha llegado el toque y se pulsa otra vez. */
+  .btn-ghost, .nav-item, .drawer-close, .obra-card, .doc-row, .vac-row,
+  .land-nav-brand, .land-footer-brand, .brand, .auth-tab {
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    transition: transform .09s ease, background .14s ease, filter .14s ease;
+  }
+  .btn-ghost:active:not(:disabled), .nav-item:active, .drawer-close:active,
+  .auth-tab:active { transform: scale(.94); }
+  .obra-card:active, .doc-row:active, .vac-row:active {
+    transform: scale(.985); filter: brightness(.97);
+  }
+  .land-nav-brand:active, .land-footer-brand:active, .brand:active { transform: scale(.96); }
+
+  /* Mientras el boton trabaja, una barra recorre su parte de abajo: asi se
+     ve que sigue en marcha y no que se ha quedado colgado. */
+  .btn.trabajando::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 40%;
+    background: currentColor; opacity: .55; border-radius: 99px;
+    animation: barraBoton 1s ease-in-out infinite;
+  }
+  @keyframes barraBoton {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(360%); }
+  }
+
+  /* La onda que sale del punto donde se ha tocado */
+  .btn .onda {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    background: currentColor; opacity: .3; transform: scale(0);
+    animation: ondaBoton .5s ease-out forwards; z-index: -1;
+  }
+  @keyframes ondaBoton {
+    to { transform: scale(2.6); opacity: 0; }
+  }
+
+  /* Mientras está trabajando, se nota que no se ha quedado colgado */
+  .btn.trabajando { position: relative; }
+  .btn.trabajando::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 40%;
+    background: currentColor; opacity: .5; border-radius: 2px;
+    animation: barraBoton 1s ease-in-out infinite;
+  }
+  @keyframes barraBoton {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(360%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .btn:active { transition: none; transform: none; }
+    .btn .onda, .btn.trabajando::after { animation: none; display: none; }
+  }
   .btn-amber { background: var(--amber); color: var(--graphite); padding: 9px 15px; font-size: 14px; }
   .btn-dark { background: var(--graphite); color: white; padding: 10px 16px; font-size: 14px; }
   /* Acción secundaria: se lee como un botón, no como un enlace suelto.
@@ -680,7 +744,10 @@
     #mobile-nav .nav-item {
       flex: 1; flex-direction: column; gap: 4px; font-size: 10px; padding: 7px 1px;
       border-radius: 10px; position: relative; max-width: none; min-width: 0;
+      overflow: hidden; transition: transform .09s ease;
+      -webkit-tap-highlight-color: transparent; touch-action: manipulation;
     }
+    #mobile-nav .nav-item:active { transform: scale(.93); }
     #mobile-nav .nav-item span {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
@@ -8531,8 +8598,34 @@ function setButtonLoading(btnId, loading, textLoading, textNormal) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
   btn.disabled = loading;
+  btn.classList.toggle('trabajando', !!loading);
   btn.innerHTML = loading ? `<i class="fa-solid fa-spinner fa-spin"></i> ${textLoading}` : textNormal;
 }
+
+/* Una onda desde el punto exacto donde se ha tocado. Es la señal que la
+   gente espera de un móvil: sin ella, al no pasar nada visible durante
+   el segundo que tarda la respuesta, se vuelve a pulsar. */
+document.addEventListener('pointerdown', (e) => {
+  const btn = e.target && e.target.closest && e.target.closest('.btn, .nav-item, .btn-ghost');
+  if (!btn || btn.disabled) return;
+  try {
+    // Quien ha pedido en su sistema que no haya animaciones, no las tiene
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  } catch (err) {}
+  try {
+    const caja = btn.getBoundingClientRect();
+    const lado = Math.max(caja.width, caja.height);
+    const onda = document.createElement('span');
+    onda.className = 'onda';
+    onda.style.width = onda.style.height = lado + 'px';
+    onda.style.left = (e.clientX - caja.left - lado / 2) + 'px';
+    onda.style.top = (e.clientY - caja.top - lado / 2) + 'px';
+    // Si el botón no tiene posición propia, la onda se iría a otro sitio
+    if (getComputedStyle(btn).position === 'static') btn.style.position = 'relative';
+    btn.appendChild(onda);
+    setTimeout(() => { if (onda.parentNode) onda.remove(); }, 520);
+  } catch (err) { /* la animación nunca debe impedir que el botón funcione */ }
+}, { passive: true });
 
 /* La empresa y el perfil los crea AUTOMÁTICAMENTE la base de datos (disparador
    handle_new_user sobre auth.users) en el mismo instante del registro, usando
