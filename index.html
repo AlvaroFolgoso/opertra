@@ -105,6 +105,33 @@
     display: flex; flex-direction: column; padding: 16px 12px;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
+  /* ---- Avisos, confirmaciones y fichas de datos ---- */
+  #avisos { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+            z-index: 400; display: flex; flex-direction: column; gap: 10px;
+            width: min(440px, calc(100vw - 32px)); pointer-events: none; }
+  .aviso { pointer-events: auto; display: flex; align-items: flex-start; gap: 11px;
+           background: var(--graphite); color: #fff; border-radius: 10px;
+           padding: 13px 14px; font-size: 13.5px; line-height: 1.5;
+           box-shadow: 0 10px 30px rgba(0,0,0,.35); border-left: 4px solid var(--amber);
+           animation: avisoEntra .18s ease-out; }
+  .aviso.malo { border-left-color: var(--danger); }
+  .aviso.bien { border-left-color: #3FA14A; }
+  .aviso i.icono { margin-top: 2px; flex-shrink: 0; }
+  .aviso .texto { flex: 1; min-width: 0; white-space: pre-line; word-break: break-word; }
+  .aviso .cerrar { background: none; border: 0; color: #9AA5AF; cursor: pointer;
+                   font-size: 15px; padding: 0 2px; line-height: 1; }
+  .aviso .cerrar:hover { color: #fff; }
+  @keyframes avisoEntra { from { opacity: 0; transform: translateY(12px); } }
+  @media (prefers-reduced-motion: reduce) { .aviso { animation: none; } }
+
+  .dato-copiable { display: flex; align-items: center; justify-content: space-between;
+                   gap: 12px; background: var(--surface); border: 1px solid var(--border);
+                   border-radius: 10px; padding: 12px 14px; margin-top: 10px; }
+  .dato-copiable .valor { font-size: 21px; letter-spacing: 3px; color: var(--amber-deep);
+                          font-weight: 700; user-select: all; }
+  .dato-copiable .etiq { font-size: 11.5px; color: var(--steel); letter-spacing: .5px;
+                         text-transform: uppercase; }
+
   .brand-icon { width: 32px; height: 32px; border-radius: 6px; background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22 width=%22128%22 height=%22128%22 role=%22img%22 aria-label=%22Opertra%22%3E%3Cdefs%3E%3ClinearGradient id=%22op-placa%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23FBB114%22/%3E%3Cstop offset=%221%22 stop-color=%22%23EF9800%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 fill=%22%231C2126%22/%3E%3Crect x=%2226.5%22 y=%2226.5%22 width=%2275%22 height=%2275%22 rx=%2210%22 fill=%22url(%23op-placa)%22/%3E%3Cpath fill=%22%231C2126%22 fill-rule=%22evenodd%22 d=%22M55 39 h18 a16 16 0 0 1 16 16 v18 a16 16 0 0 1 -16 16 h-18 a16 16 0 0 1 -16 -16 v-18 a16 16 0 0 1 16 -16 z M58.5 51.5 h11 a7 7 0 0 1 7 7 v11 a7 7 0 0 1 -7 7 h-11 a7 7 0 0 1 -7 -7 v-11 a7 7 0 0 1 7 -7 z%22/%3E%3Cg transform=%22rotate(-45 64 64)%22 fill=%22url(%23op-placa)%22%3E%3Crect x=%2233%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3Crect x=%2277%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3C/g%3E%3Cg fill=%22%231C2126%22%3E%3Ccircle cx=%2234%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2234%22 cy=%2294%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2294%22 r=%222.8%22/%3E%3C/g%3E%3C/svg%3E"); background-size: contain; background-position: center; background-repeat: no-repeat; flex-shrink: 0; }
   .brand-name { color: white; font-size: 15px; font-weight: 600; line-height: 1; }
   .brand-sub { color: #7C838A; font-size: 10px; margin-top: 3px; }
@@ -1026,6 +1053,8 @@
   <div id="add-machine-modal"></div>
 </div>
 
+<div id="avisos" aria-live="polite" aria-atomic="false"></div>
+
 <div id="install-banner" class="hidden">
   <div id="install-banner-inner">
     <div class="brand-icon" style="width:38px;height:38px;" role="img" aria-label="Opertra"></div>
@@ -1248,6 +1277,136 @@ function iniciales(nombre) {
   const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
   if (partes.length === 0) return '?';
   return partes.map(p => p[0]).join('').slice(0,2).toUpperCase();
+}
+
+/* ======================================================================
+   AVISOS, CONFIRMACIONES Y FICHAS DE DATOS
+   Sustituyen a las ventanas grises del navegador: esas cortan la pantalla,
+   no dejan copiar nada, no llevan la marca y en el móvil salen con el
+   nombre del dominio encima, que parece un error del navegador.
+   ====================================================================== */
+
+/* Mensaje que aparece abajo y se va solo. No bloquea: el trabajador puede
+   seguir usando la app mientras lo lee. */
+function aviso(texto, tipo) {
+  const caja = document.getElementById('avisos');
+  if (!caja) return;
+  const t = String(texto == null ? '' : texto);
+
+  // Si no se dice de qué tipo es, se deduce del propio mensaje
+  let clase = tipo;
+  if (!clase) {
+    clase = /^(no se pud|no se ha|no hay|no se pudieron|no puede|error)/i.test(t.trim())
+      ? 'malo' : 'info';
+  }
+  const iconos = { malo: 'fa-circle-exclamation', bien: 'fa-circle-check', info: 'fa-circle-info' };
+
+  const el = document.createElement('div');
+  el.className = 'aviso ' + clase;
+  el.setAttribute('role', clase === 'malo' ? 'alert' : 'status');
+  el.innerHTML = `<i class="fa-solid ${iconos[clase] || iconos.info} icono"></i>`
+    + `<div class="texto"></div>`
+    + `<button class="cerrar" aria-label="Cerrar aviso"><i class="fa-solid fa-xmark"></i></button>`;
+  el.querySelector('.texto').textContent = t;   // textContent: nunca se interpreta como HTML
+
+  const quitar = () => { if (el.parentNode) el.remove(); };
+  el.querySelector('.cerrar').onclick = quitar;
+  caja.appendChild(el);
+
+  // Los errores se quedan más tiempo: hay que poder leerlos enteros
+  const espera = clase === 'malo' ? 9000 : 5000;
+  setTimeout(quitar, espera + Math.min(t.length * 25, 6000));
+
+  // No se amontonan más de cuatro
+  while (caja.children.length > 4) caja.firstElementChild.remove();
+}
+
+/* Ventana propia de sí/no. Devuelve una promesa: hay que usar await. */
+function confirmar(opciones) {
+  const o = typeof opciones === 'string' ? { texto: opciones } : (opciones || {});
+  return new Promise((resolver) => {
+    const cont = document.getElementById('add-machine-modal');
+    const previo = cont.innerHTML;
+    const cerrar = (respuesta) => {
+      cont.innerHTML = previo;                       // se devuelve lo que hubiera
+      if (!previo.trim()) closeAddMachineModal();
+      document.removeEventListener('keydown', teclas);
+      resolver(respuesta);
+    };
+    const teclas = (e) => { if (e.key === 'Escape') cerrar(false); };
+
+    cont.innerHTML = `
+      <div class="modal-top">
+        <span class="f-display" style="font-size:18px;">${esc(o.titulo || '¿Seguro?')}</span>
+      </div>
+      <div style="font-size:13.5px;color:var(--steel);margin-top:8px;line-height:1.6;white-space:pre-line;"
+           id="conf-texto"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="conf-no">${esc(o.cancelar || 'Cancelar')}</button>
+        <button class="btn ${o.peligro ? 'btn-outline' : 'btn-amber'}" id="conf-si"
+                ${o.peligro ? 'style="color:var(--danger);border-color:var(--danger-bg);"' : ''}>${esc(o.aceptar || 'Sí, continuar')}</button>
+      </div>`;
+    cont.querySelector('#conf-texto').textContent = o.texto || '';
+    document.getElementById('modal-overlay').classList.add('active');
+    document.getElementById('conf-no').onclick = () => cerrar(false);
+    document.getElementById('conf-si').onclick = () => cerrar(true);
+    document.addEventListener('keydown', teclas);
+    setTimeout(() => { const b = document.getElementById('conf-si'); if (b) b.focus(); }, 30);
+  });
+}
+
+/* Ficha con datos que hay que apuntar (un PIN, un código de acceso).
+   Se pueden copiar de un toque, que es lo que se hace de verdad. */
+function mostrarDatos(o) {
+  const datos = (o.datos || []).filter(d => d && d.valor);
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">${esc(o.titulo || '')}</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    ${o.texto ? `<div style="font-size:13.5px;color:var(--steel);margin-top:6px;line-height:1.6;">${esc(o.texto)}</div>` : ''}
+    ${datos.map((d, i) => `
+      <div class="dato-copiable">
+        <div>
+          <div class="etiq">${esc(d.etiqueta)}</div>
+          <div class="valor f-mono" id="dato-${i}">${esc(d.valor)}</div>
+        </div>
+        <button class="btn btn-outline" style="font-size:12.5px;white-space:nowrap;"
+                onclick="copiarDato(${i}, this)"><i class="fa-solid fa-copy"></i> Copiar</button>
+      </div>`).join('')}
+    ${o.pie ? `<div class="form-hint" style="margin-top:14px;">
+      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i><span>${esc(o.pie)}</span></div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-amber" onclick="closeAddMachineModal()">Entendido</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('active');
+  marcarNavegacion();
+}
+
+async function copiarDato(i, boton) {
+  const el = document.getElementById('dato-' + i);
+  if (!el) return;
+  const texto = el.textContent.trim();
+  let copiado = false;
+  try {
+    // El portapapeles solo funciona en https; si no, se selecciona el texto
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(texto);
+      copiado = true;
+    }
+  } catch (e) { copiado = false; }
+
+  if (copiado) {
+    const antes = boton.innerHTML;
+    boton.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+    setTimeout(() => { boton.innerHTML = antes; }, 1800);
+  } else {
+    const sel = window.getSelection();
+    const rango = document.createRange();
+    rango.selectNodeContents(el);
+    sel.removeAllRanges(); sel.addRange(rango);
+    aviso('Tu navegador no deja copiar solo. Ya está seleccionado: pulsa Ctrl+C.');
+  }
 }
 
 function esc(txt) {
@@ -2604,7 +2763,7 @@ async function todasLasFilas(tabla, orden) {
 
 async function exportarTodo() {
   if (currentUser.isWorker) return;
-  if (!confirm('Se va a descargar un archivo con TODOS los datos de tu empresa: clientes, trabajadores, ' + t('p') + ', ' + tm('p') + ', fichajes, incidencias y cobros.\n\nPuede tardar unos segundos si hay mucho histórico. ¿Continuar?')) return;
+  if (!await confirmar('Se va a descargar un archivo con TODOS los datos de tu empresa: clientes, trabajadores, ' + t('p') + ', ' + tm('p') + ', fichajes, incidencias y cobros.\n\nPuede tardar unos segundos si hay mucho histórico. ¿Continuar?')) return;
 
   const btn = document.getElementById('btn-exportar-todo');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Preparando...'; }
@@ -2742,7 +2901,7 @@ async function exportarTodo() {
 
     registrarEnHistorial('exportación', 'Datos', 'Copia completa', `${hojas.reduce((s,h)=>s+h.filas.length,0)} registros`);
   } catch (err) {
-    alert('No se pudo exportar: ' + mensajeError(err));
+    aviso('No se pudo exportar: ' + mensajeError(err));
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-download"></i> Descargar todos mis datos'; }
   }
@@ -2910,7 +3069,7 @@ async function crearUsuario() {
       if (errCorreo) correoEnviado = false;
     } catch (e) { correoEnviado = false; }
 
-    alert(correoEnviado
+    aviso(correoEnviado
       ? `Acceso creado para ${name}.\n\nLe hemos enviado un correo a ${email} para que cree su contraseña.\n\nDile que mire también la carpeta de correo no deseado.`
       : `Acceso creado para ${name}, pero no se ha podido enviar el correo.\n\nDile que entre en Opertra, escriba ${email} y pulse "¿Has olvidado tu contraseña?".`);
     openUsuariosModal();
@@ -2933,20 +3092,26 @@ async function expulsarPorRevocacion() {
   expulsando = true;
   try { await getSupabase().auth.signOut(); } catch (e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch (e) {}
-  alert('Tu acceso a esta empresa acaba de ser revocado.\n\nHabla con el administrador si crees que es un error.');
-  location.reload();
+  mostrarDatos({
+    titulo: 'Tu acceso ha sido revocado',
+    texto: 'El administrador de tu empresa acaba de retirarte el acceso a Opertra. '
+         + 'Habla con él si crees que es un error.',
+    datos: [],
+  });
+  // Se le deja leerlo antes de devolverle a la pantalla de entrada
+  setTimeout(() => location.reload(), 6000);
 }
 
 async function revocarAcceso(userId, nombre) {
   if (!esAdministrador()) return;
-  if (!confirm(`¿Revocar el acceso de ${esc(nombre)}?\n\nNo podrá entrar hasta que lo restaures. Sus datos y su actividad se conservan.`)) return;
+  if (!await confirmar({ peligro: true, titulo: 'Revocar acceso', aceptar: 'Sí, revocar', texto: `¿Revocar el acceso de ${esc(nombre)}?\n\nNo podrá entrar hasta que lo restaures. Sus datos y su actividad se conservan.` })) return;
   try {
     const { error } = await getSupabase().from('profiles').update({ active: false }).eq('id', userId);
     if (error) throw error;
     registrarEnHistorial('revocación de acceso', 'Usuario', nombre, '');
     pintarListaUsuarios();
   } catch (err) {
-    alert('No se pudo revocar: ' + mensajeError(err));
+    aviso('No se pudo revocar: ' + mensajeError(err));
   }
 }
 
@@ -2957,7 +3122,7 @@ async function restaurarAcceso(userId) {
     if (error) throw error;
     pintarListaUsuarios();
   } catch (err) {
-    alert('No se pudo restaurar: ' + mensajeError(err));
+    aviso('No se pudo restaurar: ' + mensajeError(err));
   }
 }
 
@@ -3013,10 +3178,10 @@ function imprimirQR(machineCode) {
   const lienzo = document.getElementById('qr-render-' + m.id);
   const img = lienzo ? lienzo.querySelector('canvas, img') : null;
   const datos = img && img.toDataURL ? img.toDataURL() : (img ? img.src : null);
-  if (!datos) { alert('El código QR aún se está generando. Espera un momento e inténtalo de nuevo.'); return; }
+  if (!datos) { aviso('El código QR aún se está generando. Espera un momento e inténtalo de nuevo.'); return; }
 
   const v = window.open('', '_blank', 'width=800,height=1000');
-  if (!v) { alert('El navegador ha bloqueado la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
+  if (!v) { aviso('El navegador ha bloqueado la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
 
   v.document.write(`
     <!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
@@ -3054,11 +3219,11 @@ function imprimirQR(machineCode) {
 /* Imprimir todas las etiquetas de golpe: montar una flota de 40 máquinas
    una a una sería insufrible. */
 function imprimirTodasLasEtiquetas() {
-  if (machines.length === 0) { alert('Todavía no hay ' + tm('p') + '.'); return; }
-  if (!window.QRCode) { alert('El generador de códigos aún se está cargando. Espera un momento.'); return; }
+  if (machines.length === 0) { aviso('Todavía no hay ' + tm('p') + '.'); return; }
+  if (!window.QRCode) { aviso('El generador de códigos aún se está cargando. Espera un momento.'); return; }
 
   const v = window.open('', '_blank', 'width=900,height=1000');
-  if (!v) { alert('El navegador ha bloqueado la ventana. Permite las ventanas emergentes para este sitio.'); return; }
+  if (!v) { aviso('El navegador ha bloqueado la ventana. Permite las ventanas emergentes para este sitio.'); return; }
 
   v.document.write(`
     <!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
@@ -3107,7 +3272,7 @@ function imprimirTodasLasEtiquetas() {
    una imprenta o rotulista y que hagan vinilo o plástico duro. */
 function exportarCodigosQR() {
   if (!esAdministrador()) return;
-  if (machines.length === 0) { alert('Todavía no hay ' + tm('p') + '.'); return; }
+  if (machines.length === 0) { aviso('Todavía no hay ' + tm('p') + '.'); return; }
 
   const esc2 = (c) => `"${String(c === null || c === undefined ? '' : c).replace(/"/g,'""')}"`;
   const cab = ['Código ' + tm('s'),'Tipo','Modelo','Matrícula','Contenido del QR'];
@@ -3122,7 +3287,7 @@ function exportarCodigosQR() {
   a.click();
   URL.revokeObjectURL(url);
 
-  alert('Archivo descargado.\n\nEnvíaselo a tu rotulista o imprenta: la columna "Contenido del QR" es lo que debe codificar cada pegatina, y el "Código máquina" lo que debe ir escrito debajo.\n\nRecomendación: vinilo laminado o plástico duro, mínimo 8x8 cm.');
+  aviso('Archivo descargado. Mándaselo a tu rotulista: la columna "Contenido del QR" es lo que debe codificar cada pegatina.', 'bien');
 }
 
 /* ======================================================================
@@ -3195,7 +3360,7 @@ async function copiarMensajeAcceso() {
     }
   } catch (e) {
     campo.select();
-    alert('Selecciona el texto y cópialo con Ctrl+C.');
+    aviso('Selecciona el texto y cópialo con Ctrl+C.');
   }
 }
 
@@ -3290,7 +3455,7 @@ async function guardarMaquina(code) {
     const { data: actual } = await getSupabase().from('machines')
       .select('updated_at').eq('id', m.dbId).single();
     if (actual && m.updatedAt && actual.updated_at && actual.updated_at !== m.updatedAt) {
-      const seguir = confirm(
+      const seguir = await confirmar(
         'Otra persona ha modificado est' + tm('g') + ' ' + tm('s') + ' mientras la editabas.\n\n' +
         'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
       if (!seguir) {
@@ -3329,7 +3494,7 @@ async function borrarMaquina(code) {
   if (!esAdministrador()) return;
   const m = machines.find(x => x.id === code);
   if (!m) return;
-  if (!confirm(`¿Eliminar ${esc(m.id)} (${esc(m.type)})?\n\nSus documentos y su foto se borrarán también. Los fichajes hechos con ella se conservan.`)) return;
+  if (!await confirmar({ peligro: true, titulo: 'Eliminar', aceptar: 'Sí, eliminar', texto: `¿Eliminar ${esc(m.id)} (${esc(m.type)})?\n\nSus documentos y su foto se borrarán también. Los fichajes hechos con ella se conservan.` })) return;
   try {
     // Los documentos de una maquina no se borran solos: la columna owner_id es
     // generica (vale para maquinas y trabajadores) y no tiene regla de borrado
@@ -3348,7 +3513,7 @@ async function borrarMaquina(code) {
     closeAddMachineModal(); closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo eliminar: ' + mensajeError(err));
+    aviso('No se pudo eliminar: ' + mensajeError(err));
   }
 }
 
@@ -3432,7 +3597,7 @@ async function guardarTrabajador(code) {
     const { data: actual } = await getSupabase().from('workers')
       .select('updated_at').eq('id', w.dbId).single();
     if (actual && w.updatedAt && actual.updated_at && actual.updated_at !== w.updatedAt) {
-      const seguir = confirm(
+      const seguir = await confirmar(
         'Otra persona ha modificado esta ficha mientras la editabas.\n\n' +
         'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
       if (!seguir) {
@@ -3467,7 +3632,7 @@ async function darDeBajaTrabajador(code) {
   if (!esAdministrador()) return;
   const w = workers.find(x => x.id === code);
   if (!w) return;
-  if (!confirm(`¿Dar de baja a ${esc(w.name)}?\n\nDejará de poder fichar y no aparecerá en las listas, pero sus horas y su historial se conservan.`)) return;
+  if (!await confirmar({ peligro: true, titulo: 'Dar de baja', aceptar: 'Sí, dar de baja', texto: `¿Dar de baja a ${esc(w.name)}?\n\nDejará de poder fichar y no aparecerá en las listas, pero sus horas y su historial se conservan.` })) return;
   try {
     const { error } = await getSupabase().from('workers')
       .update({ active: false, machine_id: null }).eq('id', w.dbId);
@@ -3479,7 +3644,7 @@ async function darDeBajaTrabajador(code) {
     closeAddMachineModal(); closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo dar de baja: ' + mensajeError(err));
+    aviso('No se pudo dar de baja: ' + mensajeError(err));
   }
 }
 
@@ -3581,7 +3746,7 @@ async function guardarObra(code) {
     const { data: actual } = await getSupabase().from('projects')
       .select('updated_at').eq('id', p.dbId).single();
     if (actual && p.updatedAt && actual.updated_at && actual.updated_at !== p.updatedAt) {
-      const seguir = confirm(
+      const seguir = await confirmar(
         'Otra persona ha modificado esta ' + t('s') + ' mientras la editabas.\n\n' +
         'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
       if (!seguir) {
@@ -3628,7 +3793,7 @@ async function borrarObra(code) {
   const aviso = conFichajes
     ? `"${esc(p.name)}" tiene fichajes registrados. Si la eliminas, esos fichajes se quedarán sin ${t('s')} asignada, pero las horas NO se pierden.\n\n¿Seguro que quieres eliminarla?`
     : `¿Eliminar "${esc(p.name)}"? Esta acción no se puede deshacer.`;
-  if (!confirm(aviso)) return;
+  if (!await confirmar(aviso)) return;
   try {
     const { error } = await getSupabase().from('projects').delete().eq('id', p.dbId);
     if (error) throw error;
@@ -3644,7 +3809,7 @@ async function borrarObra(code) {
     closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo eliminar: ' + mensajeError(err));
+    aviso('No se pudo eliminar: ' + mensajeError(err));
   }
 }
 
@@ -3769,7 +3934,7 @@ async function assignWorkerToObra(projId) {
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo asignar: ' + mensajeError(err));
+    aviso('No se pudo asignar: ' + mensajeError(err));
   }
 }
 async function assignMachineToObra(projId) {
@@ -3787,7 +3952,7 @@ async function assignMachineToObra(projId) {
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo asignar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
+    aviso('No se pudo asignar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
   }
 }
 
@@ -3829,10 +3994,10 @@ async function submitAddObra() {
   const errObra = validarTexto(name, 'El nombre', LIMITES.nombre, true)
     || validarFecha(start, 'la fecha de inicio', { obligatoria: true })
     || validarFecha(end, 'la fecha de fin', { obligatoria: true });
-  if (errObra) { alert(errObra); return; }
-  if (end < start) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
+  if (errObra) { aviso(errObra); return; }
+  if (end < start) { aviso('La fecha de fin no puede ser anterior a la de inicio.'); return; }
   const elegido = await resolverClienteElegido('no-client');
-  if (!elegido.ok) { alert(elegido.mensaje); return; }
+  if (!elegido.ok) { aviso(elegido.mensaje); return; }
 
   const btn = event ? event.target.closest('button') : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...'; }
@@ -3849,7 +4014,7 @@ async function submitAddObra() {
     closeAddMachineModal();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo guardar la ' + t('s') + ': ' + mensajeError(err));
+    aviso('No se pudo guardar la ' + t('s') + ': ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar ' + t('s'); }
   } finally {
     terminarOperacion('crear-obra');
@@ -3887,7 +4052,7 @@ function pedirHorasPersonalizadas() {
   const v = prompt('¿Cuántas horas tienes previsto trabajar?\n\nPuedes poner decimales (ej. 7.5)', horasPrevistas || 8);
   if (v === null) return;
   const n = parseFloat(String(v).replace(',', '.'));
-  if (isNaN(n) || n <= 0 || n > 16) { alert('Pon un número entre 0 y 16.'); return; }
+  if (isNaN(n) || n <= 0 || n > 16) { aviso('Pon un número entre 0 y 16.'); return; }
   horasPrevistas = n;
   renderFichaje();
 }
@@ -4070,7 +4235,7 @@ window.addEventListener('offline', () => avisarSinConexion(false));
 /* Comprueba antes de guardar: mejor avisar que fallar a medias */
 function hayConexion() {
   if (navigator.onLine === false) {
-    alert('No hay conexión a internet.\n\nEspera a recuperarla e inténtalo de nuevo: los cambios no se guardarían.');
+    aviso('No hay conexión a internet.\n\nEspera a recuperarla e inténtalo de nuevo: los cambios no se guardarían.');
     return false;
   }
   return true;
@@ -4319,9 +4484,17 @@ async function darmeDeAltaComoTrabajador() {
       photoPath: null, documents: [], vacations: [],
     });
     pintarPestanaActual();
-    alert(`Listo. Ya puedes fichar.\n\nTu PIN es ${pin} — te sirve para entrar también desde el móvil con el código ${currentUser.accessCode}.`);
+    mostrarDatos({
+      titulo: 'Ya puedes fichar',
+      texto: 'Estos son tus datos para entrar desde el móvil. Cópialos ahora si quieres.',
+      datos: [
+        { etiqueta: 'Tu PIN', valor: pin },
+        { etiqueta: 'Código de tu empresa', valor: currentUser.accessCode },
+      ],
+      pie: 'El PIN lo tienes siempre en tu ficha de trabajador, no hace falta que lo memorices.',
+    });
   } catch (err) {
-    alert('No se pudo crear tu ficha: ' + mensajeError(err));
+    aviso('No se pudo crear tu ficha: ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Darme de alta'; }
   } finally {
     terminarOperacion('autoalta');
@@ -4501,7 +4674,7 @@ async function ficharAhora() {
     // hace menos de 2 minutos, y avisa de que la entrada ya estaba registrada.
     if (accion === 'ya_fichado') {
       const desde = data[0].hora ? horaDe(data[0].hora) : '';
-      alert('Ya tenías la entrada registrada' + (desde ? ' a las ' + desde : '') + '.\n\n'
+      aviso('Ya tenías la entrada registrada' + (desde ? ' a las ' + desde : '') + '.\n\n'
           + 'No hace falta volver a fichar. Cuando termines la jornada, ficha la salida.');
       if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
       await cargarFichajes();
@@ -4522,7 +4695,7 @@ async function ficharAhora() {
     arrancarContador();
     renderDashboard();
   } catch (err) {
-    alert('No se pudo registrar el fichaje: ' + mensajeError(err));
+    aviso('No se pudo registrar el fichaje: ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
   } finally {
     fichajeCargando = false;
@@ -4898,7 +5071,7 @@ async function cerrarOlvidadas() {
   if (!esAdministrador()) return;
   const olvidadas = jornadasOlvidadas();
   if (olvidadas.length === 0) return;
-  if (!confirm(`Se van a cerrar ${olvidadas.length} jornada(s) que llevan más de 14 horas abiertas.\n\nQuedarán marcadas como "cerradas automáticamente" para que las revises y pongas la hora real.\n\n¿Continuar?`)) return;
+  if (!await confirmar(`Se van a cerrar ${olvidadas.length} jornada(s) que llevan más de 14 horas abiertas.\n\nQuedarán marcadas como "cerradas automáticamente" para que las revises y pongas la hora real.\n\n¿Continuar?`)) return;
   try {
     const { data, error } = await getSupabase().rpc('cerrar_jornadas_olvidadas', {
       p_company_id: currentUser.companyId, p_horas: 16,
@@ -4908,7 +5081,7 @@ async function cerrarOlvidadas() {
     await cargarFichajes();
     renderFichaje();
   } catch (err) {
-    alert('No se pudieron cerrar: ' + mensajeError(err));
+    aviso('No se pudieron cerrar: ' + mensajeError(err));
   }
 }
 
@@ -4959,7 +5132,7 @@ async function aplicarFiltroFichaje() {
     // cuando faltan fichajes es peligroso en un registro de jornada.
     filtroTruncado = resultadosFiltro.length >= 2000;
   } catch (e) {
-    alert('No se pudieron cargar los fichajes: ' + mensajeError(e));
+    aviso('No se pudieron cargar los fichajes: ' + mensajeError(e));
     resultadosFiltro = [];
   } finally {
     filtrando = false;
@@ -5114,7 +5287,7 @@ function renderRegistroHoras() {
 /* Exportar a CSV — se abre directamente en Excel */
 function exportarFichajes() {
   const lista = fichajesFiltrados();
-  if (lista.length === 0) { alert('No hay fichajes que exportar con estos filtros.'); return; }
+  if (lista.length === 0) { aviso('No hay fichajes que exportar con estos filtros.'); return; }
   const cab = ['Trabajador', t('S'), tm('S'), 'Fecha', 'Entrada', 'Salida', 'Horas', 'Termina día siguiente', 'Corregido por', 'Motivo'];
   const filas = lista.map(l => [
     l.worker, l.project, l.machine, l.date, l.checkIn, l.checkOut,
@@ -5287,7 +5460,7 @@ function initFleetMap() {
    recargan los datos, en vez de reventar o de escribir sobre algo que ya no
    está. Devuelve undefined para poder usarse como `return yaNoExiste(...)`. */
 function yaNoExiste(queEra) {
-  alert(queEra + ' ya no existe: lo ha eliminado o modificado otra persona.\n\nSe van a actualizar los datos.');
+  aviso(queEra + ' ya no existe: lo ha eliminado o modificado otra persona.\n\nSe van a actualizar los datos.');
   closeAddMachineModal();
   closeDrawer();
   loadCompanyData();
@@ -5588,7 +5761,7 @@ async function submitAddMachine() {
     closeAddMachineModal();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo guardar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
+    aviso('No se pudo guardar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar ' + tm('s'); }
   } finally {
     terminarOperacion('crear-maquina');
@@ -5619,7 +5792,7 @@ async function reasignarOperario(machineCode) {
     openDrawer(machineCode);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo reasignar: ' + mensajeError(err));
+    aviso('No se pudo reasignar: ' + mensajeError(err));
   }
 }
 
@@ -5740,7 +5913,7 @@ async function subirFotoMaquina(machineCode, event) {
     openDrawer(machineCode);
     renderMaquinaria();
   } catch (err) {
-    alert('No se pudo subir la foto: ' + mensajeError(err));
+    aviso('No se pudo subir la foto: ' + mensajeError(err));
     openDrawer(machineCode);
   }
 }
@@ -5763,7 +5936,7 @@ async function subirFotoTrabajador(workerCode, event) {
     openWorkerDrawer(workerCode);
     renderTrabajadores();
   } catch (err) {
-    alert('No se pudo subir la foto: ' + mensajeError(err));
+    aviso('No se pudo subir la foto: ' + mensajeError(err));
     openWorkerDrawer(workerCode);
   }
 }
@@ -5912,7 +6085,7 @@ async function recargarDocumentos() {
 async function abrirDocumento(ruta) {
   const url = await urlArchivo(ruta);
   if (url) window.open(url, '_blank');
-  else alert('No se pudo abrir el archivo.');
+  else aviso('No se pudo abrir el archivo.');
 }
 
 /* ============ VINCULAR DISPOSITIVO GPS ============ */
@@ -5990,7 +6163,7 @@ async function desvincularDispositivo(machineCode) {
   if (!esAdministrador()) return;
   const m = machines.find(x => x.id === machineCode);
   if (!m) return yaNoExiste('Est' + tm('g') + ' ' + tm('s'));
-  if (!confirm(`¿Desvincular el dispositivo GPS de ${esc(m.id)}? Dejará de mostrarse en el mapa.`)) return;
+  if (!await confirmar({ peligro: true, titulo: 'Desvincular GPS', aceptar: 'Sí, desvincular', texto: `¿Desvincular el dispositivo GPS de ${esc(m.id)}? Dejará de mostrarse en el mapa.` })) return;
   try {
     const { error } = await getSupabase().from('machines').update({
       device_id: null, device_model: null, device_linked: false,
@@ -6002,7 +6175,7 @@ async function desvincularDispositivo(machineCode) {
     openDrawer(machineCode);
     renderMaquinaria();
   } catch (err) {
-    alert('No se pudo desvincular: ' + mensajeError(err));
+    aviso('No se pudo desvincular: ' + mensajeError(err));
   }
 }
 
@@ -6042,7 +6215,7 @@ async function openAddWorkerModal() {
   if (!esAdministrador()) return;
   const pinLibre = await pedirPinLibre();
   if (!pinLibre) {
-    alert('No se ha podido generar un PIN libre. Puede que la empresa tenga demasiados trabajadores con PIN de 4 dígitos.\n\nAsigna uno manualmente al crear el trabajador.');
+    aviso('No se ha podido generar un PIN libre. Puede que la empresa tenga demasiados trabajadores con PIN de 4 dígitos.\n\nAsigna uno manualmente al crear el trabajador.');
   }
   document.getElementById('add-machine-modal').innerHTML = `
     <div class="modal-top">
@@ -6478,7 +6651,7 @@ async function reasignarMaquina(workerCode) {
     openWorkerDrawer(workerCode);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo reasignar: ' + mensajeError(err));
+    aviso('No se pudo reasignar: ' + mensajeError(err));
   }
 }
 
@@ -6512,10 +6685,10 @@ async function addVacation(workerId) {
   if (!start || !end) return;
   const errV = validarFecha(start, 'la fecha de inicio', { obligatoria: true })
     || validarFecha(end, 'la fecha de fin', { obligatoria: true });
-  if (errV) { alert(errV); return; }
-  if (end < start) { alert('La fecha de fin no puede ser anterior a la de inicio.'); return; }
+  if (errV) { aviso(errV); return; }
+  if (end < start) { aviso('La fecha de fin no puede ser anterior a la de inicio.'); return; }
   if (vacacionesSolapan(w, start, end)) {
-    alert('Ese periodo se solapa con otras vacaciones ya registradas de ' + w.name + '.');
+    aviso('Ese periodo se solapa con otras vacaciones ya registradas de ' + w.name + '.');
     return;
   }
   const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
@@ -6531,7 +6704,7 @@ async function addVacation(workerId) {
     document.getElementById('vac-end').value = '';
     renderTrabajadores();
   } catch (err) {
-    alert('No se pudieron guardar las vacaciones: ' + mensajeError(err));
+    aviso('No se pudieron guardar las vacaciones: ' + mensajeError(err));
   }
 }
 
@@ -6547,7 +6720,7 @@ async function deleteVacation(workerId, vacId) {
     document.getElementById('vac-list').innerHTML = renderVacList(w);
     renderTrabajadores();
   } catch (err) {
-    alert('No se pudieron borrar las vacaciones: ' + mensajeError(err));
+    aviso('No se pudieron borrar las vacaciones: ' + mensajeError(err));
   }
 }
 
@@ -6661,7 +6834,7 @@ function handleIncPhoto(event) {
 
 async function viewIncidentPhoto(ruta) {
   const url = await urlArchivo(ruta);
-  if (!url) { alert('No se pudo abrir la foto.'); return; }
+  if (!url) { aviso('No se pudo abrir la foto.'); return; }
   document.getElementById('legal-modal').innerHTML = `
     <div class="modal-top"><h2 style="font-size:15px;">Foto de la incidencia</h2><button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button></div>
     <img src="${url}" alt="Foto de la incidencia" style="width:100%;border-radius:8px;margin-top:10px;">
@@ -6825,7 +6998,7 @@ async function resolveIncident(dbId) {
     await cargarIncidencias();
     pintarPestanaActual(); renderNav();
   } catch (err) {
-    alert('No se pudo marcar como resuelta: ' + mensajeError(err));
+    aviso('No se pudo marcar como resuelta: ' + mensajeError(err));
     setButtonLoading('res-submit', false, '', '<i class="fa-solid fa-check"></i> Sí, está resuelta');
   }
 }
@@ -6835,7 +7008,7 @@ async function resolveIncident(dbId) {
 async function borrarIncidencia(dbId) {
   const inc = incidents.find(i => i.dbId === dbId);
   if (!inc || !esAdministrador()) return;
-  if (!confirm(`¿Borrar definitivamente "${inc.title}"?\n\nSe eliminará también su foto. Esta acción no se puede deshacer.`)) return;
+  if (!await confirmar({ peligro: true, titulo: 'Borrar', aceptar: 'Sí, borrar', texto: `¿Borrar definitivamente "${inc.title}"?\n\nSe eliminará también su foto. Esta acción no se puede deshacer.` })) return;
   try {
     const { error } = await getSupabase().from('incidents').delete().eq('id', dbId);
     if (error) throw error;
@@ -6844,7 +7017,7 @@ async function borrarIncidencia(dbId) {
     incidents = incidents.filter(i => i.dbId !== dbId);
     renderAvisos(); renderNav();
   } catch (err) {
-    alert('No se pudo borrar: ' + mensajeError(err));
+    aviso('No se pudo borrar: ' + mensajeError(err));
   }
 }
 
@@ -7270,7 +7443,7 @@ function openEditClientModal(clientId) {
 
 /* Lee y valida el formulario. Devuelve null si algo está mal (y lo enseña
    en pantalla, nunca en silencio). */
-function leerFormularioCliente(excluirId) {
+async function leerFormularioCliente(excluirId) {
   const v = (id) => (document.getElementById(id) || { value: '' }).value.trim();
   const datos = {
     name: v('cl-name'), taxId: v('cl-tax').toUpperCase(), contactName: v('cl-contact'),
@@ -7306,7 +7479,7 @@ function leerFormularioCliente(excluirId) {
   const clave = claveCliente(datos.name);
   const igual = clave && clients.find(c => c.dbId !== excluirId && claveCliente(c.name) === clave);
   if (igual) {
-    const seguir = confirm(
+    const seguir = await confirmar(
       'Ya tienes un cliente llamado "' + igual.name + '", que se parece mucho a este.\n\n' +
       'Si son la misma empresa, cancela y usa el que ya existe: así no se te duplican las ' + t('p') + ' ni los cobros.\n\n' +
       '¿Guardarlo de todas formas como cliente distinto?');
@@ -7328,7 +7501,7 @@ const COLUMNAS_CLIENTE = 'id,name,tax_id,email,phone,address,contact_name,notes,
 async function submitAddClient() {
   if (!esAdministrador()) return;
   if (!hayConexion()) return;
-  const datos = leerFormularioCliente(null);
+  const datos = await leerFormularioCliente(null);
   if (!datos) return;
 
   setButtonLoading('cl-submit', true, 'Guardando...', 'Guardar cliente');
@@ -7357,7 +7530,7 @@ async function guardarCliente(clientId) {
   if (!hayConexion()) return;
   const c = clienteDe(clientId);
   if (!c) return fichaNoDisponible('Este cliente');
-  const datos = leerFormularioCliente(clientId);
+  const datos = await leerFormularioCliente(clientId);
   if (!datos) return;
 
   setButtonLoading('cl-submit', true, 'Guardando...', 'Guardar');
@@ -7368,13 +7541,13 @@ async function guardarCliente(clientId) {
       .select('updated_at').eq('id', clientId).maybeSingle();
     if (errLeer) throw errLeer;
     if (!actual) {
-      alert('Este cliente ya no existe: lo ha eliminado otra persona.');
+      aviso('Este cliente ya no existe: lo ha eliminado otra persona.');
       closeAddMachineModal();
       await loadCompanyData();
       return;
     }
     if (c.updatedAt && actual.updated_at && actual.updated_at !== c.updatedAt) {
-      const seguir = confirm(
+      const seguir = await confirmar(
         'Otra persona ha modificado esta ficha de cliente mientras la editabas.\n\n' +
         'Si guardas ahora, se perderán sus cambios.\n\n¿Guardar de todos modos?');
       if (!seguir) {
@@ -7423,17 +7596,17 @@ async function borrarCliente(clientId) {
     if (f.error) throw f.error;
     nObras = o.count || 0; nCobros = f.count || 0;
   } catch (err) {
-    alert('No se ha podido comprobar si el cliente está en uso: ' + mensajeError(err));
+    aviso('No se ha podido comprobar si el cliente está en uso: ' + mensajeError(err));
     return;
   }
 
   if (nObras || nCobros) {
-    alert('No se puede eliminar "' + c.name + '".\n\n' +
+    aviso('No se puede eliminar "' + c.name + '".\n\n' +
       'Tiene ' + nObras + ' ' + (nObras === 1 ? t('s') : t('p')) + ' y ' + nCobros + ' cobro(s) asociados.\n\n' +
       'Cambia primero el cliente en esas fichas y vuelve a intentarlo. Así no se queda nada suelto.');
     return;
   }
-  if (!confirm('¿Eliminar el cliente "' + c.name + '"? Esta acción no se puede deshacer.')) return;
+  if (!await confirmar({ peligro: true, titulo: 'Eliminar cliente', aceptar: 'Sí, eliminar', texto: '¿Eliminar el cliente "' + c.name + '"? Esta acción no se puede deshacer.' })) return;
 
   try {
     const { error } = await getSupabase().from('clients').delete().eq('id', clientId);
@@ -7445,7 +7618,7 @@ async function borrarCliente(clientId) {
     closeDrawer();
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo eliminar: ' + mensajeError(err));
+    aviso('No se pudo eliminar: ' + mensajeError(err));
   }
 }
 
@@ -7678,7 +7851,7 @@ async function markInvoicePaid(dbId) {
     if (inv) { inv.status = 'paid'; inv.paidAt = new Date().toISOString(); }
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo marcar como cobrado: ' + mensajeError(err));
+    aviso('No se pudo marcar como cobrado: ' + mensajeError(err));
   }
 }
 
@@ -7694,7 +7867,7 @@ async function markInvoicePending(dbId) {
     if (inv) { inv.status = 'pending'; inv.paidAt = null; }
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo deshacer: ' + mensajeError(err));
+    aviso('No se pudo deshacer: ' + mensajeError(err));
   }
 }
 
@@ -7702,14 +7875,14 @@ async function borrarCobro(dbId) {
   if (!esAdministrador()) return;
   const inv = invoices.find(i => i.dbId === dbId);
   if (!inv) return;
-  if (!confirm('¿Borrar este apunte de cobro? Esta acción no se puede deshacer.')) return;
+  if (!await confirmar({ peligro: true, titulo: 'Borrar cobro', aceptar: 'Sí, borrar', texto: '¿Borrar este apunte de cobro? Esta acción no se puede deshacer.' })) return;
   try {
     const { error } = await getSupabase().from('invoices').delete().eq('id', dbId);
     if (error) throw error;
     invoices = invoices.filter(i => i.dbId !== dbId);
     pintarPestanaActual();
   } catch (err) {
-    alert('No se pudo borrar: ' + mensajeError(err));
+    aviso('No se pudo borrar: ' + mensajeError(err));
   }
 }
 
@@ -7825,7 +7998,7 @@ async function submitAddInvoice() {
 
 function exportarCobros() {
   const lista = cobrosFiltrados();
-  if (lista.length === 0) { alert('No hay cobros que exportar con este filtro.'); return; }
+  if (lista.length === 0) { aviso('No hay cobros que exportar con este filtro.'); return; }
   const cab = ['Referencia', 'Cliente', t('S'), 'Concepto', 'Importe', 'Vencimiento', 'Estado'];
   const estadoTexto = { paid: 'Cobrado', overdue: 'Vencido', pending: 'Pendiente' };
   const filas = lista.map(i => [
@@ -8482,7 +8655,7 @@ async function guardarNuevaContrasena(esObligatoria) {
     const { error } = await getSupabase().auth.updateUser({ password: p1 });
     if (error) throw error;
     closeAddMachineModal();
-    alert('Contraseña guardada. Es la que usarás para entrar a partir de ahora.');
+    aviso('Contraseña guardada. Es la que usarás para entrar a partir de ahora.', 'bien');
     if (!esObligatoria) openUserSettings();
   } catch (err) {
     fallo(authErrorMessage(err));
@@ -8623,7 +8796,7 @@ async function revalidarTrabajador() {
     if (error) return;
     if (!data || data.length === 0) {
       try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
-      alert('Tu acceso ya no está activo. Habla con tu responsable.');
+      aviso('Tu acceso ya no está activo. Habla con tu responsable.');
       location.reload();
     }
   } catch (e) { /* sin conexion: se sigue trabajando */ }
@@ -8789,15 +8962,15 @@ function pintarPanelOpertra() {
 async function renovarEmpresa(id, meses) {
   const e = empresasPanel.find(x => x.id === id);
   if (!e) return;
-  if (!confirm(`¿Renovar ${e.nombre} ${meses} mes${meses > 1 ? 'es' : ''}?\n\n`
+  if (!await confirmar(`¿Renovar ${e.nombre} ${meses} mes${meses > 1 ? 'es' : ''}?\n\n`
     + `Hazlo solo cuando hayas recibido el pago.`)) return;
   try {
     const { data, error } = await getSupabase().rpc('renovar_empresa', { p_company_id: id, p_meses: meses });
     if (error) throw error;
-    alert(data);
+    aviso(data);
     abrirPanelOpertra();
   } catch (err) {
-    alert('No se pudo renovar: ' + mensajeError(err));
+    aviso('No se pudo renovar: ' + mensajeError(err));
   }
 }
 
@@ -8986,7 +9159,7 @@ async function subirFotoPerfil(event) {
     openUserSettings();
     renderTopbarUser();
   } catch (err) {
-    alert('No se pudo subir la foto: ' + mensajeError(err));
+    aviso('No se pudo subir la foto: ' + mensajeError(err));
     openUserSettings();
   }
 }
