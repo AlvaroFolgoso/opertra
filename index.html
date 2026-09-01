@@ -703,7 +703,9 @@
 
 <div id="landing">
   <header class="land-nav">
-    <div class="land-nav-brand">
+    <div class="land-nav-brand" role="button" tabindex="0" style="cursor:pointer;"
+         title="Ir al inicio" onclick="irAlInicio()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();irAlInicio();}">
       <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <span class="login-brand-name" style="color:white;">OPERTRA</span>
     </div>
@@ -835,7 +837,9 @@
   </section>
 
   <footer class="land-footer">
-    <div class="land-footer-brand"><div class="brand-icon" role="img" aria-label="Opertra"></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
+    <div class="land-footer-brand" role="button" tabindex="0" style="cursor:pointer;"
+         title="Volver arriba" onclick="irAlInicio()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();irAlInicio();}"><div class="brand-icon" role="img" aria-label="Opertra"></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
     <div class="land-footer-links">
       <button onclick="openLegal('aviso')">Aviso legal</button>
       <button onclick="openLegal('privacidad')">Privacidad</button>
@@ -1048,7 +1052,9 @@
 
 <div id="app" class="hidden">
   <nav id="sidebar">
-    <div class="brand">
+    <div class="brand" role="button" tabindex="0" style="cursor:pointer;"
+         title="Ir al panel general" onclick="irAlInicio()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();irAlInicio();}">
       <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <div>
         <div class="brand-name">OPERTRA</div>
@@ -1125,7 +1131,7 @@
   <div id="install-banner-inner">
     <div class="brand-icon" style="width:38px;height:38px;" role="img" aria-label="Opertra"></div>
     <div style="flex:1;min-width:180px;">
-      <div style="font-size:13.5px;font-weight:700;color:white;">Instala Opertra en tu móvil</div>
+      <div id="install-titulo" style="font-size:13.5px;font-weight:700;color:white;">Instala Opertra</div>
       <div id="install-texto" style="font-size:12px;color:#C7CBD0;margin-top:2px;line-height:1.45;"></div>
     </div>
     <div style="display:flex;gap:8px;">
@@ -1474,6 +1480,24 @@ async function copiarDato(i, boton) {
     sel.removeAllRanges(); sel.addRange(rango);
     aviso('Tu navegador no deja copiar solo. Ya está seleccionado: pulsa Ctrl+C.');
   }
+}
+
+/* Pulsar el logo hace lo que se espera de un logo: si has entrado, te
+   lleva al panel; si no, al principio de la portada. */
+function irAlInicio() {
+  if (currentUser && currentUser.companyId) {
+    closeAddMachineModal();
+    closeDrawer();
+    switchTab('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const portada = document.getElementById('landing');
+  if (portada && !portada.classList.contains('hidden')) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });   // ya está en la portada: solo sube
+    return;
+  }
+  showScreen('landing');
 }
 
 function esc(txt) {
@@ -9355,7 +9379,7 @@ function openUserSettings() {
           </button>`}
         ${sePuedeInstalar() ? `
           <button class="btn btn-outline" style="font-size:12.5px;" onclick="instalarDesdeAjustes()">
-            <i class="fa-solid fa-mobile-screen-button"></i> Instalar en este dispositivo
+            <i class="fa-solid fa-mobile-screen-button"></i> Instalar en este ${esMovil() ? 'móvil' : 'ordenador'}
           </button>` : ''}
         <button class="btn btn-outline" style="font-size:12.5px;" onclick="reabrirCookies()">
           <i class="fa-solid fa-cookie-bite"></i> Cookies
@@ -9740,6 +9764,13 @@ function esIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+/* ¿Móvil o tableta? Se mira el dispositivo, no el ancho de la ventana: un
+   ordenador con la ventana estrecha sigue siendo un ordenador, y a ese no
+   hay que decirle que se instale la app "en el móvil". */
+function esMovil() {
+  return /iphone|ipad|ipod|android|mobile|tablet/i.test(navigator.userAgent);
+}
+
 function mostrarBannerInstalacion() {
   if (yaInstalada()) return;
   try { if (localStorage.getItem(INSTALL_KEY) === 'no') return; } catch (e) {}
@@ -9755,14 +9786,28 @@ function mostrarBannerInstalacion() {
   // Un aviso cada vez: si el de cookies sigue en pantalla, este espera
   if (!cookiesRespondidas()) { setTimeout(mostrarBannerInstalacion, 2500); return; }
 
+  // El aviso decía "instala Opertra en tu móvil" también en el ordenador,
+  // y explicaba cómo hacerlo en un teléfono. Ahora sabe dónde está.
+  const titulo = document.getElementById('install-titulo');
+  const enOrdenador = !esMovil();
+
   if (esIOS()) {
+    if (titulo) titulo.textContent = 'Instala Opertra en tu móvil';
     texto.textContent = 'Tenla en la pantalla de inicio, como cualquier otra app.';
     boton.style.display = '';
     boton.textContent = 'Cómo se instala';
     boton.onclick = comoInstalarEnIPhone;
   } else if (promptInstalacion) {
-    texto.textContent = 'Tenla a mano como cualquier otra app, sin buscar el enlace.';
+    if (titulo) {
+      titulo.textContent = enOrdenador
+        ? 'Instala Opertra en tu escritorio'
+        : 'Instala Opertra en tu móvil';
+    }
+    texto.textContent = enOrdenador
+      ? 'Se abre en su propia ventana, sin barra de navegador, y la tienes en la barra de tareas.'
+      : 'Tenla a mano como cualquier otra app, sin buscar el enlace.';
     boton.style.display = '';
+    boton.textContent = 'Instalar';
     boton.onclick = instalarApp;
   } else {
     return; // el navegador no lo permite todavía
