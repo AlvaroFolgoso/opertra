@@ -491,6 +491,13 @@
 
   /* ============ BANNER DE COOKIES ============ */
   #cookie-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; background: var(--graphite); border-top: 2px solid var(--amber); padding: 16px 6vw calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -4px 20px rgba(0,0,0,0.3); }
+  /* Una sombra difuminada por encima, para que no corte el fondo en seco */
+  #cookie-banner::before, #install-banner::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px;
+    background: linear-gradient(to top, rgba(20,24,28,.55), rgba(20,24,28,0)); pointer-events: none;
+  }
+  /* Mientras haya un aviso abajo, la página deja hueco para no quedar tapada */
+  body.con-aviso-abajo { padding-bottom: 150px; }
   #cookie-banner-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; color: white; }
   @media (max-width: 768px) {
     #cookie-banner { padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
@@ -1100,7 +1107,8 @@
     </div>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-amber" id="btn-instalar" style="padding:9px 14px;font-size:13px;">Instalar</button>
-      <button class="btn-ghost" style="color:#8A9199;" onclick="cerrarInstalacion()">Ahora no</button>
+      <button class="btn btn-outline" style="padding:9px 14px;font-size:13px;color:#C7CBD0;border-color:var(--graphite-line);"
+              onclick="cerrarInstalacion()">Ahora no</button>
     </div>
   </div>
 </div>
@@ -9570,9 +9578,14 @@ function mostrarBannerInstalacion() {
   const boton = document.getElementById('btn-instalar');
   if (!banner) return;
 
+  // Un aviso cada vez: si el de cookies sigue en pantalla, este espera
+  if (!cookiesRespondidas()) { setTimeout(mostrarBannerInstalacion, 2500); return; }
+
   if (esIOS()) {
-    texto.textContent = 'Pulsa Compartir y luego "Añadir a pantalla de inicio".';
-    boton.style.display = 'none';
+    texto.textContent = 'Tenla en la pantalla de inicio, como cualquier otra app.';
+    boton.style.display = '';
+    boton.textContent = 'Cómo se instala';
+    boton.onclick = comoInstalarEnIPhone;
   } else if (promptInstalacion) {
     texto.textContent = 'Tenla a mano como cualquier otra app, sin buscar el enlace.';
     boton.style.display = '';
@@ -9591,6 +9604,46 @@ async function instalarApp() {
   cerrarInstalacion();
 }
 
+/* Safari no permite instalar desde la web, así que se explica el camino
+   con los mismos iconos que ve en su pantalla. */
+function comoInstalarEnIPhone() {
+  cerrarInstalacion();
+  document.getElementById('add-machine-modal').innerHTML = `
+    <div class="modal-top">
+      <span class="f-display" style="font-size:18px;">Instalar Opertra</span>
+      <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:16px;">
+      <div class="brand-icon" style="width:54px;height:54px;"></div>
+      <div style="font-size:13px;color:var(--steel);line-height:1.55;">
+        Te quedará el icono de Opertra en la pantalla de inicio.
+        No ocupa casi nada y se abre a pantalla completa.
+      </div>
+    </div>
+    <div style="margin-top:20px;display:flex;flex-direction:column;gap:14px;">
+      ${[
+        ['fa-arrow-up-from-bracket', 'Pulsa <b>Compartir</b>', 'Es el cuadrado con la flecha hacia arriba, abajo en la barra de Safari.'],
+        ['fa-square-plus', 'Elige <b>Añadir a pantalla de inicio</b>', 'Baja un poco en la lista de opciones hasta encontrarlo.'],
+        ['fa-check', 'Pulsa <b>Añadir</b>', 'Ya lo tienes. Ábrelo desde el icono, como cualquier app.'],
+      ].map(([icono, titulo, detalle], i) => `
+        <div style="display:flex;gap:13px;align-items:flex-start;">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--amber);color:var(--graphite);
+                      display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                      font-weight:700;font-size:13px;">${i + 1}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;color:var(--ink);">
+              <i class="fa-solid ${icono}" style="color:var(--amber-deep);margin-right:7px;"></i>${titulo}
+            </div>
+            <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">${detalle}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-amber" onclick="closeAddMachineModal()">Entendido</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
 function cerrarInstalacion() {
   try { localStorage.setItem(INSTALL_KEY, 'no'); } catch (e) {}
   const b = document.getElementById('install-banner');
@@ -9600,6 +9653,12 @@ function cerrarInstalacion() {
 /* En iPhone no hay evento: lo comprobamos al entrar */
 function comprobarInstalacion() {
   if (esIOS()) setTimeout(mostrarBannerInstalacion, 3000);
+}
+
+/* ¿Ya ha respondido a lo de las cookies? Mientras no lo haga, no se le
+   pone encima otro aviso: se pisaban y quedaba de mala manera. */
+function cookiesRespondidas() {
+  try { return !!localStorage.getItem(COOKIE_KEY); } catch (e) { return true; }
 }
 
 /* ============ CONSENTIMIENTO DE COOKIES ============
@@ -9612,7 +9671,10 @@ const COOKIE_KEY = 'opertra_cookies_v1';
 function comprobarCookies() {
   let decidido = null;
   try { decidido = localStorage.getItem(COOKIE_KEY); } catch (e) { return; }
-  if (!decidido) document.getElementById('cookie-banner').classList.remove('hidden');
+  if (!decidido) {
+    document.getElementById('cookie-banner').classList.remove('hidden');
+    document.body.classList.add('con-aviso-abajo');
+  }
 }
 
 function decidirCookies(aceptaTodo) {
@@ -9622,6 +9684,9 @@ function decidirCookies(aceptaTodo) {
     }));
   } catch (e) {}
   document.getElementById('cookie-banner').classList.add('hidden');
+  document.body.classList.remove('con-aviso-abajo');
+  // Ahora que la pantalla está libre, se puede ofrecer instalar la app
+  setTimeout(mostrarBannerInstalacion, 600);
 }
 
 /* Permite cambiar de opinión desde Ajustes */
