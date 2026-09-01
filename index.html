@@ -106,6 +106,43 @@
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
   /* ---- Avisos, confirmaciones y fichas de datos ---- */
+  /* ---- Pantalla de arranque ---- */
+  #arranque {
+    position: fixed; inset: 0; z-index: 500; background: var(--graphite);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; transition: opacity .32s ease, visibility .32s ease;
+  }
+  #arranque.fuera { opacity: 0; visibility: hidden; }
+  #arranque .brand-icon {
+    width: 76px; height: 76px; border-radius: 16px;
+    animation: arranqueEntra .45s cubic-bezier(.2,.9,.3,1.3) both;
+  }
+  .arranque-nombre {
+    font-family: 'Oswald', system-ui, sans-serif; letter-spacing: 5px; font-size: 19px;
+    color: #fff; font-weight: 600;
+    animation: arranqueEntra .45s .08s cubic-bezier(.2,.9,.3,1.3) both;
+  }
+  .arranque-barra {
+    width: 132px; height: 3px; border-radius: 99px; overflow: hidden;
+    background: rgba(255,255,255,.14); margin-top: 4px;
+  }
+  .arranque-barra span {
+    display: block; width: 40%; height: 100%; border-radius: 99px;
+    background: var(--amber); animation: arranqueCarga 1.05s ease-in-out infinite;
+  }
+  @keyframes arranqueEntra {
+    from { opacity: 0; transform: scale(.86) translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes arranqueCarga {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(360%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #arranque .brand-icon, .arranque-nombre { animation: none; }
+    .arranque-barra span { animation-duration: 2.4s; }
+  }
+
   #avisos { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
             z-index: 400; display: flex; flex-direction: column; gap: 10px;
             width: min(440px, calc(100vw - 32px)); pointer-events: none; }
@@ -1123,6 +1160,12 @@
 
 <div id="modal-overlay">
   <div id="add-machine-modal"></div>
+</div>
+
+<div id="arranque">
+  <div class="brand-icon" role="img" aria-label="Opertra"></div>
+  <div class="arranque-nombre">OPERTRA</div>
+  <div class="arranque-barra"><span></span></div>
 </div>
 
 <div id="avisos" aria-live="polite" aria-atomic="false"></div>
@@ -4068,17 +4111,24 @@ function openAddObraModal() {
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="form-group" style="margin-top:16px;">
-      <label class="form-label">Nombre de la ${t('s')}</label>
+      <label class="form-label">Nombre de la ${t('s')} <span style="color:var(--danger);">*</span></label>
       <input class="form-input" id="no-name" maxlength="120" placeholder="${t('ej')}">
     </div>
     ${selectorCliente('no-client', null)}
     <div class="form-group">
-      <label class="form-label">Fecha de inicio</label>
-      <input class="form-input" type="date" id="no-start">
+      <label class="form-label">Fecha de inicio <span style="color:var(--danger);">*</span></label>
+      <input class="form-input" type="date" id="no-start" value="${fechaLocalHoy()}">
     </div>
     <div class="form-group">
       <label class="form-label">Fecha de fin prevista</label>
       <input class="form-input" type="date" id="no-end">
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Puedes dejarla vacía si todavía no hay plazo cerrado. Se rellena luego.</span>
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:var(--steel);margin-top:4px;">
+      <span style="color:var(--danger);">*</span> Campos obligatorios
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeAddMachineModal()">Cancelar</button>
@@ -4096,9 +4146,10 @@ async function submitAddObra() {
   const end = document.getElementById('no-end').value;
   const errObra = validarTexto(name, 'El nombre', LIMITES.nombre, true)
     || validarFecha(start, 'la fecha de inicio', { obligatoria: true })
-    || validarFecha(end, 'la fecha de fin', { obligatoria: true });
+    || validarFecha(end, 'la fecha de fin', { obligatoria: false });
   if (errObra) { aviso(errObra); return; }
-  if (end < start) { aviso('La fecha de fin no puede ser anterior a la de inicio.'); return; }
+  // La fecha de fin es opcional: hay trabajos que no tienen plazo cerrado
+  if (end && end < start) { aviso('La fecha de fin no puede ser anterior a la de inicio.'); return; }
   const elegido = await resolverClienteElegido('no-client');
   if (!elegido.ok) { aviso(elegido.mensaje); return; }
 
@@ -4109,7 +4160,7 @@ async function submitAddObra() {
     const newCode = await siguienteCodigo('project', t('pref'), 3);
     const { data, error } = await getSupabase().from('projects').insert({
       company_id: currentUser.companyId, code: newCode, name, status: 'active',
-      start_date: start, end_date: end, client_id: elegido.valor || null,
+      start_date: start, end_date: end || null, client_id: elegido.valor || null,
     }).select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').single();
     if (error) throw error;
     projects.push(mapearObra(data));
@@ -5864,6 +5915,11 @@ async function submitAddMachine() {
     });
     closeAddMachineModal();
     pintarPestanaActual();
+    // Se abre su ficha para que pueda añadir la ITV, el seguro y lo que
+    // haga falta ahora, que es cuando tiene los papeles delante.
+    switchTab('maquinaria');
+    openDrawer(data.code);
+    aviso('Guardad' + tm('g') + '. Añade ahora sus documentos (ITV, seguro...) si los tienes a mano.', 'bien');
   } catch (err) {
     aviso('No se pudo guardar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar ' + tm('s'); }
@@ -7743,11 +7799,37 @@ function selectorCliente(id, fila, etiqueta) {
           <option value="${esc(c.dbId)}"${actual === c.dbId ? ' selected' : ''}>${esc(c.name)}${c.taxId ? ' · ' + esc(c.taxId) : ''}</option>`).join('')}
         <option value="__nuevo__">+ Crear cliente nuevo…</option>
       </select>
-      <div id="${id}-nuevo" style="display:none;margin-top:8px;">
-        <input class="form-input" id="${id}-nuevo-nombre" maxlength="120" placeholder="Nombre del cliente nuevo">
+      <div id="${id}-nuevo" style="display:none;margin-top:10px;padding:14px;border:1px solid var(--border);
+                                    border-radius:10px;background:var(--surface);">
+        <div style="font-size:11.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+                    color:var(--steel);margin-bottom:10px;">Cliente nuevo</div>
+        <div class="form-group" style="margin-top:0;">
+          <label class="form-label">Nombre o razón social <span style="color:var(--danger);">*</span></label>
+          <input class="form-input" id="${id}-nuevo-nombre" maxlength="120" placeholder="Ej. Promociones del Sur S.A.">
+        </div>
+        <div class="form-group">
+          <label class="form-label">CIF / NIF</label>
+          <input class="form-input f-mono" id="${id}-nuevo-cif" maxlength="20" placeholder="B12345678">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Persona de contacto</label>
+          <input class="form-input" id="${id}-nuevo-contacto" maxlength="120" placeholder="Nombre y apellidos">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Teléfono</label>
+          <input class="form-input f-mono" id="${id}-nuevo-tel" maxlength="30" placeholder="600 000 000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Correo</label>
+          <input class="form-input" type="email" id="${id}-nuevo-correo" maxlength="254" placeholder="facturacion@empresa.com">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Domicilio fiscal</label>
+          <input class="form-input" id="${id}-nuevo-dir" maxlength="200" placeholder="Calle, número, CP y población">
+        </div>
         <div class="form-hint">
           <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-          <span>Se crea la ficha con el nombre. El CIF y el resto de datos los rellenas luego en Clientes.</span>
+          <span>Solo el nombre es obligatorio. Lo demás lo puedes completar después en Clientes.</span>
         </div>
       </div>
       ${legacy ? `<div class="form-hint">
@@ -7781,9 +7863,22 @@ async function resolverClienteElegido(id) {
     return { ok: true, valor: v };
   }
 
-  const nombre = (document.getElementById(id + '-nuevo-nombre') || { value: '' }).value.trim();
-  const err = validarTexto(nombre, 'El nombre del cliente', LIMITES.nombre, true);
+  const leer = (sufijo) => (document.getElementById(id + sufijo) || { value: '' }).value.trim();
+  const nombre = leer('-nuevo-nombre');
+  const cif = leer('-nuevo-cif').toUpperCase();
+  const correo = leer('-nuevo-correo');
+
+  const err = validarTexto(nombre, 'El nombre del cliente', LIMITES.nombre, true)
+    || validarTexto(leer('-nuevo-contacto'), 'La persona de contacto', LIMITES.nombre, false)
+    || validarTexto(leer('-nuevo-tel'), 'El teléfono', 30, false)
+    || validarTexto(leer('-nuevo-dir'), 'El domicilio', 200, false);
   if (err) return { ok: false, mensaje: err };
+  if (cif && !nifValido(cif)) {
+    return { ok: false, mensaje: 'El CIF/NIF del cliente no es válido. Revísalo o déjalo vacío.' };
+  }
+  if (correo && !correoValido(correo)) {
+    return { ok: false, mensaje: 'El correo del cliente no tiene un formato válido.' };
+  }
 
   // Si ya existe uno con ese mismo nombre, se reutiliza en vez de duplicarlo
   const clave = claveCliente(nombre);
@@ -7792,7 +7887,12 @@ async function resolverClienteElegido(id) {
 
   try {
     const { data, error } = await getSupabase().from('clients')
-      .insert({ company_id: currentUser.companyId, name: nombre })
+      .insert({
+        company_id: currentUser.companyId, name: nombre,
+        tax_id: cif || null, contact_name: leer('-nuevo-contacto') || null,
+        phone: leer('-nuevo-tel') || null, email: correo || null,
+        address: leer('-nuevo-dir') || null,
+      })
       .select(COLUMNAS_CLIENTE).single();
     if (error) throw error;
     clients.push(mapearCliente(data));
@@ -8279,12 +8379,28 @@ function renderTopbarUser() {
 /* ============ LOGIN / SESIÓN ============ */
 /* ============ LANDING ============ */
 /* Solo una de las tres pantallas puede estar visible a la vez: landing, login o app */
+/* Se quita la pantalla de arranque cuando ya se sabe a dónde va el
+   usuario. Con un pequeño retraso: si tarda 80 ms, verlo aparecer y
+   desaparecer de golpe queda peor que no ponerlo. */
+let arranqueDesde = Date.now();
+function quitarArranque() {
+  const el = document.getElementById('arranque');
+  if (!el || el.classList.contains('fuera')) return;
+  const visto = Date.now() - arranqueDesde;
+  const esperar = Math.max(0, 450 - visto);
+  setTimeout(() => {
+    el.classList.add('fuera');
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 400);
+  }, esperar);
+}
+
 function showScreen(which) {
   document.getElementById('landing').classList.toggle('hidden', which !== 'landing');
   document.getElementById('login-screen').classList.toggle('hidden', which !== 'login');
   document.getElementById('app').classList.toggle('hidden', which !== 'app');
   document.getElementById('trial-expired-screen').classList.toggle('hidden', which !== 'trial-expired');
   window.scrollTo(0,0);
+  quitarArranque();
 }
 function showLogin() { showScreen('login'); showAuthPanel('login'); }
 function showLanding() { showScreen('landing'); }
@@ -9705,6 +9821,10 @@ const INSTALL_KEY = 'opertra_install_v1';
    diferencia entre cientos de GB de trafico al mes y casi ninguno.
    Si hay version nueva, se avisa en vez de cambiarla de golpe mientras
    alguien esta fichando. */
+// Red de seguridad: si algo se atasca, la pantalla de arranque no se queda
+// puesta para siempre.
+setTimeout(quitarArranque, 6000);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     // El service worker avisa cuando ha guardado una version nueva de la
