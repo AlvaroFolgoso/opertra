@@ -905,6 +905,11 @@
       <div class="login-title">Inicia sesión</div>
       <div class="login-sub">Accede con la cuenta de tu empresa</div>
 
+      <button class="login-btn-social" onclick="entrarConGoogle()">
+        <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.4 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 6.4 29.6 4 24 4c-8 0-14.8 4.5-18.3 11.1z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-2.1 14-5.6l-6.5-5.3C29.4 34.9 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.6 5.1C9.2 39.5 16 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.5 5.3C39.7 37 44 31.5 44 24c0-1.4-.1-2.4-.4-3.5z"/></svg> Continuar con Google
+      </button>
+      <div class="login-divider">o con tu correo</div>
+
       <div class="form-group" style="margin-top:0;">
         <label class="form-label">Correo electrónico</label>
         <input class="form-input" id="login-email" placeholder="tu@empresa.com" type="email">
@@ -8410,7 +8415,16 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     if (profile) break;
     await new Promise(r => setTimeout(r, 600));
   }
-  if (error || !profile) throw error || new Error('No se encontró el perfil de este usuario.');
+  if (error) throw error;
+  if (!profile) {
+    // Entró con Google y todavía no tiene empresa. Antes esto acababa en
+    // un error genérico y el usuario se quedaba fuera sin saber por qué.
+    const err = new Error('SIN_EMPRESA');
+    err.sinEmpresa = true;
+    err.nombre = (authUser.user_metadata && (authUser.user_metadata.full_name
+                  || authUser.user_metadata.name)) || '';
+    throw err;
+  }
   if (profile.active === false) {
     try { await getSupabase().auth.signOut(); } catch(e) {}
     throw new Error('Tu acceso a esta empresa ha sido revocado. Habla con el administrador.');
@@ -8611,11 +8625,127 @@ async function handleLogin() {
     await loadCurrentUserProfile(data.user);
     enterAppOrShowTrialExpired();
   } catch (err) {
+    if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
     document.getElementById('login-error-text').textContent = authErrorMessage(err);
     errBox.style.display = 'flex';
   } finally {
     setButtonLoading('login-submit-btn', false, '', 'Iniciar sesión');
   }
+}
+
+/* Entrar con Google.
+   Google solo nos da nombre y correo, no el nombre de la empresa. Así que
+   quien entra por aquí por primera vez vuelve sin empresa asignada, y hay
+   que preguntársela en un segundo paso (ver pedirDatosDeEmpresa). */
+async function entrarConGoogle() {
+  if (!hayConexion()) return;
+  try {
+    const { error } = await getSupabase().auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + '/' },
+    });
+    if (error) throw error;
+  } catch (err) {
+    const caja = document.getElementById('login-error');
+    const txt = document.getElementById('login-error-text');
+    if (txt && caja) {
+      txt.textContent = 'No se ha podido entrar con Google: ' + authErrorMessage(err)
+        + ' Puedes entrar con tu correo y contraseña.';
+      caja.style.display = 'flex';
+    }
+  }
+}
+
+/* Segundo paso para quien entra con Google la primera vez: sin esto se
+   quedaba dentro de Opertra sin empresa, viendo un error genérico. */
+function pedirDatosDeEmpresa(nombrePersona) {
+  showScreen('login');
+  document.getElementById('auth-tabs').classList.add('hidden');
+  ['auth-panel-login', 'auth-panel-signup', 'auth-panel-pin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+
+  let panel = document.getElementById('auth-panel-empresa');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'auth-panel-empresa';
+    document.getElementById('auth-panel-pin').parentNode.appendChild(panel);
+  }
+  panel.classList.remove('hidden');
+  panel.innerHTML = `
+    <div class="login-title">Ya casi está${nombrePersona ? ', ' + esc(nombrePersona.split(' ')[0]) : ''}</div>
+    <div class="login-sub">Solo faltan los datos de tu empresa</div>
+
+    <div class="form-group">
+      <label class="form-label">Nombre de la empresa</label>
+      <input class="form-input" id="emp-nombre" maxlength="120" placeholder="Ej. Excavaciones del Sur S.L.">
+    </div>
+    <div class="form-group">
+      <label class="form-label">CIF (opcional)</label>
+      <input class="form-input f-mono" id="emp-cif" maxlength="20" placeholder="B12345678">
+    </div>
+    <div class="form-group">
+      <label class="form-label">¿A qué se dedica?</label>
+      <select class="form-select" id="emp-sector">
+        ${Object.entries(VOCABULARIO).map(([k, v]) =>
+          `<option value="${k}">${esc(v.label)}</option>`).join('')}
+      </select>
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Cambia cómo se llaman las cosas dentro: obras, servicios o proyectos.</span>
+      </div>
+    </div>
+
+    <div id="emp-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="emp-error-text"></span></div>
+
+    <button class="btn btn-amber" id="emp-submit" style="width:100%;justify-content:center;padding:12px;margin-top:16px;"
+            onclick="crearEmpresaDesdeGoogle()">Empezar a usar Opertra</button>
+
+    <div class="login-link" style="margin-top:14px;">
+      <a onclick="salirSinEmpresa()">Salir y entrar con otra cuenta</a>
+    </div>`;
+  setTimeout(() => { const c = document.getElementById('emp-nombre'); if (c) c.focus(); }, 80);
+}
+
+async function crearEmpresaDesdeGoogle() {
+  const nombre = document.getElementById('emp-nombre').value.trim();
+  const cif = document.getElementById('emp-cif').value.trim();
+  const sector = document.getElementById('emp-sector').value;
+  const caja = document.getElementById('emp-error');
+  const fallo = (t) => {
+    document.getElementById('emp-error-text').textContent = t;
+    caja.style.display = 'flex';
+  };
+  caja.style.display = 'none';
+
+  const err = validarTexto(nombre, 'El nombre de la empresa', LIMITES.nombre, true);
+  if (err) return fallo(err);
+  if (cif && !nifValido(cif)) return fallo('Ese CIF no es válido. Revísalo o déjalo vacío.');
+
+  setButtonLoading('emp-submit', true, 'Creando...', 'Empezar a usar Opertra');
+  try {
+    const { error } = await getSupabase().rpc('crear_mi_empresa', {
+      p_nombre: nombre, p_cif: cif || null, p_sector: sector,
+      p_version_legal: VERSION_LEGAL,
+    });
+    if (error) throw error;
+
+    const { data } = await getSupabase().auth.getUser();
+    if (!data || !data.user) throw new Error('Se ha perdido la sesión. Vuelve a entrar.');
+    await loadCurrentUserProfile(data.user);
+    const panel = document.getElementById('auth-panel-empresa');
+    if (panel) panel.classList.add('hidden');
+    enterAppOrShowTrialExpired();
+  } catch (e) {
+    fallo('No se ha podido crear la empresa: ' + mensajeError(e));
+    setButtonLoading('emp-submit', false, '', 'Empezar a usar Opertra');
+  }
+}
+
+async function salirSinEmpresa() {
+  try { await getSupabase().auth.signOut(); } catch (e) {}
+  location.reload();
 }
 
 async function handleSignup() {
@@ -8936,6 +9066,9 @@ async function checkExistingSession() {
       showScreen('landing');
     }
   } catch (err) {
+    // Vuelve de Google y todavía no tiene empresa: se le pide, no se le
+    // devuelve a la portada como si no hubiera entrado.
+    if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
     showScreen('landing');
   }
 }
