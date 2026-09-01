@@ -187,6 +187,27 @@
 
   /* Documentos / permisos */
   .doc-section-title { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+
+  /* ---- Ajustes de cuenta ---- */
+  .aj-cabecera { display: flex; align-items: center; gap: 16px; padding: 4px 0 20px; }
+  .aj-bloque { border-top: 1px solid var(--border); padding: 20px 0 4px; }
+  .aj-bloque:last-of-type { padding-bottom: 0; }
+  .aj-titulo { font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px;
+               text-transform: uppercase; color: var(--steel); margin-bottom: 14px; }
+  .aj-fila { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+             padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .aj-fila:last-child { border-bottom: 0; }
+  .aj-fila .et { font-size: 13px; color: var(--steel); }
+  .aj-fila .vl { font-size: 13.5px; color: var(--ink); font-weight: 500; text-align: right;
+                 word-break: break-word; }
+  .aj-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .aj-nota { font-size: 12px; color: var(--steel); line-height: 1.55; margin-top: 12px;
+             display: flex; gap: 8px; align-items: flex-start; }
+  .aj-codigo { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+               background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+               padding: 13px 15px; margin-top: 12px; }
+  .aj-codigo .valor { font-size: 20px; letter-spacing: 3px; font-weight: 700;
+                      color: var(--amber-deep); user-select: all; }
   .doc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
   .doc-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); }
   .doc-name { font-size: 13px; font-weight: 500; }
@@ -584,8 +605,11 @@
     }
     #mobile-nav-items { display: flex; width: 100%; justify-content: space-around; }
     #mobile-nav .nav-item {
-      flex: 1; flex-direction: column; gap: 3px; font-size: 10px; padding: 6px 2px;
-      border-radius: 10px; position: relative; max-width: 76px;
+      flex: 1; flex-direction: column; gap: 4px; font-size: 10px; padding: 7px 1px;
+      border-radius: 10px; position: relative; max-width: none; min-width: 0;
+    }
+    #mobile-nav .nav-item span {
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     #mobile-nav .nav-item i { font-size: 18px; }
     #mobile-nav .nav-badge { position: absolute; top: 0px; right: 14px; margin-left: 0; }
@@ -812,7 +836,8 @@
 
       <div class="form-group" style="margin-top:0;">
         <label class="form-label">Código de empresa</label>
-        <input class="form-input f-mono" id="pin-company" placeholder="OP-XXXXX" style="text-transform:uppercase;">
+        <input class="form-input f-mono" id="pin-company" placeholder="OP-XXXXX" style="text-transform:uppercase;"
+               autocomplete="off" inputmode="text">
       </div>
       <div class="form-group">
         <label class="form-label">Tu PIN</label>
@@ -820,7 +845,16 @@
       </div>
       <div id="pin-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="pin-error-text"></span></div>
 
-      <button class="btn btn-amber" id="pin-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:16px;" onclick="handleWorkerLogin()">
+      <label style="display:flex;align-items:flex-start;gap:9px;margin-top:16px;cursor:pointer;
+                    font-size:13px;color:var(--steel);line-height:1.45;">
+        <input type="checkbox" id="pin-recordar" checked
+               style="width:17px;height:17px;margin-top:1px;flex-shrink:0;accent-color:var(--amber);">
+        <span>Mantener la sesión abierta en este móvil<br>
+          <span style="font-size:11.5px;">Así no tendrás que escribir el PIN cada día.
+          Desmárcalo si el móvil o la tablet los usáis varios.</span></span>
+      </label>
+
+      <button class="btn btn-amber" id="pin-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:14px;" onclick="handleWorkerLogin()">
         Entrar
       </button>
 
@@ -1010,6 +1044,8 @@
   <div id="more-sheet-overlay" onclick="if(event.target===this) closeMoreSheet()">
     <div id="more-sheet">
       <div class="more-sheet-handle"></div>
+      <div style="font-size:12px;color:var(--steel);text-transform:uppercase;letter-spacing:1px;
+                  font-weight:700;padding:0 6px 10px;">Resto de secciones</div>
       <div id="more-sheet-items"></div>
     </div>
   </div>
@@ -2027,8 +2063,8 @@ function renderNav() {
    Para el rol trabajador, los accesos principales son los que usa a diario en obra. */
 const MOBILE_PRIMARY_DEFAULT = [
   { key: 'dashboard', label: 'Inicio', icon: 'fa-gauge-high' },
+  { key: 'fichaje', label: 'Fichaje', icon: 'fa-tower-broadcast' },
   { key: 'obras', label: null, icon: 'fa-diagram-project' },
-  { key: 'maquinaria', label: null, icon: 'fa-truck' },
   { key: 'trabajadores', label: 'Personal', icon: 'fa-users' },
 ];
 const MOBILE_PRIMARY_TRABAJADOR = [
@@ -2054,8 +2090,8 @@ function renderMobileNav() {
     <button class="nav-item" data-tab="${n.key}">
       <i class="fa-solid ${n.icon}"></i><span>${n.label || t('P')}</span>
     </button>`).join('') + `
-    <button class="nav-item" onclick="toggleMoreSheet()">
-      <i class="fa-solid fa-ellipsis"></i><span>Más</span>
+    <button class="nav-item" onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
+      <i class="fa-solid fa-bars"></i><span>Menú</span>
       ${secondaryHasBadge ? `<span class="nav-badge">${unresolvedCount}</span>` : ''}
     </button>`;
   document.querySelectorAll('#mobile-nav .nav-item[data-tab]').forEach(b => {
@@ -2321,7 +2357,14 @@ function bloquePrimerosPasos() {
   if (!esAdministrador()) return '';
   if (guiaOculta()) return '';
 
-  const yoFicho = !!miFichaTrabajador();
+  // Un paso solo se da por hecho cuando ha pasado DE VERDAD.
+  // Antes bastaba con crearte tu propia ficha para que la guía diera por
+  // buenos dos pasos que no habías dado, y te quedabas sin saber qué
+  // faltaba por hacer.
+  const miFicha = miFichaTrabajador();
+  const equipoDeVerdad = workers.filter(w => !miFicha || w.dbId !== miFicha.dbId).length > 0;
+  const alguienHaFichado = timeLogs.length > 0;
+
   const pasos = [
     { hecho: projects.length > 0, texto: `Crea tu primera ${t('s')}`,
       detalle: `Un trabajo, una obra o un servicio: es donde se imputan las horas`,
@@ -2329,10 +2372,12 @@ function bloquePrimerosPasos() {
     { hecho: machines.length > 0, texto: 'Registra tus ' + tm('p'),
       detalle: 'Excavadoras, camiones, furgonetas... con su documentación',
       accion: `switchTab('maquinaria')`, icono: 'fa-truck' },
-    { hecho: workers.length > 0, texto: 'Da de alta a tu equipo',
-      detalle: 'Cada uno recibe un PIN para fichar desde su móvil',
+    { hecho: equipoDeVerdad, texto: 'Da de alta a tu equipo',
+      detalle: miFicha && !equipoDeVerdad
+        ? 'Ya tienes tu ficha. Ahora añade a tus trabajadores: cada uno recibe su PIN'
+        : 'Cada uno recibe un PIN para fichar desde su móvil',
       accion: `switchTab('trabajadores')`, icono: 'fa-users' },
-    { hecho: timeLogs.length > 0 || yoFicho, texto: 'Que empiecen a fichar',
+    { hecho: alguienHaFichado, texto: 'Que empiecen a fichar',
       detalle: `Pásales el código ${esc(currentUser.accessCode || '')} y su PIN`,
       accion: `switchTab('trabajadores')`, icono: 'fa-tower-broadcast' },
   ];
@@ -8240,6 +8285,21 @@ async function submitDemoRequest() {
    - 'pin'    : código de empresa + PIN (personal de obra, sin cuenta) */
 let authMode = 'login';
 
+/* Se rellena el código de la empresa con el último que se usó en este
+   móvil. Es lo tedioso de escribir: cinco letras y números con guion,
+   con guantes y a las siete de la mañana. El PIN no se guarda nunca. */
+function recordarCodigoEmpresa() {
+  try {
+    const guardado = localStorage.getItem('opertra_ultimo_codigo');
+    const campo = document.getElementById('pin-company');
+    if (guardado && campo && !campo.value) {
+      campo.value = guardado;
+      const pin = document.getElementById('pin-code');
+      if (pin) setTimeout(() => pin.focus(), 60);   // el cursor va directo al PIN
+    }
+  } catch (e) {}
+}
+
 function showAuthPanel(mode) {
   authMode = mode;
   document.getElementById('auth-panel-login').classList.toggle('hidden', mode !== 'login');
@@ -8255,6 +8315,8 @@ function showAuthPanel(mode) {
     const el = document.getElementById(id);
     if (el) { el.style.display = 'none'; el.style.color = ''; }
   });
+
+  if (mode === 'pin') recordarCodigoEmpresa();
 }
 
 /* Volver retrocede UN solo paso: de crear empresa vuelve al login,
@@ -8805,7 +8867,9 @@ async function revalidarTrabajador() {
 async function checkExistingSession() {
   // Sesión de trabajador (entró con PIN, no tiene cuenta de Supabase Auth)
   try {
-    const raw = localStorage.getItem('opertra_worker_session');
+    // La sesión "solo por ahora" (móvil compartido) manda sobre la larga
+    const raw = sessionStorage.getItem('opertra_worker_session')
+             || localStorage.getItem('opertra_worker_session');
     if (raw) {
       const w = JSON.parse(raw);
       const caducada = !w.sesionDesde ||
@@ -9039,86 +9103,95 @@ function openUserSettings() {
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
 
-    <!-- ---------- Quién eres ---------- -->
-    <div style="display:flex;align-items:center;gap:14px;margin-top:18px;">
-      <div class="user-avatar" style="width:60px;height:60px;font-size:17px;overflow:hidden;flex-shrink:0;" id="settings-avatar">
+    <div class="aj-cabecera">
+      <div class="user-avatar" style="width:64px;height:64px;font-size:18px;overflow:hidden;flex-shrink:0;" id="settings-avatar">
         ${currentUser.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : `<span class="f-mono">${currentUser.initials}</span>`}
       </div>
       <div style="min-width:0;flex:1;">
-        <div class="f-display" style="font-size:17px;">${esc(currentUser.name)}</div>
-        <div style="font-size:12.5px;color:var(--steel);margin-top:2px;">
+        <div class="f-display" style="font-size:18px;line-height:1.25;">${esc(currentUser.name)}</div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:3px;word-break:break-word;">
           ${esc(currentUser.role || '')}${currentUser.email ? ' · ' + esc(currentUser.email) : ''}
         </div>
         <input type="file" accept="image/*" id="settings-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoPerfil(event)">
-        <label class="btn-ghost" for="settings-photo" style="font-size:12.5px;color:var(--blue);cursor:pointer;display:inline-block;margin-top:6px;">
+        <label class="btn btn-outline" for="settings-photo" style="font-size:12px;padding:6px 11px;margin-top:9px;display:inline-flex;cursor:pointer;">
           <i class="fa-solid fa-camera"></i> ${currentUser.photoPath ? 'Cambiar foto' : 'Subir foto'}
         </label>
       </div>
     </div>
 
-    <div class="form-group" style="margin-top:18px;">
-      <label class="form-label">Nombre completo</label>
-      <input class="form-input" id="settings-name" value="${esc(currentUser.name)}" maxlength="120">
-    </div>
-
-    <div class="drawer-rows" style="margin-top:4px;">
-      ${filaAjuste('Puesto', currentUser.role)}
-      ${filaAjuste('Empresa', currentUser.company)}
-    </div>
-
-    <!-- ---------- Seguridad ---------- -->
-    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">SEGURIDAD</span></div>
-    ${esTrabajador ? `
-      <div class="form-hint" style="margin-top:0;">
-        <i class="fa-solid fa-key" style="margin-top:1px;"></i>
-        <span>Tú entras con el código de tu empresa y tu PIN. Si has olvidado el PIN, pídeselo a tu encargado.</span>
-      </div>` : `
-      <div class="drawer-rows">
-        ${filaAjuste('Contraseña', '••••••••')}
+    <div class="aj-bloque">
+      <div class="aj-titulo">Tu perfil</div>
+      <div class="form-group" style="margin-top:0;">
+        <label class="form-label">Nombre completo</label>
+        <input class="form-input" id="settings-name" value="${esc(currentUser.name)}" maxlength="120">
       </div>
-      <button class="btn btn-outline" style="margin-top:10px;font-size:12.5px;" onclick="abrirCambiarContrasena()">
-        <i class="fa-solid fa-key"></i> Cambiar contraseña
-      </button>
-      <div class="form-group" style="margin-top:16px;">
-        <label class="form-label">Código de acceso para tu equipo</label>
-        <input class="form-input f-mono" value="${esc(currentUser.accessCode || '—')}" disabled
-               style="background:var(--surface);color:var(--amber-deep);font-size:16px;letter-spacing:2px;">
-        <div class="form-hint">
-          <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-          <span>Tus trabajadores entran con este código y su PIN personal.</span>
-        </div>
-      </div>`}
+      <div class="aj-fila"><span class="et">Puesto</span><span class="vl">${esc(currentUser.role) || '—'}</span></div>
+      <div class="aj-fila"><span class="et">Empresa</span><span class="vl">${esc(currentUser.company) || '—'}</span></div>
+    </div>
 
-    <!-- ---------- Tus datos ---------- -->
+    <div class="aj-bloque">
+      <div class="aj-titulo">Seguridad</div>
+      ${esTrabajador ? `
+        <div class="aj-fila"><span class="et">Cómo entras</span><span class="vl">Código de empresa + PIN</span></div>
+        <div class="aj-nota">
+          <i class="fa-solid fa-key" style="margin-top:2px;"></i>
+          <span>Si has olvidado tu PIN, pídeselo a tu encargado: lo tiene en tu ficha.</span>
+        </div>` : `
+        <div class="aj-fila"><span class="et">Contraseña</span><span class="vl f-mono">••••••••</span></div>
+        <div class="aj-acciones">
+          <button class="btn btn-outline" style="font-size:12.5px;" onclick="abrirCambiarContrasena()">
+            <i class="fa-solid fa-key"></i> Cambiar contraseña
+          </button>
+        </div>
+        <div class="aj-codigo">
+          <div>
+            <div class="aj-titulo" style="margin:0 0 3px;">Código de acceso del equipo</div>
+            <div class="valor f-mono" id="dato-codigo-equipo">${esc(currentUser.accessCode || '—')}</div>
+          </div>
+          <button class="btn btn-outline" style="font-size:12.5px;white-space:nowrap;"
+                  onclick="copiarCodigoEquipo(this)"><i class="fa-solid fa-copy"></i> Copiar</button>
+        </div>
+        <div class="aj-nota">
+          <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
+          <span>Tus trabajadores entran con este código y su PIN personal. Es el mismo para toda la empresa.</span>
+        </div>`}
+    </div>
+
     ${!esTrabajador ? `
-    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">TUS DATOS</span></div>
-    <div id="uso-almacen" style="font-size:12.5px;color:var(--steel);line-height:1.55;"></div>
-    <button class="btn btn-outline" id="btn-exportar-todo" style="margin-top:10px;font-size:12.5px;" onclick="exportarTodo()">
-      <i class="fa-solid fa-download"></i> Descargar todos mis datos
-    </button>
-    <div class="form-hint" style="margin-top:6px;">
-      <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
-      <span>Un archivo para Excel con todo: clientes, trabajadores, ${t('p')}, ${tm('p')}, registro de jornada, incidencias y cobros.</span>
+    <div class="aj-bloque">
+      <div class="aj-titulo">Tus datos</div>
+      <div id="uso-almacen" style="font-size:13px;color:var(--steel);line-height:1.55;"></div>
+      <div class="aj-acciones">
+        <button class="btn btn-outline" id="btn-exportar-todo" style="font-size:12.5px;" onclick="exportarTodo()">
+          <i class="fa-solid fa-download"></i> Descargar todos mis datos
+        </button>
+      </div>
+      <div class="aj-nota">
+        <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
+        <span>Un archivo para Excel con todo: clientes, trabajadores, ${t('p')}, ${tm('p')},
+        registro de jornada, incidencias y cobros.</span>
+      </div>
     </div>` : ''}
 
-    <!-- ---------- Ayuda ---------- -->
-    <div class="doc-section-title"><span class="f-display" style="font-size:15px;">AYUDA</span></div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;">
-      ${!esTrabajador ? `
-        <button class="btn btn-outline" style="font-size:12.5px;" onclick="mostrarPrimerosPasos()">
-          <i class="fa-solid fa-list-check"></i> Primeros pasos
-        </button>` : `
-        <button class="btn btn-outline" style="font-size:12.5px;" onclick="repetirTutorial()">
-          <i class="fa-solid fa-circle-question"></i> Cómo se ficha
-        </button>`}
-      <button class="btn btn-outline" style="font-size:12.5px;" onclick="reabrirCookies()">
-        <i class="fa-solid fa-cookie-bite"></i> Cookies
-      </button>
-    </div>
-    <div class="form-hint" style="margin-top:8px;">
-      <i class="fa-solid fa-shield-halved" style="margin-top:1px;"></i>
-      <span>Opertra solo usa cookies técnicas para mantener tu sesión: no hay seguimiento ni publicidad.
-      Todo se guarda en la base de datos de tu empresa y solo tu empresa puede verlo.</span>
+    <div class="aj-bloque">
+      <div class="aj-titulo">Ayuda y privacidad</div>
+      <div class="aj-acciones" style="margin-top:0;">
+        ${!esTrabajador ? `
+          <button class="btn btn-outline" style="font-size:12.5px;" onclick="mostrarPrimerosPasos()">
+            <i class="fa-solid fa-list-check"></i> Primeros pasos
+          </button>` : `
+          <button class="btn btn-outline" style="font-size:12.5px;" onclick="repetirTutorial()">
+            <i class="fa-solid fa-circle-question"></i> Cómo se ficha
+          </button>`}
+        <button class="btn btn-outline" style="font-size:12.5px;" onclick="reabrirCookies()">
+          <i class="fa-solid fa-cookie-bite"></i> Cookies
+        </button>
+      </div>
+      <div class="aj-nota">
+        <i class="fa-solid fa-shield-halved" style="margin-top:2px;"></i>
+        <span>Opertra solo usa cookies técnicas para mantener tu sesión: no hay seguimiento ni
+        publicidad. Todo se guarda en la base de datos de tu empresa y solo tu empresa puede verlo.</span>
+      </div>
     </div>
 
     <div id="settings-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="settings-error-text"></span></div>
@@ -9132,6 +9205,25 @@ function openUserSettings() {
   marcarNavegacion();
   if (currentUser.photoPath) pintarImagen('settings-avatar', currentUser.photoPath, currentUser.name);
   if (!esTrabajador) mostrarUsoAlmacen();
+}
+
+/* El código de la empresa hay que pasárselo a cada trabajador: se copia
+   de un toque en vez de tener que seleccionarlo a mano. */
+async function copiarCodigoEquipo(boton) {
+  const el = document.getElementById('dato-codigo-equipo');
+  if (!el) return;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(el.textContent.trim());
+      const antes = boton.innerHTML;
+      boton.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+      setTimeout(() => { boton.innerHTML = antes; }, 1800);
+      return;
+    }
+  } catch (e) { /* abajo se selecciona a mano */ }
+  const sel = window.getSelection(), r = document.createRange();
+  r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
+  aviso('Tu navegador no deja copiar solo. Ya está seleccionado: pulsa Ctrl+C.');
 }
 
 async function subirFotoPerfil(event) {
@@ -9202,7 +9294,22 @@ async function guardarAjustesCuenta() {
     if (currentUser.isWorker) {
       const w = workers.find(x => x.dbId === currentUser.id);
       if (w) w.name = nombre;
-      try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
+      // El código de la empresa no es un secreto: es el mismo para todos y
+      // va escrito en las etiquetas de las máquinas. Se recuerda siempre
+      // para que nadie tenga que copiarlo a mano cada vez. El PIN no se
+      // guarda nunca por separado.
+      try { localStorage.setItem('opertra_ultimo_codigo', currentUser.accessCode || ''); } catch(e) {}
+
+      const recordar = document.getElementById('pin-recordar');
+      if (!recordar || recordar.checked) {
+        try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
+      } else {
+        // Móvil compartido: la sesión dura lo que dure la pestaña abierta
+        try {
+          localStorage.removeItem('opertra_worker_session');
+          sessionStorage.setItem('opertra_worker_session', JSON.stringify(currentUser));
+        } catch(e) {}
+      }
     }
     closeAddMachineModal();
     renderTopbarUser(); renderTrabajadores();
