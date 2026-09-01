@@ -2215,7 +2215,7 @@ function renderNav() {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
     <button class="nav-item" data-tab="${n.key}">
-      <i class="fa-solid ${n.icon}"></i>${n.label || (n.key === 'maquinaria' ? tm('nav') : t('P'))}${badge}
+      <i class="fa-solid ${n.icon}"></i>${nombreSeccion(n)}${badge}
     </button>`;
   }).join('');
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => {
@@ -2246,6 +2246,16 @@ function mobileSecondaryItems() {
   return NAV.filter(n => canAccess(n.key) && !primaryKeys.includes(n.key));
 }
 
+/* El nombre de una sección. Las que dependen del sector no llevan nombre
+   fijo: se calcula aquí. Antes el menú del móvil ponía "Obras" a todo lo
+   que no tuviera nombre propio, y por eso Maquinaria salía como Obras. */
+function nombreSeccion(n) {
+  if (n.label) return n.label;
+  if (n.key === 'maquinaria') return tm('nav');
+  if (n.key === 'obras') return t('P');
+  return n.key;
+}
+
 function renderMobileNav() {
   const unresolvedCount = incidents.filter(i => !i.resolved).length;
   const primary = mobilePrimary();
@@ -2253,7 +2263,7 @@ function renderMobileNav() {
 
   document.getElementById('mobile-nav-items').innerHTML = primary.map(n => `
     <button class="nav-item" data-tab="${n.key}">
-      <i class="fa-solid ${n.icon}"></i><span>${n.label || t('P')}</span>
+      <i class="fa-solid ${n.icon}"></i><span>${nombreSeccion(n)}</span>
     </button>`).join('') + `
     <button class="nav-item" onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
       <i class="fa-solid fa-bars"></i><span>Menú</span>
@@ -2267,7 +2277,7 @@ function renderMobileNav() {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
     <button class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
-      <i class="fa-solid ${n.icon}"></i><span>${n.label || t('P')}</span>${badge}
+      <i class="fa-solid ${n.icon}"></i><span>${nombreSeccion(n)}</span>${badge}
     </button>`;
   }).join('');
 }
