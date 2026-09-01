@@ -8769,7 +8769,13 @@ async function handleSignup() {
     || validarTexto(name, 'Tu nombre', LIMITES.nombre, true);
   if (errCampos) return fallo(errCampos);
   if (!correoValido(email)) return fallo('Ese correo no parece válido. Comprueba que esté bien escrito.');
+  // El CIF de la empresa se comprueba igual que el de sus clientes: si no,
+  // el dato con el que se factura entra mal desde el primer día y nadie
+  // se entera hasta que hay que emitir una factura.
   if (cif && cif.length > 20) return fallo('El CIF es demasiado largo.');
+  if (cif && !nifValido(cif)) {
+    return fallo('Ese CIF no es válido. Revísalo, o déjalo vacío y lo rellenas luego.');
+  }
   if (pass.length < 8) {
     document.getElementById('signup-error-text').textContent = 'La contraseña debe tener al menos 8 caracteres.';
     errBox.style.display = 'flex'; return;
