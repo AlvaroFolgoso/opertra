@@ -9202,6 +9202,10 @@ function openUserSettings() {
           <button class="btn btn-outline" style="font-size:12.5px;" onclick="repetirTutorial()">
             <i class="fa-solid fa-circle-question"></i> Cómo se ficha
           </button>`}
+        ${sePuedeInstalar() ? `
+          <button class="btn btn-outline" style="font-size:12.5px;" onclick="instalarDesdeAjustes()">
+            <i class="fa-solid fa-mobile-screen-button"></i> Instalar en este dispositivo
+          </button>` : ''}
         <button class="btn btn-outline" style="font-size:12.5px;" onclick="reabrirCookies()">
           <i class="fa-solid fa-cookie-bite"></i> Cookies
         </button>
@@ -9571,8 +9575,14 @@ window.addEventListener('beforeinstallprompt', (e) => {
   mostrarBannerInstalacion();
 });
 
+/* Los navegadores metidos dentro de otras apps (WhatsApp, Facebook) a
+   veces no traen matchMedia. Sin esta protección, Ajustes reventaba
+   entero al abrirse desde ahí. */
 function yaInstalada() {
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  try {
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+  } catch (e) {}
+  return window.navigator.standalone === true;
 }
 
 function esIOS() {
@@ -9582,7 +9592,9 @@ function esIOS() {
 function mostrarBannerInstalacion() {
   if (yaInstalada()) return;
   try { if (localStorage.getItem(INSTALL_KEY) === 'no') return; } catch (e) {}
-  if (window.innerWidth > 900) return; // solo tiene sentido en móvil o tablet
+  // En el ordenador solo si el navegador lo ofrece de verdad; en iPhone
+  // se explica el camino a mano, y eso solo tiene sentido en el móvil.
+  if (window.innerWidth > 900 && !promptInstalacion) return;
 
   const banner = document.getElementById('install-banner');
   const texto = document.getElementById('install-texto');
@@ -9610,9 +9622,37 @@ function mostrarBannerInstalacion() {
 async function instalarApp() {
   if (!promptInstalacion) return;
   promptInstalacion.prompt();
-  try { await promptInstalacion.userChoice; } catch (e) {}
+  let respuesta = null;
+  try { respuesta = await promptInstalacion.userChoice; } catch (e) {}
+  // El navegador no deja reutilizar su ventana: una vez usada, se acabó
   promptInstalacion = null;
   cerrarInstalacion();
+
+  if (respuesta && respuesta.outcome === 'dismissed') {
+    aviso('No pasa nada. Cuando quieras instalarla, la tienes en Ajustes de cuenta.');
+  }
+}
+
+/* Cuando el sistema confirma que ya está instalada */
+window.addEventListener('appinstalled', () => {
+  promptInstalacion = null;
+  cerrarInstalacion();
+  aviso('Opertra ya está en tu pantalla de inicio. Ábrela desde ahí a partir de ahora.', 'bien');
+});
+
+/* ¿Se puede ofrecer la instalación ahora mismo? */
+function sePuedeInstalar() {
+  return !yaInstalada() && (esIOS() || !!promptInstalacion);
+}
+
+/* Instalar desde Ajustes: el mismo camino, pero sin depender de que el
+   aviso de abajo siga en pantalla. */
+function instalarDesdeAjustes() {
+  closeAddMachineModal();
+  if (esIOS()) return comoInstalarEnIPhone();
+  if (promptInstalacion) return instalarApp();
+  aviso('Tu navegador no ofrece la instalación ahora mismo. Prueba desde Chrome en el móvil, '
+      + 'o usa el menú del navegador y busca "Instalar aplicación".');
 }
 
 /* Safari no permite instalar desde la web, así que se explica el camino
