@@ -271,7 +271,25 @@
   .btn { border: none; border-radius: 6px; font-family: 'Manrope', sans-serif; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
   .btn-amber { background: var(--amber); color: var(--graphite); padding: 9px 15px; font-size: 14px; }
   .btn-dark { background: var(--graphite); color: white; padding: 10px 16px; font-size: 14px; }
-  .btn-ghost { background: none; color: var(--steel); text-decoration: underline; font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+  /* Acción secundaria: se lee como un botón, no como un enlace suelto.
+     Sin subrayado, sin monoespaciada y con zona de pulsación de verdad
+     para un dedo con guantes. */
+  .btn-ghost {
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--steel); font-size: 12.5px; font-weight: 600;
+    font-family: inherit; text-decoration: none; cursor: pointer;
+    padding: 6px 10px; display: inline-flex; align-items: center; gap: 6px;
+    line-height: 1.2; transition: background .12s, color .12s, border-color .12s;
+  }
+  .btn-ghost:hover { background: var(--surface); color: var(--ink); border-color: var(--border); }
+  .btn-ghost:active { transform: translateY(1px); }
+  .btn-ghost:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+  /* Variante para "ver todos": la flecha invita a seguir */
+  .btn-ghost.enlace { color: var(--blue); padding-left: 4px; padding-right: 4px; }
+  .btn-ghost.enlace:hover { background: none; color: var(--blue-dark, var(--blue)); text-decoration: underline; }
+  /* Variante para acciones que quitan algo */
+  .btn-ghost.peligro { color: var(--danger); }
+  .btn-ghost.peligro:hover { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-bg); }
 
   .search-box { max-width: 280px; flex: 1; }
   .search-input { width: 100%; border: none; outline: none; background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="%235B6570" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>') no-repeat 12px center; padding: 9px 12px 9px 34px; font-size: 14px; font-family: 'Manrope', sans-serif; color: var(--ink); border-radius: 6px; background-color: var(--card); border: 1px solid var(--border); }
@@ -831,7 +849,7 @@
 
 <div id="login-screen" class="hidden">
   <div class="login-box">
-    <button class="btn-ghost" id="auth-back-btn" style="margin-bottom:12px;" onclick="authGoBack()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
+    <button class="btn-ghost" id="auth-back-btn" style="margin-bottom:12px;margin-left:-10px;" onclick="authGoBack()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
     <div class="login-brand">
       <div class="brand-icon" role="img" aria-label="Opertra"></div>
       <span class="login-brand-name">OPERTRA</span>
@@ -886,17 +904,6 @@
     <div id="auth-panel-login">
       <div class="login-title">Inicia sesión</div>
       <div class="login-sub">Accede con la cuenta de tu empresa</div>
-
-      <button class="login-btn-social" disabled style="opacity:.5;cursor:not-allowed;" title="Próximamente">
-        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.4 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 6.4 29.6 4 24 4c-8 0-14.8 4.5-18.3 11.1z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-2.1 14-5.6l-6.5-5.3C29.4 34.9 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.6 5.1C9.2 39.5 16 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.5 5.3C39.7 37 44 31.5 44 24c0-1.4-.1-2.4-.4-3.5z"/></svg>
-        Continuar con Google <span style="margin-left:auto;font-size:11px;color:var(--steel);">Próximamente</span>
-      </button>
-      <button class="login-btn-social" disabled style="opacity:.5;cursor:not-allowed;" title="Próximamente">
-        <i class="fa-brands fa-apple" style="font-size:16px;"></i>
-        Continuar con Apple <span style="margin-left:auto;font-size:11px;color:var(--steel);">Próximamente</span>
-      </button>
-
-      <div class="login-divider">o con tu correo</div>
 
       <div class="form-group" style="margin-top:0;">
         <label class="form-label">Correo electrónico</label>
@@ -2324,7 +2331,7 @@ function pintarTutorial() {
         ${tutoPaso < pasos.length - 1 ? 'Siguiente' : 'Entendido, empezar'}
       </button>
       ${tutoPaso < pasos.length - 1
-        ? `<button class="btn-ghost" style="margin-top:10px;font-size:13px;" onclick="tutoSaltar()">Saltar</button>`
+        ? `<button class="btn-ghost" style="margin-top:10px;" onclick="tutoSaltar()">Saltar explicación</button>`
         : ''}
     </div>
   `;
@@ -2413,8 +2420,9 @@ function bloquePrimerosPasos() {
             En cinco minutos lo tienes listo. ${hechos} de ${pasos.length} completado${hechos!==1?'s':''}.
           </div>
         </div>
-        <button class="btn-ghost" style="font-size:12px;align-self:flex-start;" onclick="ocultarPrimerosPasos()" title="Puedes volver a verlo desde Ajustes">
-          Ocultar
+        <button class="btn-ghost" style="align-self:flex-start;" onclick="ocultarPrimerosPasos()"
+                title="Puedes volver a verla desde Ajustes de cuenta">
+          <i class="fa-solid fa-eye-slash"></i> Ocultar guía
         </button>
         <div style="flex:1;min-width:120px;max-width:220px;">
           <div class="obra-progress-track"><div class="obra-progress-fill" style="width:${(hechos/pasos.length)*100}%;"></div></div>
@@ -2563,7 +2571,7 @@ function renderDashboard() {
       <div class="plate" style="width:280px;flex-shrink:0;padding:20px;">${rivets}
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span class="f-display" style="font-size:15px;">AVISOS</span>
-          <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('avisos')">ver todos <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
+          <button class="btn-ghost enlace" onclick="switchTab('avisos')">Ver todos <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
         </div>
         <div style="margin-top:14px;">
           ${incidents.filter(i=>!i.resolved).length === 0 ? `
@@ -2587,7 +2595,7 @@ function renderDashboard() {
     <div style="margin-top:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <span class="f-display" style="font-size:16px;">RESUMEN DE ${t('PP')}</span>
-        <button class="btn-ghost" style="text-decoration:none;color:var(--blue);" onclick="switchTab('obras')">ver todas <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
+        <button class="btn-ghost enlace" onclick="switchTab('obras')">Ver todas <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
       </div>
       <div class="obras-grid">
         ${(() => {
@@ -3032,8 +3040,10 @@ async function pintarListaUsuarios() {
         ${soyYo
           ? `<span class="chip status-vigente"><span class="dot"></span>Activo</span>`
           : activo
-            ? `<button class="btn-ghost" style="color:var(--danger);" onclick="revocarAcceso('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">revocar</button>`
-            : `<button class="btn-ghost" onclick="restaurarAcceso('${u.id}')">restaurar</button>`}
+            ? `<button class="btn-ghost peligro" onclick="revocarAcceso('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">
+                 <i class="fa-solid fa-ban"></i> Revocar acceso</button>`
+            : `<button class="btn-ghost" onclick="restaurarAcceso('${u.id}')">
+                 <i class="fa-solid fa-rotate-left"></i> Restaurar acceso</button>`}
       </div>`;
   }).join('');
 }
@@ -5337,7 +5347,8 @@ function renderRegistroHoras() {
                   ${l.editedBy ? `<i class="fa-solid fa-pen" style="font-size: 10px;color:var(--amber-deep);margin-left:4px;" title="Corregido por ${esc(l.editedBy)}: ${esc(l.editReason)}"></i>` : ''}
                   ${l.autoClosed ? `<i class="fa-solid fa-robot" style="font-size: 10px;color:var(--danger);margin-left:4px;" title="Cerrada automáticamente — revisa la hora real"></i>` : ''}
                 </td>
-                ${esAdmin ? `<td><button class="btn-ghost" onclick="openEditFichajeModal('${l.dbId}')" title="Corregir">corregir</button></td>` : ''}
+                ${esAdmin ? `<td><button class="btn-ghost" onclick="openEditFichajeModal('${l.dbId}')"
+                     title="Corregir este fichaje"><i class="fa-solid fa-pen"></i> Corregir</button></td>` : ''}
               </tr>`).join('')}
           </tbody>
         </table>
@@ -7888,7 +7899,8 @@ function renderFacturacion() {
                 <td style="white-space:nowrap;">
                   ${e !== 'paid'
                     ? `<button class="resolve-btn" style="padding:5px 10px;font-size:12px;" onclick="markInvoicePaid('${i.dbId}')"><i class="fa-solid fa-check"></i> Cobrado</button>`
-                    : `<button class="btn-ghost" onclick="markInvoicePending('${i.dbId}')">deshacer</button>`}
+                    : `<button class="btn-ghost" onclick="markInvoicePending('${i.dbId}')">
+                         <i class="fa-solid fa-rotate-left"></i> Deshacer</button>`}
                   <button class="vac-delete" onclick="borrarCobro('${i.dbId}')" title="Borrar"><i class="fa-solid fa-trash-can"></i></button>
                 </td>
               </tr>`;
