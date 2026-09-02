@@ -4408,8 +4408,10 @@ function obraElegida() {
 
 function cambiarObraHoy(valor) { obraElegidaManual = valor; }
 
-function cambiarMaquinaHoy(valor) {
+async function cambiarMaquinaHoy(valor) {
   maquinaElegidaManual = valor;
+  // Se pregunta cuánto marcaba la máquina la última vez, para proponerlo
+  await cargarUltimaLectura(valor || null);
   renderFichaje();
 }
 
@@ -4792,6 +4794,7 @@ function renderFicharCard() {
                   : `Previsto terminar sobre las ${horaDe(abierto.previstaFin)}. Te avisaremos.`}
               </div>`;
             })() : ''}
+            ${bloqueLecturas(true)}
             ${(() => {
               const dela = machines.find(m => m.dbId === abierto.machineId) || null;
               return `
@@ -4844,6 +4847,7 @@ function renderFicharCard() {
                     : 'Sin aviso. Recuerda fichar la salida al terminar.'}
                 </div>
               </div>
+              ${bloqueLecturas(false)}
               ${(() => {
                 // La que ha elegido HOY, que puede no ser la suya de siempre
                 const hoy = maquinaDeHoy();
@@ -4933,9 +4937,132 @@ async function ficharSinEscanear(momento) {
   await ficharAhora({ verificado: false });
 }
 
+/* ======================================================================
+   HORÓMETRO Y GASOIL
+   Se apuntan al entrar y al salir. El consumo real de la jornada es:
+       lo que había  +  lo que se repostó  −  lo que queda
+   Una resta simple daría negativo en cuanto alguien echa gasoil a media
+   mañana, que es lo normal.
+   ====================================================================== */
+let ultimaLectura = null;      // lo que marcaba la máquina la última vez
+
+/* Se pregunta cuánto marcaba la máquina la última vez que se usó, para
+   proponerlo. Que el trabajador teclee el horómetro entero cada día es
+   la mejor forma de que acabe mal escrito. */
+async function cargarUltimaLectura(machineDbId) {
+  ultimaLectura = null;
+  if (!machineDbId) return;
+  try {
+    const { data, error } = await getSupabase().rpc('ultima_lectura_maquina',
+      { p_machine_id: machineDbId });
+    if (error) return;
+    const fila = Array.isArray(data) ? data[0] : data;
+    if (fila && fila.horometro != null) ultimaLectura = fila;
+  } catch (e) { /* si falla, simplemente no se propone nada */ }
+}
+
+function campoLectura(id, etiqueta, unidad, valor, pista) {
+  return `
+    <div style="flex:1;min-width:130px;">
+      <label class="form-label" for="${id}" style="font-size:11.5px;">${etiqueta}</label>
+      <div style="position:relative;">
+        <input class="form-input f-mono" id="${id}" type="text" inputmode="decimal"
+               autocomplete="off" placeholder="—" value="${valor != null ? valor : ''}"
+               style="padding-right:44px;text-align:right;">
+        <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+                     font-size:12px;color:var(--steel);pointer-events:none;">${unidad}</span>
+      </div>
+      ${pista ? `<div style="font-size:11px;color:var(--steel);margin-top:4px;">${pista}</div>` : ''}
+    </div>`;
+}
+
+/* Los campos que se enseñan al fichar. Todos opcionales: una empresa que
+   no lleve el gasoil no tiene por qué rellenarlos. */
+function bloqueLecturas(esSalida) {
+  const maq = esSalida
+    ? (fichajeAbierto ? machines.find(m => m.dbId === fichajeAbierto.machineId) : null)
+    : maquinaDeHoy();
+  if (!maq) return '';
+
+  const propuesto = (!esSalida && ultimaLectura) ? ultimaLectura.horometro : null;
+  const gasoilProp = (!esSalida && ultimaLectura) ? ultimaLectura.gasoil : null;
+  const entradaH = esSalida && fichajeAbierto ? fichajeAbierto.horometroInicio : null;
+
+  return `
+    <div style="margin-top:18px;text-align:left;padding:14px;border:1px solid var(--border);
+                border-radius:10px;background:var(--surface);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div class="form-label" style="margin:0;">Lecturas de ${esc(maq.id)}</div>
+        <span style="font-size:11px;color:var(--steel);">Opcional</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        ${campoLectura('lec-horometro', 'Horómetro', 'h', propuesto,
+            esSalida
+              ? (entradaH != null ? `Al entrar marcaba ${entradaH} h` : '')
+              : (propuesto != null ? 'Última lectura conocida' : ''))}
+        ${campoLectura('lec-gasoil', 'Gasoil en el depósito', 'L', gasoilProp,
+            esSalida ? 'Lo que queda ahora' : (gasoilProp != null ? 'Lo que quedó la última vez' : ''))}
+      </div>
+      ${esSalida ? `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+          ${campoLectura('lec-repostado', 'Gasoil repostado hoy', 'L', null,
+              'Déjalo vacío si no has repostado')}
+        </div>` : ''}
+    </div>`;
+}
+
+/* Se envían después de fichar, en una llamada aparte. Si esto fallara, el
+   fichaje ya está guardado: las horas del trabajador nunca dependen de
+   que el gasoil se haya apuntado bien. */
+/* Se leen ANTES de fichar. Si se leyeran después, la pantalla ya se ha
+   repintado y los campos están vacíos: las lecturas se perdían. */
+function leerLecturasDeLaPantalla(esSalida) {
+  const num = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const texto = String(el.value || '').trim().replace(',', '.');
+    if (!texto) return null;
+    const v = Number(texto);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  return {
+    horometro: num('lec-horometro'),
+    gasoil: num('lec-gasoil'),
+    repostado: esSalida ? num('lec-repostado') : null,
+  };
+}
+
+async function guardarLecturas(logId, esSalida, lecturas) {
+  const l = lecturas || leerLecturasDeLaPantalla(esSalida);
+  const { horometro, gasoil, repostado } = l;
+  if (horometro === null && gasoil === null && repostado === null) return;
+
+  const ficha = miFichaTrabajador();
+  if (!ficha || !logId) return;
+  try {
+    const { data, error } = await getSupabase().rpc('worker_lecturas', {
+      p_worker_id: ficha.dbId, p_pin: ficha.pin, p_log_id: logId,
+      p_horometro: horometro, p_gasoil: gasoil, p_repostado: repostado,
+    });
+    if (error) throw error;
+    if (typeof data === 'string' && data.startsWith('ERROR')) {
+      aviso(data.replace('ERROR: ', ''), 'malo');
+      return;
+    }
+    aviso('Lecturas guardadas.', 'bien');
+  } catch (e) {
+    // El fichaje está bien; solo no se han podido guardar las lecturas
+    aviso('El fichaje se ha guardado, pero no las lecturas de la máquina. '
+        + 'Díselo a tu encargado para que las anote.', 'malo');
+  }
+}
+
 async function ficharAhora(opciones) {
   if (!hayConexion()) return;
   if (fichajeCargando) return;
+  // Lo primero de todo: lo que haya escrito en los campos, antes de que
+  // cualquier repintado los deje en blanco.
+  const lecturasApuntadas = leerLecturasDeLaPantalla(!!fichajeAbierto);
   // Si va a fichar entrada, comprobamos que la lista de trabajos esté al día
   if (!fichajeAbierto) await refrescarAntesDeFichar();
   fichajeCargando = true;
@@ -4963,6 +5090,12 @@ async function ficharAhora(opciones) {
     if (error) throw error;
 
     const accion = data && data[0] ? data[0].accion : null;
+    const idFichaje = data && data[0] ? data[0].log_id : null;
+
+    // Las lecturas van aparte: el fichaje ya está a salvo
+    if (accion === 'entrada' || accion === 'salida') {
+      await guardarLecturas(idFichaje, accion === 'salida', lecturasApuntadas);
+    }
 
     // Doble toque: en obra con mala cobertura es normal que alguien toque dos
     // veces al no ver respuesta. La base de datos no cierra una jornada abierta
