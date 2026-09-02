@@ -169,6 +169,15 @@
   .dato-copiable .etiq { font-size: 11.5px; color: var(--steel); letter-spacing: .5px;
                          text-transform: uppercase; }
 
+  /* El contenido de cada sección aparece con una transición corta. Sin
+     esto el cambio de pestaña es un salto seco y parece que se traba. */
+  .view.active { animation: vistaEntra .16s ease-out; }
+  @keyframes vistaEntra {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .view.active { animation: none; } }
+
   .brand-icon { width: 32px; height: 32px; border-radius: 6px; background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22 width=%22128%22 height=%22128%22 role=%22img%22 aria-label=%22Opertra%22%3E%3Cdefs%3E%3ClinearGradient id=%22op-placa%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23FBB114%22/%3E%3Cstop offset=%221%22 stop-color=%22%23EF9800%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 fill=%22%231C2126%22/%3E%3Crect x=%2226.5%22 y=%2226.5%22 width=%2275%22 height=%2275%22 rx=%2210%22 fill=%22url(%23op-placa)%22/%3E%3Cpath fill=%22%231C2126%22 fill-rule=%22evenodd%22 d=%22M55 39 h18 a16 16 0 0 1 16 16 v18 a16 16 0 0 1 -16 16 h-18 a16 16 0 0 1 -16 -16 v-18 a16 16 0 0 1 16 -16 z M58.5 51.5 h11 a7 7 0 0 1 7 7 v11 a7 7 0 0 1 -7 7 h-11 a7 7 0 0 1 -7 -7 v-11 a7 7 0 0 1 7 -7 z%22/%3E%3Cg transform=%22rotate(-45 64 64)%22 fill=%22url(%23op-placa)%22%3E%3Crect x=%2233%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3Crect x=%2277%22 y=%2261.9%22 width=%2218%22 height=%224.2%22/%3E%3C/g%3E%3Cg fill=%22%231C2126%22%3E%3Ccircle cx=%2234%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2234%22 r=%222.8%22/%3E%3Ccircle cx=%2234%22 cy=%2294%22 r=%222.8%22/%3E%3Ccircle cx=%2294%22 cy=%2294%22 r=%222.8%22/%3E%3C/g%3E%3C/svg%3E"); background-size: contain; background-position: center; background-repeat: no-repeat; flex-shrink: 0; }
   .brand-name { color: white; font-size: 15px; font-weight: 600; line-height: 1; }
   .brand-sub { color: #7C838A; font-size: 10px; margin-top: 3px; }
@@ -742,6 +751,9 @@
       display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
       background: var(--graphite); border-top: 1px solid var(--graphite-line);
       padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+      /* El fondo del botón activo se salía por debajo de la barra y quedaba
+         un rectángulo suelto sobre el contenido. */
+      overflow: hidden; align-items: stretch;
     }
     #mobile-nav-items { display: flex; width: 100%; justify-content: space-around; }
     #mobile-nav .nav-item {
@@ -2323,7 +2335,8 @@ function renderMobileNav() {
     <button class="nav-item" data-tab="${n.key}">
       <i class="fa-solid ${n.icon}"></i><span>${nombreSeccion(n)}</span>
     </button>`).join('') + `
-    <button class="nav-item" onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
+    <button class="nav-item ${mobileSecondaryItems().some(n => n.key === currentTab) ? 'active' : ''}"
+            onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
       <i class="fa-solid fa-bars"></i><span>Menú</span>
       ${secondaryHasBadge ? `<span class="nav-badge">${unresolvedCount}</span>` : ''}
     </button>`;
@@ -2367,7 +2380,14 @@ function switchTab(tab) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + tab).classList.add('active');
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.getElementById('view-title').textContent = VIEW_META[tab][0] || t('P');
+  // Se usa la misma función que el menú: así el título, el botón de abajo
+  // y la hoja de secciones dicen siempre lo mismo.
+  document.getElementById('view-title').textContent =
+    VIEW_META[tab][0] || nombreSeccion({ key: tab });
+  // Se empieza por arriba: si no, entras a una sección nueva por la mitad
+  const principal = document.getElementById('main');
+  if (principal) principal.scrollTop = 0;
+  window.scrollTo(0, 0);
   document.getElementById('view-subtitle').textContent =
     tab === 'dashboard' ? 'Vista de hoy, ' + new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) :
     tab === 'obras' ? projects.length + ' ' + (projects.length===1?t('s'):t('p')) + ' registrada' + (projects.length===1?'':'s') :
