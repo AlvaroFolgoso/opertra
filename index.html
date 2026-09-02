@@ -143,7 +143,8 @@
     .arranque-barra span { animation-duration: 2.4s; }
   }
 
-  #avisos { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  #avisos { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateZ(0);
+            will-change: transform;
             z-index: 400; display: flex; flex-direction: column; gap: 10px;
             width: min(440px, calc(100vw - 32px)); pointer-events: none; }
   .aviso { pointer-events: auto; display: flex; align-items: flex-start; gap: 11px;
@@ -173,8 +174,8 @@
      esto el cambio de pestaña es un salto seco y parece que se traba. */
   .view.active { animation: vistaEntra .16s ease-out; }
   @keyframes vistaEntra {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: none; }
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) { .view.active { animation: none; } }
 
@@ -627,6 +628,7 @@
     padding: 14px 16px;
     box-shadow: 0 14px 40px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
     animation: avisoEntra .22s ease-out;
+    transform: translateZ(0);
   }
   #install-banner-inner { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
   @media (max-width: 768px) {
@@ -642,6 +644,7 @@
     border-radius: 16px; padding: 16px 18px;
     box-shadow: 0 14px 40px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
     animation: avisoEntra .22s ease-out;
+    transform: translateZ(0);
   }
   /* Mientras haya un aviso abajo, la página deja hueco para no quedar tapada */
   body.con-aviso-abajo { padding-bottom: 190px; }
@@ -763,6 +766,10 @@
       /* El fondo del botón activo se salía por debajo de la barra y quedaba
          un rectángulo suelto sobre el contenido. */
       overflow: hidden; align-items: stretch;
+      /* En su propia capa: así el navegador no la recoloca cada vez que
+         algo se mueve en la pantalla, que es lo que la hacía saltar. */
+      transform: translateZ(0); will-change: transform; backface-visibility: hidden;
+      contain: paint;
     }
     #mobile-nav-items { display: flex; width: 100%; justify-content: space-around; }
     #mobile-nav .nav-item {
@@ -785,6 +792,7 @@
     transition: background .2s ease;
   }
   #more-sheet-overlay.active { display: flex; background: rgba(28,33,38,0.55); }
+  #more-sheet-overlay { transform: translateZ(0); }
   #more-sheet {
     width: 100%; max-width: 480px; background: var(--card);
     border-radius: 16px 16px 0 0;
