@@ -266,7 +266,11 @@
   /* Modal (añadir máquina) */
   #modal-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: center; justify-content: center; z-index: 60; }
   #modal-overlay.active { display: flex; }
-  #add-machine-modal { width: 440px; max-height: 88vh; overflow: auto; background: var(--card); border-radius: 10px; padding: 24px; }
+  #add-machine-modal {
+    width: 440px; max-height: 88vh; overflow-y: auto; overflow-x: hidden;
+    background: var(--card); border-radius: 10px; padding: 24px;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  }
   .modal-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .form-group { margin-top: 16px; }
   .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--steel); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 6px; }
@@ -466,7 +470,8 @@
   #overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: stretch; justify-content: flex-end; z-index: 50; }
   #overlay.active { display: flex; }
   #drawer { width: 380px; max-width: 100%; height: 100%; background: var(--card); padding: 24px;
-    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); overflow-y: auto;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
   .drawer-top { display: flex; justify-content: space-between; align-items: center; }
   .drawer-top-left { display: flex; align-items: center; gap: 12px; }
   .drawer-close { background: none; border: none; cursor: pointer; color: var(--steel); font-size: 18px; }
@@ -650,7 +655,11 @@
   /* ============ LEGAL ============ */
   #legal-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: center; justify-content: center; z-index: 70; }
   #legal-overlay.active { display: flex; }
-  #legal-modal { width: 560px; max-height: 80vh; overflow: auto; background: var(--card); border-radius: 10px; padding: 28px; }
+  #legal-modal {
+    width: 560px; max-height: 80vh; overflow-y: auto; overflow-x: hidden;
+    background: var(--card); border-radius: 10px; padding: 28px;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  }
   #legal-modal h2 { font-family: 'Oswald', sans-serif; font-size: 20px; margin: 0 0 4px; }
   #legal-modal .legal-updated { font-size: 12px; color: var(--steel); margin-bottom: 18px; }
   #legal-modal p { font-size: 13.5px; color: var(--steel); line-height: 1.65; margin: 0 0 12px; }
@@ -780,12 +789,14 @@
     width: 100%; max-width: 480px; background: var(--card);
     border-radius: 16px 16px 0 0;
     padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+    max-height: 80vh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
     transform: translateY(100%); transition: transform .24s cubic-bezier(.2,.8,.3,1);
   }
   #more-sheet-overlay.active #more-sheet { transform: none; }
   /* Mientras la hoja está abierta el fondo no se mueve: si no, el móvil
      recoloca la vista y la barra de abajo pega un salto. */
-  body.hoja-abierta { overflow: hidden; }
+  body.hoja-abierta, body.ventana-abierta { overflow: hidden; }
   @media (prefers-reduced-motion: reduce) {
     #more-sheet { transition: none; }
   }
@@ -6231,7 +6242,47 @@ function openAddMachineModal() {
   document.getElementById('modal-overlay').classList.add('active');
   marcarNavegacion();
 }
+/* Se congela el fondo mientras hay una ventana abierta y se devuelve al
+   mismo punto al cerrarla. Sin esto, el móvil no sabe qué está moviendo
+   el dedo y el desplazamiento se queda trabado. */
+let desplazamientoGuardado = 0;
+function congelarFondo() {
+  if (document.body.classList.contains('ventana-abierta')) return;
+  desplazamientoGuardado = window.scrollY || document.documentElement.scrollTop || 0;
+  document.body.classList.add('ventana-abierta');
+}
+function descongelarFondo() {
+  if (!document.body.classList.contains('ventana-abierta')) return;
+  document.body.classList.remove('ventana-abierta');
+  window.scrollTo(0, desplazamientoGuardado);
+}
+
 function closeAddMachineModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+
+/* Cualquier ventana que se abra o se cierre congela o suelta el fondo, sin
+   que haya que acordarse en cada uno de los sitios que las abren. */
+(function vigilarVentanas() {
+  const capas = ['modal-overlay', 'overlay', 'legal-overlay', 'more-sheet-overlay'];
+  const hayAlguna = () => capas.some(id => {
+    const el = document.getElementById(id);
+    return el && el.classList.contains('active');
+  });
+  const revisar = () => { if (hayAlguna()) congelarFondo(); else descongelarFondo(); };
+
+  const arrancar = () => {
+    capas.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      new MutationObserver(revisar).observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+    revisar();
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arrancar);
+  } else {
+    arrancar();
+  }
+})();
 
 function mostrarFotoMaquinaNueva(event) {
   const f = event.target.files[0];
