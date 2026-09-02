@@ -1879,7 +1879,7 @@ async function loadCompanyData() {
   try {
     const [projRes, machRes, docRes, workRes, vacRes, cliRes] = await Promise.all([
       sb.from('projects').select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').order('created_at'),
-      sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,updated_at').order('created_at'),
+      sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,medidor,updated_at').order('created_at'),
       sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
       sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id,updated_at' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
       // Las vacaciones no se borran nunca. Sin filtro, a los años se arrastrarían
@@ -2064,6 +2064,45 @@ function mapearCliente(c) {
     dbId: c.id, name: c.name, taxId: c.tax_id, email: c.email, phone: c.phone,
     address: c.address, contactName: c.contact_name, notes: c.notes, updatedAt: c.updated_at,
   };
+}
+
+/* Qué cuenta cada máquina. No se adivina por el nombre —"la amarilla" o
+   "JCB 3CX" no dicen nada— sino que se guarda en su ficha. */
+const MEDIDORES = {
+  horas:   { etiqueta: 'Horómetro',        unidad: 'h',  nombre: 'horas de máquina' },
+  km:      { etiqueta: 'Cuentakilómetros', unidad: 'km', nombre: 'kilómetros' },
+  ninguno: { etiqueta: null,               unidad: '',   nombre: 'nada' },
+};
+
+function medidorDe(maquina) {
+  const m = maquina && maquina.medidor;
+  return MEDIDORES[m] ? m : 'horas';
+}
+
+/* Lo que se propone al dar de alta una máquina, según el tipo elegido.
+   Es solo una propuesta: manda lo que diga el usuario. */
+function medidorSegunTipo(tipo) {
+  const t = String(tipo || '').toLowerCase();
+  if (/cami|furgon|tr[aá]iler|cabeza|reparto|veh[ií]culo|coche/.test(t)) return 'km';
+  if (/remolque|contenedor|cuba|silo|generador|compresor/.test(t)) return 'ninguno';
+  return 'horas';
+}
+
+function selectorMedidor(id, valor) {
+  return `
+    <div class="form-group">
+      <label class="form-label">¿Qué cuenta esta ${tm('s')}?</label>
+      <select class="form-select" id="${id}">
+        <option value="horas"${valor === 'horas' ? ' selected' : ''}>Horas de trabajo (horómetro)</option>
+        <option value="km"${valor === 'km' ? ' selected' : ''}>Kilómetros (cuentakilómetros)</option>
+        <option value="ninguno"${valor === 'ninguno' ? ' selected' : ''}>Nada — no lleva contador</option>
+      </select>
+      <div class="form-hint">
+        <i class="fa-solid fa-circle-info" style="margin-top:1px;"></i>
+        <span>Es lo que se pedirá al fichar, para llevar el control del uso y del gasoil.
+        Las excavadoras y tractores cuentan horas; los camiones y furgonetas, kilómetros.</span>
+      </div>
+    </div>`;
 }
 
 function mapearObra(p) {
@@ -3676,6 +3715,7 @@ function openEditMachineModal(code) {
 }
 
 function toggleEditTipo() {
+  proponerMedidor('em-type', 'em-medidor', 'em-type-custom');
   const esOtro = document.getElementById('em-type').value === '__otro__';
   document.getElementById('em-type-custom').classList.toggle('hidden', !esOtro);
 }
@@ -3726,7 +3766,7 @@ async function guardarMaquina(code) {
     }
     const proj = projects.find(p => p.dbId === projectId);
     Object.assign(m, {
-      type, model, plate: plate || '—', status, fuel,
+      type, model, plate: plate || '—', status, fuel, medidor,
       projectDbId: projectId, project: proj ? proj.id : null,
       location: proj ? proj.name : 'Almacén / sin asignar',
     });
@@ -4690,7 +4730,19 @@ async function cargarJornadasAbiertas() {
   } catch (e) { console.error('Error cargando jornadas abiertas:', e); }
 }
 
+let maquinaConsultada = null;
 function renderFichaje() {
+  // Se pide la última lectura de la máquina que toque, aunque no se haya
+  // tocado el desplegable. Antes solo se pedía al cambiarlo a mano, así
+  // que quien tenía máquina fija no veía nunca la sugerencia.
+  const enJuego = fichajeAbierto
+    ? fichajeAbierto.machineId
+    : (typeof maquinaDeHoy === 'function' && maquinaDeHoy() ? maquinaDeHoy().dbId : null);
+  if (enJuego && enJuego !== maquinaConsultada && !fichajeAbierto) {
+    maquinaConsultada = enJuego;
+    cargarUltimaLectura(enJuego).then(() => renderFichaje());
+  }
+
   const esTrabajador = puedoFichar();
   document.getElementById('view-fichaje').innerHTML = `
     <div class="avisos-tabs">
@@ -4953,11 +5005,17 @@ async function cargarUltimaLectura(machineDbId) {
   ultimaLectura = null;
   if (!machineDbId) return;
   try {
-    const { data, error } = await getSupabase().rpc('ultima_lectura_maquina',
-      { p_machine_id: machineDbId });
+    // El trabajador entra con PIN y no tiene sesión de navegador: se le
+    // manda para que la base de datos sepa de qué empresa es.
+    const ficha = miFichaTrabajador();
+    const { data, error } = await getSupabase().rpc('ultima_lectura_maquina', {
+      p_machine_id: machineDbId,
+      p_worker_id: ficha ? ficha.dbId : null,
+      p_pin: ficha ? ficha.pin : null,
+    });
     if (error) return;
     const fila = Array.isArray(data) ? data[0] : data;
-    if (fila && fila.horometro != null) ultimaLectura = fila;
+    if (fila && (fila.horometro != null || fila.gasoil != null)) ultimaLectura = fila;
   } catch (e) { /* si falla, simplemente no se propone nada */ }
 }
 
@@ -4984,9 +5042,22 @@ function bloqueLecturas(esSalida) {
     : maquinaDeHoy();
   if (!maq) return '';
 
+  // Si esta máquina no lleva contador, no se pregunta por él. Pero el
+  // gasoil sí: un generador no cuenta horas y gasta igual.
+  const clase = medidorDe(maq);
+  const med = MEDIDORES[clase];
+  const pideContador = clase !== 'ninguno';
+
   const propuesto = (!esSalida && ultimaLectura) ? ultimaLectura.horometro : null;
   const gasoilProp = (!esSalida && ultimaLectura) ? ultimaLectura.gasoil : null;
   const entradaH = esSalida && fichajeAbierto ? fichajeAbierto.horometroInicio : null;
+
+  // De dónde vienen los datos propuestos: quién los dejó y cuándo. Sin
+  // esto el trabajador no sabe si confiar en el número que le sale.
+  const procedencia = (!esSalida && ultimaLectura && ultimaLectura.quien)
+    ? `Lo dejó ${esc(ultimaLectura.quien)}${ultimaLectura.cuando
+        ? ' el ' + fmtDate(fechaLocal(ultimaLectura.cuando)) : ''}`
+    : null;
 
   return `
     <div style="margin-top:18px;text-align:left;padding:14px;border:1px solid var(--border);
@@ -4995,11 +5066,21 @@ function bloqueLecturas(esSalida) {
         <div class="form-label" style="margin:0;">Lecturas de ${esc(maq.id)}</div>
         <span style="font-size:11px;color:var(--steel);">Opcional</span>
       </div>
+
+      ${procedencia ? `
+        <div style="display:flex;gap:8px;align-items:flex-start;margin-top:9px;padding:9px 11px;
+                    border-radius:8px;background:var(--amber-bg);font-size:12px;
+                    color:var(--amber-deep);line-height:1.45;">
+          <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
+          <span><b>Te proponemos lo último apuntado.</b> ${procedencia}.
+          Confírmalo o corrígelo si no cuadra.</span>
+        </div>` : ''}
+
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-        ${campoLectura('lec-horometro', 'Horómetro', 'h', propuesto,
+        ${pideContador ? campoLectura('lec-horometro', med.etiqueta, med.unidad, propuesto,
             esSalida
-              ? (entradaH != null ? `Al entrar marcaba ${entradaH} h` : '')
-              : (propuesto != null ? 'Última lectura conocida' : ''))}
+              ? (entradaH != null ? `Al entrar marcaba ${entradaH} ${med.unidad}` : '')
+              : (propuesto != null ? 'Última lectura conocida' : '')) : ''}
         ${campoLectura('lec-gasoil', 'Gasoil en el depósito', 'L', gasoilProp,
             esSalida ? 'Lo que queda ahora' : (gasoilProp != null ? 'Lo que quedó la última vez' : ''))}
       </div>
@@ -6101,6 +6182,7 @@ function openAddMachineModal() {
       <label class="form-label">Modelo</label>
       <input class="form-input" id="nm-model" maxlength="120" placeholder="Ej. CAT 320, Volvo FMX...">
     </div>
+    ${selectorMedidor('nm-medidor', 'horas')}
     <div class="form-group">
       <label class="form-label">Matrícula / nº de serie</label>
       <input class="form-input" id="nm-plate" maxlength="40" placeholder="Ej. 4392-KBL">
@@ -6143,7 +6225,22 @@ function mostrarFotoMaquinaNueva(event) {
   lector.readAsDataURL(f);
 }
 
+/* Al elegir el tipo se propone lo que suele contar esa clase de máquina.
+   Si el usuario ya lo ha tocado a mano, no se le pisa. */
+function proponerMedidor(idTipo, idMedidor, idOtro) {
+  const sel = document.getElementById(idMedidor);
+  if (!sel || sel.dataset.tocado === 'si') return;
+  const tipoSel = document.getElementById(idTipo);
+  let tipo = tipoSel ? tipoSel.value : '';
+  if (tipo === '__otro__' && idOtro) {
+    const otro = document.getElementById(idOtro);
+    tipo = otro ? otro.value : '';
+  }
+  sel.value = medidorSegunTipo(tipo);
+}
+
 function toggleCustomMachineType() {
+  proponerMedidor('nm-type', 'nm-medidor', 'nm-type-custom');
   const esOtro = document.getElementById('nm-type').value === '__otro__';
   const campo = document.getElementById('nm-type-custom');
   campo.classList.toggle('hidden', !esOtro);
@@ -6175,6 +6272,7 @@ async function submitAddMachine() {
     }
     const { data, error } = await getSupabase().from('machines').insert({
       company_id: currentUser.companyId, code: newCode, qr_code: qrCode, type, model, plate,
+      medidor: (document.getElementById('nm-medidor') || { value: 'horas' }).value,
       status: 'idle', fuel: 0, photo_url: rutaFoto, has_photo: !!rutaFoto,
       lat: 37.175 + (Math.random()-0.5)*0.02, lng: -3.59 + (Math.random()-0.5)*0.02,
       device_id: deviceId || null, device_model: deviceId ? 'Pendiente de confirmar' : null, device_linked: !!deviceId,
