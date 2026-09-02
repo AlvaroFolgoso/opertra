@@ -456,7 +456,8 @@
   /* Drawer */
   #overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: stretch; justify-content: flex-end; z-index: 50; }
   #overlay.active { display: flex; }
-  #drawer { width: 380px; max-width: 100%; height: 100%; background: var(--card); padding: 24px; padding-bottom: 48px; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+  #drawer { width: 380px; max-width: 100%; height: 100%; background: var(--card); padding: 24px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
   .drawer-top { display: flex; justify-content: space-between; align-items: center; }
   .drawer-top-left { display: flex; align-items: center; gap: 12px; }
   .drawer-close { background: none; border: none; cursor: pointer; color: var(--steel); font-size: 18px; }
@@ -614,7 +615,9 @@
     animation: avisoEntra .22s ease-out;
   }
   #install-banner-inner { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
-  @media (max-width: 768px) { #main { padding-bottom: 72px; } }
+  @media (max-width: 768px) {
+    #main { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+  }
 
   /* ============ BANNER DE COOKIES ============ */
   #cookie-banner {
@@ -683,7 +686,7 @@
 
   @media (max-width: 768px) {
     #app { flex-direction: column; }
-    #main { padding-bottom: 72px; }
+    #main { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
     #sidebar { display: none; }
 
     #topbar { padding: 12px 16px; }
@@ -755,9 +758,25 @@
     #mobile-nav .nav-badge { position: absolute; top: 0px; right: 14px; margin-left: 0; }
   }
 
-  #more-sheet-overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: flex-end; justify-content: center; z-index: 95; }
-  #more-sheet-overlay.active { display: flex; }
-  #more-sheet { width: 100%; max-width: 480px; background: var(--card); border-radius: 16px 16px 0 0; padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  #more-sheet-overlay {
+    position: fixed; inset: 0; background: rgba(28,33,38,0); display: none;
+    align-items: flex-end; justify-content: center; z-index: 95;
+    transition: background .2s ease;
+  }
+  #more-sheet-overlay.active { display: flex; background: rgba(28,33,38,0.55); }
+  #more-sheet {
+    width: 100%; max-width: 480px; background: var(--card);
+    border-radius: 16px 16px 0 0;
+    padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(100%); transition: transform .24s cubic-bezier(.2,.8,.3,1);
+  }
+  #more-sheet-overlay.active #more-sheet { transform: none; }
+  /* Mientras la hoja está abierta el fondo no se mueve: si no, el móvil
+     recoloca la vista y la barra de abajo pega un salto. */
+  body.hoja-abierta { overflow: hidden; }
+  @media (prefers-reduced-motion: reduce) {
+    #more-sheet { transition: none; }
+  }
   .more-sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: var(--border); margin: 6px auto 14px; }
   #more-sheet-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .more-item { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; border-radius: 12px; background: var(--surface); border: none; cursor: pointer; position: relative; }
@@ -2282,12 +2301,20 @@ function renderMobileNav() {
   }).join('');
 }
 
-function toggleMoreSheet() { document.getElementById('more-sheet-overlay').classList.add('active'); }
-function closeMoreSheet() { document.getElementById('more-sheet-overlay').classList.remove('active'); }
+function toggleMoreSheet() {
+  document.getElementById('more-sheet-overlay').classList.add('active');
+  document.body.classList.add('hoja-abierta');
+}
+function closeMoreSheet() {
+  document.getElementById('more-sheet-overlay').classList.remove('active');
+  document.body.classList.remove('hoja-abierta');
+}
 
 let currentTab = 'dashboard';
 function switchTab(tab) {
   if (!canAccess(tab)) tab = 'dashboard'; // sin permiso para este módulo
+  // Si se llega desde la hoja del menú, se suelta el bloqueo del fondo
+  document.body.classList.remove('hoja-abierta');
   if (currentTab === 'fichaje' && tab !== 'fichaje' && typeof stopQRScan === 'function') {
     stopQRScan(); stopNFCScan();
   }
@@ -4770,7 +4797,11 @@ function renderFicharCard() {
               return `
               <button class="btn btn-dark" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${dela ? 'abrirEscaneo()' : 'ficharAhora()'}">
                 <i class="fa-solid fa-${dela ? 'qrcode' : 'right-from-bracket'}"></i> ${dela ? 'Escanear y fichar salida' : 'Fichar salida'}
-              </button>`;
+              </button>
+              ${dela ? `
+                <button class="btn-ghost" style="margin-top:10px;" onclick="ficharSinEscanear('salida')">
+                  No puedo escanear · Fichar salida igualmente
+                </button>` : ''}`;
             })()}
             <div style="font-size:12px;color:var(--steel);margin-top:10px;line-height:1.5;">
               Si cambias de ${t('s')} o de ${tm('s')}, ficha salida y vuelve a fichar entrada: escanea directamente ${tm('el')} ${tm('s')} nuev${tm('g')} y se elige sol${tm('g')}. Así las horas quedan bien repartidas.
@@ -4813,10 +4844,21 @@ function renderFicharCard() {
                     : 'Sin aviso. Recuerda fichar la salida al terminar.'}
                 </div>
               </div>
-              <button class="btn btn-amber" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${machine ? 'abrirEscaneo()' : 'ficharAhora()'}">
-                <i class="fa-solid fa-${machine ? 'qrcode' : 'right-to-bracket'}"></i> ${machine ? 'Escanear y fichar' : 'Fichar entrada'}
+              ${(() => {
+                // La que ha elegido HOY, que puede no ser la suya de siempre
+                const hoy = maquinaDeHoy();
+                return `
+              <button class="btn btn-amber" id="btn-fichar" style="width:100%;justify-content:center;margin-top:20px;padding:16px;font-size:16px;" onclick="${hoy ? 'abrirEscaneo()' : 'ficharAhora()'}">
+                <i class="fa-solid fa-${hoy ? 'qrcode' : 'right-to-bracket'}"></i> ${hoy ? 'Escanear y fichar' : 'Fichar entrada'}
               </button>
-              ${machine ? `<div style="font-size: 11px;color:var(--steel);margin-top:8px;">Escanea el código de la máquina para confirmar que estás con ella.</div>` : ''}
+              ${hoy ? `
+                <div style="font-size: 11px;color:var(--steel);margin-top:8px;">
+                  Escanea el código de ${esc(hoy.id)} para confirmar que estás con ell${tm('g')}.
+                </div>
+                <button class="btn-ghost" style="margin-top:10px;" onclick="ficharSinEscanear('entrada')">
+                  No puedo escanear el código
+                </button>` : ''}`;
+              })()}
             `}
           `}
         </div>
@@ -4871,7 +4913,27 @@ function pedirPermisoAvisos() {
   }
 }
 
-async function ficharAhora() {
+/* Si la cámara no va, si el código está roto o si el trabajador ya se ha
+   ido de la máquina, tiene que poder fichar igual. Queda anotado que no
+   se verificó con el código, para que el encargado lo sepa. */
+async function ficharSinEscanear(momento) {
+  const esSalida = momento === 'salida';
+  const ok = await confirmar({
+    titulo: esSalida ? 'Fichar salida sin escanear' : 'Fichar sin escanear',
+    texto: esSalida
+      ? 'Se va a cerrar tu jornada sin leer el código.\n\n'
+        + 'La hora que se guarda es la de ahora mismo. Quedará anotado que no se '
+        + 'pudo escanear, por si tu encargado necesita comprobarlo.'
+      : 'Se va a fichar la entrada sin leer el código.\n\n'
+        + 'Quedará anotado que no se pudo escanear, por si tu encargado necesita comprobarlo.',
+    aceptar: esSalida ? 'Sí, fichar salida' : 'Sí, fichar entrada',
+  });
+  if (!ok) return;
+  cerrarEscaneo();
+  await ficharAhora({ verificado: false });
+}
+
+async function ficharAhora(opciones) {
   if (!hayConexion()) return;
   if (fichajeCargando) return;
   // Si va a fichar entrada, comprobamos que la lista de trabajos esté al día
@@ -4895,6 +4957,8 @@ async function ficharAhora() {
       p_worker_id: ficha.dbId, p_pin: ficha.pin,
       p_project_id: projectId || null, p_machine_id: machine ? machine.dbId : null,
       p_horas_previstas: fichajeAbierto ? null : horasPrevistas,
+      // false = no se pudo leer el código de la máquina
+      p_verificado: !(opciones && opciones.verificado === false),
     });
     if (error) throw error;
 
@@ -5152,7 +5216,7 @@ function comprobarCodigo(texto) {
   }
 
   document.getElementById('modal-overlay').classList.remove('active');
-  ficharAhora();
+  ficharAhora({ verificado: true });
 }
 
 /* ======================================================================
@@ -9928,6 +9992,11 @@ const INSTALL_KEY = 'opertra_install_v1';
 // puesta para siempre.
 setTimeout(quitarArranque, 6000);
 
+// Se vigila si sale una versión nueva. Va con retraso a propósito: si se
+// llama aquí mismo, sus variables todavía no existen (están definidas más
+// abajo) y el arranque entero se cae.
+setTimeout(arrancarVigilanciaDeVersion, 0);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     // El service worker avisa cuando ha guardado una version nueva de la
@@ -9952,18 +10021,92 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* ======================================================================
+   ACTUALIZACIÓN AUTOMÁTICA
+   Se pregunta al servidor si el archivo de la app ha cambiado. Es una
+   petición mínima (solo las cabeceras, no se descarga nada), así que se
+   puede hacer cada media hora sin gastar datos del trabajador.
+   ====================================================================== */
+let selloVersion = null;      // la "huella" de la versión que se está usando
+let comprobandoVersion = false;
+
+async function huellaDeLaVersion() {
+  const r = await fetch('/index.html?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+  if (!r || !r.ok) return null;
+  return r.headers.get('etag') || r.headers.get('last-modified') || null;
+}
+
+async function comprobarVersionNueva(auto) {
+  if (comprobandoVersion) return;
+  if (navigator.onLine === false) return;
+  comprobandoVersion = true;
+  try {
+    const huella = await huellaDeLaVersion();
+    if (!huella) return;                       // el servidor no la da: no se puede comparar
+    if (selloVersion === null) { selloVersion = huella; return; }
+    if (huella === selloVersion) return;
+
+    // Hay versión nueva. Si se puede recargar sin molestar, se hace sola.
+    if (auto && sePuedeRecargarSinMolestar()) {
+      aviso('Actualizando Opertra...', 'bien');
+      setTimeout(() => location.reload(), 900);
+      return;
+    }
+    avisarVersionNueva();
+  } catch (e) {
+    /* sin conexión o servidor caído: se reintenta en la siguiente vuelta */
+  } finally {
+    comprobandoVersion = false;
+  }
+}
+
+/* Recargar en mitad de un formulario le borraría lo escrito, y en mitad
+   de un fichaje sería peor. En esos casos se pregunta en vez de hacerlo. */
+function sePuedeRecargarSinMolestar() {
+  const modal = document.getElementById('modal-overlay');
+  const cajon = document.getElementById('overlay');
+  if (modal && modal.classList.contains('active')) return false;
+  if (cajon && cajon.classList.contains('active')) return false;
+  if (typeof escaneando !== 'undefined' && escaneando) return false;
+  if (typeof fichajeCargando !== 'undefined' && fichajeCargando) return false;
+  if (typeof operacionesEnCurso !== 'undefined' && operacionesEnCurso
+      && operacionesEnCurso.size > 0) return false;
+
+  // ¿Hay algo escrito a medias en algún campo?
+  const campos = document.querySelectorAll('input:not([type=hidden]), textarea');
+  for (const c of campos) {
+    if (c.type === 'checkbox' || c.type === 'radio') continue;
+    if (c.value && c.value.trim() && !c.disabled && c.offsetParent !== null) return false;
+  }
+  return true;
+}
+
+function arrancarVigilanciaDeVersion() {
+  comprobarVersionNueva(false);                       // se guarda la huella actual
+  setInterval(() => comprobarVersionNueva(true), 30 * 60 * 1000);   // cada media hora
+
+  // Y al volver a la app después de tenerla en segundo plano, que es
+  // justo cuando se ha podido subir una versión nueva.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) comprobarVersionNueva(true);
+  });
+  window.addEventListener('online', () => comprobarVersionNueva(true));
+}
+
 function avisarVersionNueva() {
   if (document.getElementById('aviso-version')) return;
   const av = document.createElement('div');
   av.id = 'aviso-version';
   av.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:200;'
     + 'background:var(--graphite);color:white;padding:12px 16px;border-radius:12px;font-size:13px;'
-    + 'box-shadow:0 4px 16px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;max-width:92vw;';
-  av.innerHTML = '<span>Hay una versión nueva de Opertra.</span>'
-    + '<button style="background:var(--amber);color:var(--graphite);border:none;padding:7px 12px;'
-    + 'border-radius:8px;font-weight:600;font-size:12.5px;cursor:pointer;" onclick="location.reload()">Actualizar</button>'
-    + '<button style="background:none;border:none;color:#B7BCC1;cursor:pointer;font-size:16px;" '
-    + 'onclick="this.parentNode.remove()">&times;</button>';
+    + 'box-shadow:0 14px 40px rgba(0,0,0,.45);display:flex;align-items:center;gap:11px;'
+    + 'max-width:min(440px,92vw);border:1px solid #3A424B;';
+  av.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="color:var(--amber);"></i>'
+    + '<span style="flex:1;">Hay una versión nueva de Opertra.</span>'
+    + '<button class="btn btn-amber" style="padding:7px 12px;font-size:12.5px;white-space:nowrap;" '
+    + 'onclick="location.reload()">Actualizar</button>'
+    + '<button class="btn-ghost" style="color:#B7BCC1;" aria-label="Cerrar" '
+    + 'onclick="this.parentNode.remove()"><i class="fa-solid fa-xmark"></i></button>';
   document.body.appendChild(av);
 }
 
