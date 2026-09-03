@@ -825,29 +825,34 @@
        el hueco de la franja del iPhone, y ahí no llega ningún fondo. */
     #mobile-nav-items {
       display: flex; width: 100%; justify-content: space-around;
-      align-items: stretch; height: 52px;
+      align-items: center; height: 52px;
     }
     #mobile-nav .nav-item {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 3px;
-      padding: 0 2px; height: 100%;
-      border-radius: 10px; position: relative; max-width: none; min-width: 0;
+      flex: 1 1 0; min-width: 0; max-width: none;
+      /* Rejilla de dos filas con medidas escritas a mano: el dibujo arriba,
+         el nombre abajo. Nada puede cambiar de sitio ni de tamaño. */
+      display: grid; grid-template-rows: 24px 14px; align-content: center;
+      justify-items: center; row-gap: 4px;
+      height: 52px; box-sizing: border-box; padding: 0 2px;
+      border-radius: 10px; position: relative; overflow: hidden;
       -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-      /* La única animación: encogerse un pelín al pulsar y volver. Dura lo
-         que dura el toque, no arrastra nada y se siente como un botón. */
-      transition: transform .12s ease, background .12s ease, color .12s ease;
+      transition: background .1s ease, color .1s ease;
     }
-    #mobile-nav .nav-item:active { transform: scale(.90); }
-    /* Solo texto, sin iconos. Los iconos venían de una fuente que se
-       descarga, y al llegar recolocaban el botón: por eso el dibujo subía,
-       bajaba o desaparecía al pulsar. Sin fuente que esperar, no hay nada
-       que se pueda mover. */
-    /* El dibujo ocupa siempre lo mismo porque está dentro del archivo: no
-       hay ninguna fuente que llegue tarde y lo recoloque. */
-    #mobile-nav .nav-item svg { display: block; flex-shrink: 0; }
-    #mobile-nav .nav-item span {
-      display: block; max-width: 100%; text-align: center;
-      font-size: 10.5px; font-weight: 600; line-height: 1;
+    /* Lo que se encoge al pulsar es el CONTENIDO, no el botón. Así el hueco
+       que ocupa en la barra no cambia jamás y no se recoloca nada. */
+    #mobile-nav .nav-item > svg, #mobile-nav .nav-item > span {
+      transition: transform .11s cubic-bezier(.3,.7,.4,1);
+    }
+    #mobile-nav .nav-item:active > svg, #mobile-nav .nav-item:active > span {
+      transform: scale(.86);
+    }
+    /* Cada uno en su fila, centrado y con su alto fijo */
+    #mobile-nav .nav-item > svg {
+      display: block; width: 24px; height: 24px; align-self: center;
+    }
+    #mobile-nav .nav-item > span {
+      display: block; max-width: 100%; text-align: center; align-self: center;
+      font-size: 10.5px; font-weight: 600; line-height: 14px; height: 14px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     /* Solo el color, igual que en las celdas del menú, que ya van bien */
@@ -2032,7 +2037,15 @@ function pintarPestanaActual(permitirSaltar) {
   }
   // Cualquier repintado forzado quiere decir que algo ha cambiado: las
   // demás pestañas dejan de estar al día y se repintarán al visitarlas.
-  if (permitirSaltar !== true) revisionDatos++;
+  if (permitirSaltar !== true) {
+    revisionDatos++;
+    // Los datos han cambiado: lo prepintado ya no vale, se rehace en el
+    // siguiente rato libre.
+    prepintadoHecho = false;
+    setTimeout(() => {
+      if (currentUser && currentUser.companyId) prepintarPantallas();
+    }, 800);
+  }
 
   const pintar = pintores[currentTab];
   if (pintar) pintar();
@@ -2045,6 +2058,44 @@ function pintarPestanaActual(permitirSaltar) {
 
 /* Solo actualiza el numerito rojo de avisos, sin rehacer los botones.
    Rehacerlos enteros hacía parpadear el texto en cada toque. */
+/* Se pintan las pantallas que no se están viendo, aprovechando los ratos
+   en que el móvil no tiene nada que hacer. Una cada vez, y solo si de
+   verdad está libre: nunca se le quita tiempo a lo que el usuario ve.
+
+   El corte al pulsar era esto: la primera vez que entras en una pestaña hay
+   que construirla entera. Con esto, no hay primera vez. */
+let prepintadoHecho = false;
+function prepintarPantallas() {
+  if (prepintadoHecho) return;
+  prepintadoHecho = true;
+
+  const cola = ['dashboard', 'fichaje', 'obras', 'trabajadores', 'maquinaria',
+                'avisos', 'clientes', 'facturacion', 'informes']
+    .filter(t => t !== currentTab && canAccess(t));
+
+  const cuandoHayaHueco = window.requestIdleCallback
+    ? window.requestIdleCallback.bind(window)
+    : ((fn) => setTimeout(() => fn({ timeRemaining: () => 12 }), 120));
+
+  const siguiente = () => {
+    if (!cola.length) return;
+    cuandoHayaHueco((hueco) => {
+      const t = cola.shift();
+      const vista = document.getElementById('view-' + t);
+      if (vista && vista.innerHTML.length === 0) {
+        const antes = currentTab;
+        try {
+          currentTab = t;
+          pintarPestanaActual(true);
+        } catch (e) { /* si una pantalla falla, se sigue con las demás */ }
+        currentTab = antes;
+      }
+      siguiente();
+    }, { timeout: 2500 });
+  };
+  siguiente();
+}
+
 let ultimoRecuentoAvisos = -1;
 function refrescarAvisosDeNav(forzar) {
   const pendientes = incidents.filter(i => !i.resolved).length;
@@ -10523,6 +10574,14 @@ setTimeout(quitarArranque, 6000);
 // llama aquí mismo, sus variables todavía no existen (están definidas más
 // abajo) y el arranque entero se cae.
 setTimeout(arrancarVigilanciaDeVersion, 0);
+
+// En cuanto haya un rato libre, se dejan pintadas las demás pantallas para
+// que el primer toque en cada una sea instantáneo y no dé el corte.
+setTimeout(() => {
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.companyId) {
+    prepintarPantallas();
+  }
+}, 1200);
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
