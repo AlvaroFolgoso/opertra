@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Opertra · Gestión de flota y personal</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1C2126">
@@ -109,11 +109,19 @@
      ventana y todo lo fijo se recoloca. De ahi el salto de la barra de
      abajo. 100dvh es la altura REAL en cada momento. */
   #app { display: flex; width: 100%; height: 100vh; height: 100dvh; }
+  /* Móviles antiguos (iPhone con iOS anterior a 15.4, Android viejo): ahí no
+     existe 100dvh y 100vh vale MÁS que lo que se ve, porque no descuenta la
+     barra del navegador. La barra de abajo se quedaría fuera de la pantalla.
+     En esos casos la altura la mide JavaScript y se guarda en --alto-app. */
+  html.sin-dvh #app { height: var(--alto-app, 100vh); }
   #app.hidden { display: none; }
 
   #sidebar {
     width: 220px; flex-shrink: 0; background: var(--graphite);
     display: flex; flex-direction: column; padding: 16px 12px;
+    /* Si la pantalla es baja no cabían las nueve secciones más Ajustes y
+       Salir, y se quedaban fuera sin forma de llegar a ellas. */
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
   /* ---- Aviso de versión nueva ---- */
@@ -220,8 +228,9 @@
   }
   .nav-item i { width: 17px; text-align: center; }
   .nav-item.active { background: var(--graphite-line); color: var(--amber); }
-  #mobile-nav .nav-item.active { background: rgba(255,255,255,.07); }
-  .nav-item:hover:not(.active) { color: white; }
+  /* Solo donde hay ratón de verdad. En el móvil, :hover se queda pegado
+     después de tocar y el botón se quedaba blanco al volver. */
+  @media (hover: hover) { .nav-item:hover:not(.active) { color: white; } }
   .nav-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--graphite-line); display: flex; flex-direction: column; gap: 4px; }
 
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -396,8 +405,20 @@
     100% { transform: translateX(360%); }
   }
 
-  /* La onda que sale del punto donde se ha tocado */
-  .btn .onda {
+  /* La onda que sale del punto donde se ha tocado.
+
+     ESTO ERA EL FALLO DE LOS ICONOS QUE SE MOVÍAN Y SE CORTABAN:
+     la regla decía ".btn .onda", solo para los botones .btn. Pero el
+     JavaScript metía la onda también en los botones de la barra de abajo
+     y en los .btn-ghost, y ahí el span no recibía NINGÚN estilo: en vez
+     de un círculo flotando por encima, se quedaba como una caja de
+     verdad de 76x76 píxeles metida dentro de un botón de 52. Empujaba
+     el dibujo y el nombre fuera de su sitio, y el recorte del botón se
+     comía lo que sobresalía. Medio segundo, justo mientras miras.
+
+     Ahora la regla vale para cualquier sitio donde caiga la onda, y así
+     no puede volver a ocupar espacio en ningún botón. */
+  .onda {
     position: absolute; border-radius: 50%; pointer-events: none;
     background: currentColor; opacity: .3; transform: scale(0);
     animation: ondaBoton .5s ease-out forwards; z-index: -1;
@@ -420,7 +441,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .btn, .btn:active { transition: none; transform: none; }
-    .btn .onda, .btn.trabajando::after { animation: none; display: none; }
+    .onda, .btn.trabajando::after { animation: none; display: none; }
   }
   .btn-amber { background: var(--amber); color: var(--graphite); padding: 9px 15px; font-size: 14px; }
   .btn-dark { background: var(--graphite); color: white; padding: 10px 16px; font-size: 14px; }
@@ -433,6 +454,9 @@
     font-family: inherit; text-decoration: none; cursor: pointer;
     padding: 6px 10px; display: inline-flex; align-items: center; gap: 6px;
     line-height: 1.2; transition: background .12s, color .12s, border-color .12s;
+    /* Para que la onda se quede dentro y por detrás del texto, igual que
+       en los .btn. Sin esto se salía del botón o no se veía. */
+    position: relative; overflow: hidden; isolation: isolate;
   }
   .btn-ghost:hover { background: var(--surface); color: var(--ink); border-color: var(--border); }
   .btn-ghost:active { transform: translateY(1px); }
@@ -669,8 +693,6 @@
     transform: translateZ(0);
   }
   #install-banner-inner { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
-  @media (max-width: 768px) {
-  }
 
   /* ============ BANNER DE COOKIES ============ */
   #cookie-banner {
@@ -742,19 +764,24 @@
     .invoice-doc { max-width: 100%; }
   }
 
-  @media (max-width: 768px) {
+  /* El segundo caso es el móvil de lado: 844x390 son más de 768 de ancho y
+     antes le salía la barra lateral de escritorio, que no cabía en 390 de
+     alto y dejaba "Ajustes" y "Salir" fuera de la pantalla. */
+  @media (max-width: 768px), (max-height: 500px) {
     #app { flex-direction: column; }
     #sidebar { display: none; }
 
     /* UNA sola zona que se desplaza: la vista. Antes tambien se desplazaba
        #main, una dentro de otra, y se peleaban por el mismo dedo. */
     #app { overflow: hidden; }
-    #main { overflow: hidden; }
+    /* #main es la fila que se estira. min-height:0 es obligatorio: sin el,
+       una columna flexible se niega a encoger por debajo de su contenido y
+       la barra de abajo se sale de la pantalla. */
+    #main { overflow: hidden; order: 1; flex: 1 1 auto; min-height: 0;
+            padding-top: 0;
+            padding-top: env(safe-area-inset-top, 0px); }
     .view {
       -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
-      /* El hueco va DENTRO de lo que se mueve. Si va fuera, queda una banda
-         gris fija entre el contenido y la barra: la "barrita" de siempre. */
-      padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
     }
     body.ventana-abierta .view, body.hoja-abierta .view { overflow: hidden; }
 
@@ -764,7 +791,10 @@
     .user-company { display: none; }
     .company-pill { display: none; }
 
-    .view { padding: 16px; }
+    /* Se escribe el padding completo: antes habia otra regla mas arriba con
+       padding-bottom y esta la borraba, asi que el ultimo boton de cada
+       pantalla se quedaba debajo de la barra y no habia forma de tocarlo. */
+    .view { padding: 16px 16px 24px; }
     .stat-row { gap: 10px; }
     .stat-card { min-width: 100%; padding: 14px; }
     .toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -804,64 +834,114 @@
     .report-value { width: 70px; font-size: 11px; }
   }
 
-  /* ============ NAVEGACIÓN MÓVIL PREMIUM ============ */
+  /* ======================================================================
+     BARRA INFERIOR DEL MÓVIL
+
+     Antes iba "flotando" (position: fixed) y con tres avisos al navegador
+     para que la pusiera en una capa aparte de la pantalla (translateZ,
+     will-change, backface-visibility). Esa capa aparte es justo lo que
+     hacía que al pulsar un botón el fondo de color apareciera en un
+     fotograma y el dibujo en otro: por eso los iconos "saltaban" y se
+     veían cortados.
+
+     Ahora la barra es sencillamente la última fila de la aplicación: #app
+     mide la pantalla, el contenido ocupa lo que sobra y la barra se queda
+     abajo porque no cabe en otro sitio. Sin capas, sin posiciones fijas y
+     sin nada que el móvil tenga que recolocar mientras el dedo está
+     encima. Es como funcionan las barras de las apps nativas.
+     ====================================================================== */
   #mobile-nav { display: none; }
-  @media (max-width: 768px) {
+  @media (max-width: 768px), (max-height: 500px) {
     #mobile-nav {
-      /* En bloque, NO en flex. Con flex, el botón se estiraba hasta llenar
-         también la franja de abajo del iPhone y su fondo bajaba hasta el
-         borde de la pantalla: ese era el rectángulo raro. */
-      display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+      display: block; order: 2; flex: 0 0 auto;
+      position: relative; z-index: 90;
       background: var(--graphite);
       /* Sin línea de separación: una sombra hace que la barra se lea como
          algo que flota por encima del contenido, no como un trozo pegado. */
       box-shadow: 0 -12px 28px rgba(0,0,0,.10);
-      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-      /* En su propia capa: así el navegador no la recoloca cada vez que
-         algo se mueve en la pantalla, que es lo que la hacía saltar. */
-      transform: translateZ(0); will-change: transform; backface-visibility: hidden;
+      /* Abajo, el hueco de la franja del iPhone. En Android vale 0 y no
+         cambia nada. A los lados, por si el móvil está tumbado. */
+      /* Primero la medida de siempre: si el móvil es antiguo y no entiende
+         env(), se queda con esta y no pierde el relleno. */
+      padding: 6px 4px;
+      padding: 6px calc(4px + env(safe-area-inset-left, 0px))
+               calc(6px + env(safe-area-inset-bottom, 0px))
+               calc(4px + env(safe-area-inset-right, 0px));
+      /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
+         provocar el zoom del doble toque. */
+      touch-action: manipulation;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
-    /* La fila de botones tiene su propia altura fija. Lo de debajo es solo
-       el hueco de la franja del iPhone, y ahí no llega ningún fondo. */
+    /* La fila de botones tiene alto propio y fijo, reservado desde el
+       primer fotograma. Aunque los botones tarden en escribirse, el hueco
+       ya está hecho y nada se mueve cuando aparecen. */
     #mobile-nav-items {
       display: flex; width: 100%; justify-content: space-around;
-      align-items: center; height: 52px;
+      align-items: stretch; height: 52px;
     }
     #mobile-nav .nav-item {
-      flex: 1 1 0; min-width: 0; max-width: none;
-      /* Rejilla de dos filas con medidas escritas a mano: el dibujo arriba,
-         el nombre abajo. Nada puede cambiar de sitio ni de tamaño. */
-      display: grid; grid-template-rows: 24px 14px; align-content: center;
-      justify-items: center; row-gap: 4px;
-      height: 52px; box-sizing: border-box; padding: 0 2px;
-      border-radius: 10px; position: relative; overflow: hidden;
+      flex: 1 1 0%; min-width: 0; max-width: none;
+      /* Columna con dos piezas de tamaño fijo: el dibujo y el nombre.
+         Cada uno tiene su caja y no puede invadir la del otro ni aunque
+         el dibujo tardara en aparecer. */
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      /* Separación con margen, no con gap: gap en flex no existe en Safari
+         anterior al 14.1 y ahí el nombre se pegaría al dibujo.
+         El gap: 0 es obligatorio: .nav-item (la barra lateral del
+         ordenador) trae gap: 12px y se sumaba al margen. */
+      gap: 0;
+      height: 100%; min-height: 0; box-sizing: border-box; padding: 0 2px;
+      border: 0; background: none; color: #B7BCC1;
+      border-radius: 10px; position: relative;
+      /* NADA de overflow:hidden. Era lo que recortaba los iconos en cuanto
+         algo se movía medio píxel. Con cajas de medida fija no hay nada
+         que recortar. */
       -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-      /* NADA de transiciones ni transformaciones. Cualquiera de las dos
-         obliga al navegador a pintar el contenido en una capa aparte, y esa
-         capa se compone un instante DESPUES del fondo. Ese instante es el
-         dibujo que aparece fuera de sitio. */
+      -webkit-user-select: none; user-select: none;
+      /* NADA de transiciones ni transformaciones: cualquiera de las dos
+         obliga al navegador a pintar el botón en una capa aparte, y esa
+         capa se compone un instante DESPUÉS del fondo. Ese instante es el
+         dibujo fuera de sitio. */
       transition: none;
     }
-    #mobile-nav .nav-item > svg, #mobile-nav .nav-item > span { transition: none; }
-    /* La senal de que has pulsado: el color, al momento. */
-    #mobile-nav .nav-item:active { background: rgba(251,177,20,.28); color: var(--amber); }
-    /* Cada uno en su fila, centrado y con su alto fijo */
-    #mobile-nav .nav-item > svg {
-      display: block; width: 24px; height: 24px; align-self: center;
+    /* La caja del dibujo: medida fija, pase lo que pase */
+    #mobile-nav .nav-item > .nav-ico {
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 26px; width: 26px; height: 26px; line-height: 0;
     }
-    #mobile-nav .nav-item > span {
-      display: block; max-width: 100%; text-align: center; align-self: center;
-      font-size: 10.5px; font-weight: 600; line-height: 14px; height: 14px;
+    #mobile-nav .nav-item > .nav-ico > svg {
+      display: block; width: 24px; height: 24px;
+    }
+    /* La caja del nombre: una línea, medida fija, y si no cabe se recorta
+       con puntos suspensivos en vez de empujar al dibujo. */
+    #mobile-nav .nav-item > .nav-txt {
+      display: block; flex: 0 0 14px; width: 100%; height: 14px;
+      margin-top: 4px; line-height: 14px; text-align: center;
+      font-size: 10.5px; font-weight: 600; letter-spacing: -.1px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    /* Solo el color, igual que en las celdas del menú, que ya van bien */
+    /* Pantallas estrechas (Android de 320-360): una pizca menos de letra
+       para que "Maquinaria" siga entrando entero. */
+    @media (max-width: 360px) { #mobile-nav .nav-item > .nav-txt { font-size: 9.5px; } }
+    /* La señal de que has pulsado: solo el color, en el mismo fotograma */
     #mobile-nav .nav-item.active { background: rgba(251,177,20,.16); color: var(--amber); }
-    #mobile-nav .nav-item i, #mobile-nav .nav-item span { transition: none; }
-    #mobile-nav .nav-item span {
-      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    #mobile-nav .nav-item:active { background: rgba(251,177,20,.28); color: var(--amber); }
+    #mobile-nav .nav-badge {
+      position: absolute; top: 1px; right: 8px; margin: 0;
+      min-width: 17px; height: 17px; line-height: 17px; padding: 0 5px;
+      box-sizing: border-box; text-align: center; font-size: 10px;
+      pointer-events: none;
     }
-    #mobile-nav .nav-item i { font-size: 18px; }
-    #mobile-nav .nav-badge { position: absolute; top: 0px; right: 14px; margin-left: 0; }
+    /* Móvil tumbado o pantalla muy baja: barra más estrecha para que no se
+       coma la mitad del alto útil. */
+    @media (max-height: 500px) {
+      #mobile-nav-items { height: 44px; }
+      #mobile-nav .nav-item > .nav-ico { flex-basis: 22px; width: 22px; height: 22px; }
+      #mobile-nav .nav-item > .nav-ico > svg { width: 20px; height: 20px; }
+      #mobile-nav .nav-item > .nav-txt { margin-top: 2px; }
+    }
   }
 
   #more-sheet-overlay {
@@ -899,32 +979,41 @@
     grid-auto-rows: 78px; align-items: stretch;
   }
   .more-item {
-    /* Misma rejilla rigida que los botones de la barra: es su continuacion */
-    display: grid; grid-template-rows: 26px 16px; align-content: center;
-    justify-items: center; row-gap: 6px;
+    /* Mismas cajas fijas que los botones de la barra: es su continuacion */
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0;   /* .nav-item trae gap: 12px y aquí sobra */
     padding: 8px; border-radius: 12px; background: var(--graphite-line);
     border: none; cursor: pointer; position: relative;
-    height: 100%; min-height: 0; max-width: none; overflow: hidden;
+    height: 100%; min-height: 0; max-width: none;
     transition: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
   }
   /* Al pulsar, solo el color. Nada de tamaños dentro de una hoja que flota.
      El gris de antes era casi el mismo que el fondo y no se notaba. */
-  .more-item:active { background: rgba(251,177,20,.28); }
-  .more-item:active > svg, .more-item:active > span { color: var(--amber); }
   .more-item.active { background: rgba(251,177,20,.16); }
-  .more-item.active > svg, .more-item.active > span { color: var(--amber); }
-  .more-item > svg { display: block; width: 26px; height: 26px; color: #C7CBD0; }
-  .more-item > span {
+  .more-item.active > .nav-ico, .more-item.active > .nav-txt { color: var(--amber); }
+  .more-item:active { background: rgba(251,177,20,.28); }
+  .more-item:active > .nav-ico, .more-item:active > .nav-txt { color: var(--amber); }
+  .more-item > .nav-ico {
+    display: flex; align-items: center; justify-content: center;
+    flex: 0 0 28px; width: 28px; height: 28px; line-height: 0; color: #C7CBD0;
+  }
+  .more-item > .nav-ico > svg { display: block; width: 26px; height: 26px; }
+  .more-item > .nav-txt {
     font-size: 11.5px; font-weight: 600; color: #C7CBD0;
-    display: block; line-height: 16px; height: 16px; text-align: center;
+    display: block; flex: 0 0 16px; line-height: 16px; height: 16px; text-align: center;
+    margin-top: 6px;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .more-item .nav-badge { position: absolute; top: 8px; right: 10px; }
+  .more-item .nav-badge {
+    position: absolute; top: 8px; right: 10px; margin: 0;
+    min-width: 17px; height: 17px; line-height: 17px; padding: 0 5px;
+    box-sizing: border-box; text-align: center; font-size: 10px; pointer-events: none;
+  }
 
   @media (max-width: 420px) {
     .user-avatar { width: 32px; height: 32px; font-size: 11px; }
-    #mobile-nav .nav-item { font-size: 10px; }
-    #mobile-nav .nav-item i { font-size: 17px; }
   }
 
   /* ============ DASHBOARD PRO ============ */
@@ -1430,6 +1519,44 @@
 
 <script>
 /* ======================================================================
+   ALTURA REAL DE LA PANTALLA (móviles antiguos)
+
+   Los móviles modernos entienden 100dvh, que es la altura de lo que se ve
+   de verdad en cada momento. Los antiguos (iPhone con iOS anterior al
+   15.4, Android viejo) solo entienden 100vh, que vale MÁS: no descuenta la
+   barra del navegador. Con 100vh, la barra de abajo de la aplicación se
+   queda por debajo del borde de la pantalla y no hay forma de tocarla.
+
+   Aquí se comprueba si el móvil entiende dvh. Si no, se mide la pantalla
+   con JavaScript y se guarda la medida en --alto-app. En un móvil moderno
+   este trozo no hace absolutamente nada.
+   ====================================================================== */
+(function alturaDePantalla() {
+  var entiendeDvh = false;
+  try { entiendeDvh = !!(window.CSS && CSS.supports && CSS.supports('height', '100dvh')); } catch (e) {}
+  if (entiendeDvh) return;
+
+  document.documentElement.classList.add('sin-dvh');
+  var pendiente = false;
+  function medir() {
+    pendiente = false;
+    // innerHeight en el móvil ya es lo que se ve, sin las barras del navegador
+    var alto = window.innerHeight || document.documentElement.clientHeight;
+    if (alto > 0) document.documentElement.style.setProperty('--alto-app', alto + 'px');
+  }
+  function remedir() {
+    // Se agrupa: al girar el móvil llegan varios avisos seguidos y no hace
+    // falta rehacer la pantalla con cada uno.
+    if (pendiente) return;
+    pendiente = true;
+    (window.requestAnimationFrame || setTimeout)(medir);
+  }
+  medir();
+  window.addEventListener('resize', remedir);
+  window.addEventListener('orientationchange', function () { setTimeout(medir, 300); });
+})();
+
+/* ======================================================================
    DATOS — edita aquí para cambiar máquinas, trabajadores, avisos, etc.
    ====================================================================== */
 /* Usuario con sesión iniciada — esto vendría del login real */
@@ -1457,14 +1584,17 @@ function hayAlgoAbierto() {
   return document.getElementById('modal-overlay').classList.contains('active')
       || document.getElementById('overlay').classList.contains('active')
       || document.getElementById('legal-overlay').classList.contains('active')
-      || document.getElementById('more-sheet').classList.contains('active');
+      /* Antes se miraba 'more-sheet', pero la clase 'active' se pone en la
+         capa de fuera. Resultado: el botón "atrás" del móvil no cerraba la
+         hoja del menú, cerraba la aplicación. */
+      || document.getElementById('more-sheet-overlay').classList.contains('active');
 }
 
 function cerrarLoQueEsteAbierto() {
   const m = document.getElementById('modal-overlay');
   const d = document.getElementById('overlay');
   const l = document.getElementById('legal-overlay');
-  const ms = document.getElementById('more-sheet');
+  const ms = document.getElementById('more-sheet-overlay');
   if (m.classList.contains('active')) { closeAddMachineModal(); return true; }
   if (l.classList.contains('active')) { closeLegal(); return true; }
   if (d.classList.contains('active')) { closeDrawer(); return true; }
@@ -2583,14 +2713,18 @@ const ICONOS_NAV = {
   menu:      '<path d="M3.5 7h17"/><path d="M3.5 12h17"/><path d="M3.5 17h17"/>',
 };
 
-/* Devuelve el icono ya dibujado. Nada que descargar, nada que esperar. */
+/* Devuelve el icono ya dibujado, metido en su propia caja de tamaño fijo.
+   La caja se escribe SIEMPRE, aunque no haya dibujo: así el nombre de la
+   sección no puede subirse al hueco del icono si algo falla. Ese era el
+   motivo de que al pulsar se viera el texto arriba y el dibujo cortado. */
 function iconoNav(clave, tam) {
-  const d = ICONOS_NAV[clave];
-  if (!d) return '';
+  const d = ICONOS_NAV[clave] || '';
   const t = tam || 22;
-  return `<svg viewBox="0 0 24 24" width="${t}" height="${t}" aria-hidden="true" focusable="false"
+  return `<span class="nav-ico" aria-hidden="true">` +
+    (d ? `<svg viewBox="0 0 24 24" width="${t}" height="${t}" aria-hidden="true" focusable="false"
     fill="none" stroke="currentColor" stroke-width="1.7"
-    stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    stroke-linecap="round" stroke-linejoin="round">${d}</svg>` : '') +
+    `</span>`;
 }
 
 function nombreSeccion(n) {
@@ -2606,12 +2740,12 @@ function renderMobileNav() {
   const secondaryHasBadge = mobileSecondaryItems().some(n => n.key === 'avisos') && unresolvedCount > 0;
 
   document.getElementById('mobile-nav-items').innerHTML = primary.map(n => `
-    <button class="nav-item" data-tab="${n.key}">
-      ${iconoNav(n.key)}<span>${nombreSeccion(n)}</span>
+    <button type="button" class="nav-item" data-tab="${n.key}">
+      ${iconoNav(n.key)}<span class="nav-txt">${esc(nombreSeccion(n))}</span>
     </button>`).join('') + `
-    <button class="nav-item ${mobileSecondaryItems().some(n => n.key === currentTab) ? 'active' : ''}"
+    <button type="button" class="nav-item ${mobileSecondaryItems().some(n => n.key === currentTab) ? 'active' : ''}"
             onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
-      ${iconoNav('menu')}<span>Menú</span>
+      ${iconoNav('menu')}<span class="nav-txt">Menú</span>
       ${secondaryHasBadge ? `<span class="nav-badge">${unresolvedCount}</span>` : ''}
     </button>`;
   document.querySelectorAll('#mobile-nav .nav-item[data-tab]').forEach(b => {
@@ -2622,15 +2756,22 @@ function renderMobileNav() {
   document.getElementById('more-sheet-items').innerHTML = mobileSecondaryItems().map(n => {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
-    <button class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
-      ${iconoNav(n.key, 24)}<span>${nombreSeccion(n)}</span>${badge}
+    <button type="button" class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
+      ${iconoNav(n.key, 24)}<span class="nav-txt">${esc(nombreSeccion(n))}</span>${badge}
     </button>`;
   }).join('');
 }
 
 function toggleMoreSheet() {
-  document.getElementById('more-sheet-overlay').classList.add('active');
+  const capa = document.getElementById('more-sheet-overlay');
+  // Antes solo abría: volver a tocar "Menú" con la hoja abierta no hacía
+  // nada y había que buscar el hueco de fuera para cerrarla.
+  if (capa.classList.contains('active')) { closeMoreSheet(); return; }
+  capa.classList.add('active');
   document.body.classList.add('hoja-abierta');
+  // Deja una marca en el historial: así el botón "atrás" del móvil cierra
+  // la hoja en vez de sacarte de la aplicación.
+  marcarNavegacion();
 }
 function closeMoreSheet() {
   document.getElementById('more-sheet-overlay').classList.remove('active');
@@ -9259,8 +9400,12 @@ function setButtonLoading(btnId, loading, textLoading, textNormal) {
    gente espera de un móvil: sin ella, al no pasar nada visible durante
    el segundo que tarda la respuesta, se vuelve a pulsar. */
 document.addEventListener('pointerdown', (e) => {
-  const btn = e.target && e.target.closest && e.target.closest('.btn, .nav-item, .btn-ghost');
+  const btn = e.target && e.target.closest && e.target.closest('.btn, .btn-ghost');
   if (!btn || btn.disabled) return;
+  /* En la barra de abajo y en la hoja del menú no hay onda: esos botones ya
+     cambian de color en el mismo instante del toque, que es más rápido y no
+     obliga al móvil a rehacer nada mientras tienes el dedo encima. */
+  if (btn.closest('#mobile-nav, #more-sheet')) return;
   try {
     // Quien ha pedido en su sistema que no haya animaciones, no las tiene
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
