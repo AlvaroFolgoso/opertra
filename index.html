@@ -828,28 +828,30 @@
       align-items: stretch; height: 52px;
     }
     #mobile-nav .nav-item {
-      flex: 1; flex-direction: column; justify-content: center; gap: 3px;
-      font-size: 10px; padding: 0 1px; height: 100%;
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 3px;
+      padding: 0 2px; height: 100%;
       border-radius: 10px; position: relative; max-width: none; min-width: 0;
       -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-      /* Sin recorte y sin transición: nada de lo que el navegador tenga que
-         componer aparte. El texto se ajusta solo si no cabe. */
-      overflow: visible; transition: none;
+      /* La única animación: encogerse un pelín al pulsar y volver. Dura lo
+         que dura el toque, no arrastra nada y se siente como un botón. */
+      transition: transform .12s ease, background .12s ease, color .12s ease;
     }
-    /* Hueco fijo para el icono y para el texto. Los iconos son una fuente
-       que se descarga: hasta que llega, el navegador deja un espacio de
-       otro tamaño, y al sustituirlo recoloca el botón. Eso es lo que se
-       veía como el icono cortado. Con el hueco reservado, no se mueve. */
-    #mobile-nav .nav-item i {
-      display: block; font-size: 19px; width: 100%; height: 22px; line-height: 22px;
-      text-align: center; flex-shrink: 0;
-    }
+    #mobile-nav .nav-item:active { transform: scale(.90); }
+    /* Solo texto, sin iconos. Los iconos venían de una fuente que se
+       descarga, y al llegar recolocaban el botón: por eso el dibujo subía,
+       bajaba o desaparecía al pulsar. Sin fuente que esperar, no hay nada
+       que se pueda mover. */
+    /* El dibujo ocupa siempre lo mismo porque está dentro del archivo: no
+       hay ninguna fuente que llegue tarde y lo recoloque. */
+    #mobile-nav .nav-item svg { display: block; flex-shrink: 0; }
     #mobile-nav .nav-item span {
-      display: block; width: 100%; height: 14px; line-height: 14px; text-align: center;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;
+      display: block; max-width: 100%; text-align: center;
+      font-size: 10.5px; font-weight: 600; line-height: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     /* Solo el color, igual que en las celdas del menú, que ya van bien */
-    #mobile-nav .nav-item:active { background: rgba(251,177,20,.22); }
+    #mobile-nav .nav-item.active { background: rgba(251,177,20,.16); color: var(--amber); }
     #mobile-nav .nav-item i, #mobile-nav .nav-item span { transition: none; }
     #mobile-nav .nav-item span {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -890,7 +892,7 @@
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
     /* Todas las celdas iguales y de altura fija: si no, la que se pulsa
        crece y arrastra a toda su fila. */
-    grid-auto-rows: 88px; align-items: stretch;
+    grid-auto-rows: 78px; align-items: stretch;
   }
   .more-item {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -901,17 +903,14 @@
   }
   /* Al pulsar, solo el color. Nada de tamaños dentro de una hoja que flota.
      El gris de antes era casi el mismo que el fondo y no se notaba. */
-  .more-item:active { transform: none; background: var(--amber); }
-  .more-item:active i, .more-item:active span { color: var(--graphite); }
+  .more-item:active { transform: scale(.94); background: var(--amber); }
+  .more-item:active svg, .more-item:active span { color: var(--graphite); }
   .more-item.active { background: var(--graphite); }
-  .more-item.active i, .more-item.active span { color: #fff; }
-  .more-item i {
-    font-size: 20px; color: var(--steel);
-    display: block; height: 24px; line-height: 24px; flex-shrink: 0;
-  }
+  .more-item.active svg, .more-item.active span { color: #fff; }
+  .more-item svg { display: block; flex-shrink: 0; color: var(--steel); }
   .more-item span {
-    font-size: 12px; font-weight: 500; color: var(--ink);
-    display: block; height: 16px; line-height: 16px; flex-shrink: 0;
+    font-size: 12.5px; font-weight: 600; color: var(--ink);
+    display: block; line-height: 1.2; text-align: center;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .more-item .nav-badge { position: absolute; top: 8px; right: 10px; }
@@ -2519,6 +2518,29 @@ function mobileSecondaryItems() {
 /* El nombre de una sección. Las que dependen del sector no llevan nombre
    fijo: se calcula aquí. Antes el menú del móvil ponía "Obras" a todo lo
    que no tuviera nombre propio, y por eso Maquinaria salía como Obras. */
+const ICONOS_NAV = {
+  dashboard: '<path d="M3 13a9 9 0 0 1 18 0"/><path d="M12 13l4.5-4"/><circle cx="12" cy="13" r="1.6" fill="currentColor" stroke="none"/><path d="M3 13v4h18v-4"/>',
+  fichaje:   '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+  obras:     '<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M9 6h4a2 2 0 0 1 2 2v10"/>',
+  maquinaria:'<rect x="1.5" y="7" width="12" height="8" rx="1.5"/><path d="M13.5 10h4l3 3v2h-7z"/><circle cx="6" cy="17.5" r="2"/><circle cx="17" cy="17.5" r="2"/>',
+  trabajadores:'<circle cx="9" cy="8" r="3.2"/><path d="M2.5 19a6.5 6.5 0 0 1 13 0"/><path d="M16.5 5.6a3.2 3.2 0 0 1 0 6.3"/><path d="M17.5 13.5a6.5 6.5 0 0 1 4 5.5"/>',
+  avisos:    '<path d="M3.5 9.5v5a1 1 0 0 0 1 1H7l6 4.5V4L7 8.5H4.5a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/>',
+  clientes:  '<rect x="4" y="2.5" width="14" height="19" rx="2"/><circle cx="11" cy="10" r="2.6"/><path d="M7 17.5a4.2 4.2 0 0 1 8 0"/><path d="M20 7v2M20 11v2M20 15v2"/>',
+  facturacion:'<path d="M6 2.5h9l4 4v15H6z"/><path d="M15 2.5v4h4"/><path d="M12 10v7"/><path d="M14 11.5h-3a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3h-3"/>',
+  informes:  '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M2 20h20"/>',
+  menu:      '<path d="M3.5 7h17"/><path d="M3.5 12h17"/><path d="M3.5 17h17"/>',
+};
+
+/* Devuelve el icono ya dibujado. Nada que descargar, nada que esperar. */
+function iconoNav(clave, tam) {
+  const d = ICONOS_NAV[clave];
+  if (!d) return '';
+  const t = tam || 22;
+  return `<svg viewBox="0 0 24 24" width="${t}" height="${t}" aria-hidden="true" focusable="false"
+    fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+}
+
 function nombreSeccion(n) {
   if (n.label) return n.label;
   if (n.key === 'maquinaria') return tm('nav');
@@ -2533,11 +2555,11 @@ function renderMobileNav() {
 
   document.getElementById('mobile-nav-items').innerHTML = primary.map(n => `
     <button class="nav-item" data-tab="${n.key}">
-      <i class="fa-solid ${n.icon}"></i><span>${nombreSeccion(n)}</span>
+      ${iconoNav(n.key)}<span>${nombreSeccion(n)}</span>
     </button>`).join('') + `
     <button class="nav-item ${mobileSecondaryItems().some(n => n.key === currentTab) ? 'active' : ''}"
             onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
-      <i class="fa-solid fa-bars"></i><span>Menú</span>
+      ${iconoNav('menu')}<span>Menú</span>
       ${secondaryHasBadge ? `<span class="nav-badge">${unresolvedCount}</span>` : ''}
     </button>`;
   document.querySelectorAll('#mobile-nav .nav-item[data-tab]').forEach(b => {
@@ -2549,7 +2571,7 @@ function renderMobileNav() {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
     <button class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
-      <i class="fa-solid ${n.icon}"></i><span>${nombreSeccion(n)}</span>${badge}
+      ${iconoNav(n.key, 24)}<span>${nombreSeccion(n)}</span>${badge}
     </button>`;
   }).join('');
 }
