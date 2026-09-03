@@ -215,7 +215,7 @@
   .user-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
   .user-company { font-size: 10px; color: var(--steel); font-weight: 500; letter-spacing: 0.01em; }
 
-  .view { display: none; padding: 32px; overflow: auto; flex: 1; }
+  .view { display: none; padding: 32px; overflow: auto; flex: 1; contain: layout paint; }
   .view.active { display: block; }
 
   #trial-banner { display: flex; align-items: center; gap: 8px; justify-content: center; background: var(--amber-bg,#FDF1DC); color: var(--amber-deep); font-size: 13px; font-weight: 600; padding: 8px 16px; text-align: center; }
@@ -345,12 +345,15 @@
     -webkit-tap-highlight-color: transparent; touch-action: manipulation;
     transition: transform .09s ease, background .14s ease, filter .14s ease;
   }
-  .btn-ghost:active:not(:disabled), .nav-item:active, .drawer-close:active,
-  .auth-tab:active { transform: scale(.94); }
-  .obra-card:active, .doc-row:active, .vac-row:active {
-    transform: scale(.985); filter: brightness(.97);
+  /* Los botones pequeños sí se hunden: son pequeños, están aislados y esa
+     señal es la que dice "te he oído". Lo que nunca se toca es el tamaño de
+     algo que arrastre a la lista de al lado. */
+  .btn-ghost:active:not(:disabled), .drawer-close:active, .auth-tab:active {
+    transform: scale(.94);
   }
-  .land-nav-brand:active, .land-footer-brand:active, .brand:active { transform: scale(.96); }
+  .nav-item:not(.more-item):active { filter: brightness(1.25); }
+  .obra-card:active, .doc-row:active, .vac-row:active { filter: brightness(.95); }
+  .land-nav-brand:active, .land-footer-brand:active, .brand:active { opacity: .7; }
 
   /* Mientras el boton trabaja, una barra recorre su parte de abajo: asi se
      ve que sigue en marcha y no que se ha quedado colgado. */
@@ -839,8 +842,22 @@
     #more-sheet { transition: none; }
   }
   .more-sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: var(--border); margin: 6px auto 14px; }
-  #more-sheet-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .more-item { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; border-radius: 12px; background: var(--surface); border: none; cursor: pointer; position: relative; }
+  #more-sheet-items {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    /* Todas las celdas iguales y de altura fija: si no, la que se pulsa
+       crece y arrastra a toda su fila. */
+    grid-auto-rows: 88px; align-items: stretch;
+  }
+  .more-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; padding: 8px; border-radius: 12px; background: var(--surface);
+    border: none; cursor: pointer; position: relative;
+    height: 100%; min-height: 0; max-width: none; overflow: hidden;
+    transition: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  /* Al pulsar, solo el color. Nada de tamaños dentro de una hoja que flota. */
+  .more-item:active { transform: none; background: var(--border); }
+  .more-item.active { background: var(--border); }
   .more-item i { font-size: 20px; color: var(--steel); }
   .more-item span { font-size: 12px; font-weight: 500; color: var(--ink); }
   .more-item .nav-badge { position: absolute; top: 8px; right: 10px; }
@@ -1916,7 +1933,30 @@ const gpsDataProvider = (() => {
    ejemplo — es el siguiente paso pendiente.
    ====================================================================== */
 /* Pinta únicamente la pestaña que el usuario está viendo */
-function pintarPestanaActual() {
+/* ======================================================================
+   NO REDIBUJAR LO QUE YA ESTÁ DIBUJADO
+
+   Cada vez que se entraba en una pestaña se reconstruía su pantalla entera
+   desde cero. Con pocos datos apenas se nota; con 10.000 fichajes es medio
+   segundo de trabajo en el que el móvil no puede ni terminar de pintar el
+   botón que acabas de tocar. De ahí que saliera cortado.
+
+   Ahora se guarda una "huella" de los datos con los que se pintó cada
+   pantalla. Si al volver la huella es la misma, no se toca nada: la
+   pantalla ya está lista y el cambio es instantáneo.
+   ====================================================================== */
+let revisionDatos = 0;          // sube cada vez que algo cambia de verdad
+const huellaPintada = {};       // con qué datos se pintó cada pestaña
+
+function huellaDeDatos() {
+  return [
+    revisionDatos, currentUser.businessType, currentUser.accessLevel,
+    projects.length, machines.length, workers.length, clients.length,
+    timeLogs.length, incidents.length, invoices.length,
+  ].join('|');
+}
+
+function pintarPestanaActual(permitirSaltar) {
   const pintores = {
     dashboard: renderDashboard, obras: renderObras, fichaje: renderFichaje,
     maquinaria: renderMaquinaria, trabajadores: renderTrabajadores,
@@ -1927,8 +1967,23 @@ function pintarPestanaActual() {
   // se llama desde refrescos automaticos. Si no se comprueba aqui, un trabajador
   // podria acabar viendo pantallas de facturacion o clientes por un refresco.
   if (!canAccess(currentTab)) { currentTab = 'dashboard'; }
+
+  const huella = huellaDeDatos();
+  const vista = document.getElementById('view-' + currentTab);
+  const yaPintada = vista && vista.innerHTML.length > 0;
+
+  if (permitirSaltar === true && yaPintada && huellaPintada[currentTab] === huella) {
+    // Ya está pintada con estos mismos datos: no se toca
+    if (currentTab !== 'dashboard' && currentTab !== 'avisos') refrescarAvisosDeNav();
+    return;
+  }
+  // Cualquier repintado forzado quiere decir que algo ha cambiado: las
+  // demás pestañas dejan de estar al día y se repintarán al visitarlas.
+  if (permitirSaltar !== true) revisionDatos++;
+
   const pintar = pintores[currentTab];
   if (pintar) pintar();
+  huellaPintada[currentTab] = huellaDeDatos();
   // Las horas del mes las calcula la base de datos: se piden al entrar
   if (currentTab === 'informes' && horasDelMes === null && !cargandoInforme) cargarHorasDelMes();
   // El panel general muestra avisos y cobros, así que necesita esos datos al día
@@ -1937,8 +1992,13 @@ function pintarPestanaActual() {
 
 /* Solo actualiza el numerito rojo de avisos, sin rehacer los botones.
    Rehacerlos enteros hacía parpadear el texto en cada toque. */
-function refrescarAvisosDeNav() {
+let ultimoRecuentoAvisos = -1;
+function refrescarAvisosDeNav(forzar) {
   const pendientes = incidents.filter(i => !i.resolved).length;
+  // Si el número no ha cambiado no hay nada que tocar. Recorrer los botones
+  // en cada cambio de pestaña cuesta más que el propio cambio.
+  if (!forzar && pendientes === ultimoRecuentoAvisos) return;
+  ultimoRecuentoAvisos = pendientes;
   document.querySelectorAll('#nav-items .nav-item[data-tab], #mobile-nav-items .nav-item[data-tab], #more-sheet-items .nav-item[data-tab]')
     .forEach(boton => {
       const esAvisos = boton.dataset.tab === 'avisos';
@@ -2430,6 +2490,7 @@ function renderMobileNav() {
     if (b.dataset.tab === currentTab) b.classList.add('active');
   });
 
+  ultimoRecuentoAvisos = -1;   // la barra se ha rehecho: hay que recontar
   document.getElementById('more-sheet-items').innerHTML = mobileSecondaryItems().map(n => {
     const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
     return `
@@ -2477,7 +2538,7 @@ function switchTab(tab) {
   //    respondido. Pintar antes es lo que daba el tirón.
   requestAnimationFrame(() => {
     if (currentTab !== tab) return;   // ha vuelto a tocar: manda lo último
-    pintarPestanaActual();
+    pintarPestanaActual(true);        // si ya está pintada, no se toca
     const v = document.getElementById('view-' + tab);
     if (v) v.scrollTop = 0;
   });
