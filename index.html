@@ -836,16 +836,15 @@
       height: 52px; box-sizing: border-box; padding: 0 2px;
       border-radius: 10px; position: relative; overflow: hidden;
       -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-      transition: background .1s ease, color .1s ease;
+      /* NADA de transiciones ni transformaciones. Cualquiera de las dos
+         obliga al navegador a pintar el contenido en una capa aparte, y esa
+         capa se compone un instante DESPUES del fondo. Ese instante es el
+         dibujo que aparece fuera de sitio. */
+      transition: none;
     }
-    /* Lo que se encoge al pulsar es el CONTENIDO, no el botón. Así el hueco
-       que ocupa en la barra no cambia jamás y no se recoloca nada. */
-    #mobile-nav .nav-item > svg, #mobile-nav .nav-item > span {
-      transition: transform .11s cubic-bezier(.3,.7,.4,1);
-    }
-    #mobile-nav .nav-item:active > svg, #mobile-nav .nav-item:active > span {
-      transform: scale(.86);
-    }
+    #mobile-nav .nav-item > svg, #mobile-nav .nav-item > span { transition: none; }
+    /* La senal de que has pulsado: el color, al momento. */
+    #mobile-nav .nav-item:active { background: rgba(251,177,20,.28); color: var(--amber); }
     /* Cada uno en su fila, centrado y con su alto fijo */
     #mobile-nav .nav-item > svg {
       display: block; width: 24px; height: 24px; align-self: center;
@@ -873,7 +872,7 @@
   #more-sheet-overlay.active { display: flex; background: rgba(28,33,38,0.55); }
   #more-sheet-overlay { transform: translateZ(0); }
   #more-sheet {
-    width: 100%; max-width: 480px; background: var(--card);
+    width: 100%; max-width: 480px; background: var(--graphite);
     border-radius: 16px 16px 0 0;
     padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px));
     max-height: 80vh; overflow-y: auto;
@@ -892,7 +891,7 @@
   @media (prefers-reduced-motion: reduce) {
     #more-sheet { transition: none; }
   }
-  .more-sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: var(--border); margin: 6px auto 14px; }
+  .more-sheet-handle { width: 36px; height: 4px; border-radius: 99px; background: #4A525B; margin: 6px auto 14px; }
   #more-sheet-items {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
     /* Todas las celdas iguales y de altura fija: si no, la que se pulsa
@@ -900,22 +899,24 @@
     grid-auto-rows: 78px; align-items: stretch;
   }
   .more-item {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 8px; padding: 8px; border-radius: 12px; background: var(--surface);
+    /* Misma rejilla rigida que los botones de la barra: es su continuacion */
+    display: grid; grid-template-rows: 26px 16px; align-content: center;
+    justify-items: center; row-gap: 6px;
+    padding: 8px; border-radius: 12px; background: var(--graphite-line);
     border: none; cursor: pointer; position: relative;
     height: 100%; min-height: 0; max-width: none; overflow: hidden;
     transition: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   /* Al pulsar, solo el color. Nada de tamaños dentro de una hoja que flota.
      El gris de antes era casi el mismo que el fondo y no se notaba. */
-  .more-item:active { transform: scale(.94); background: var(--amber); }
-  .more-item:active svg, .more-item:active span { color: var(--graphite); }
-  .more-item.active { background: var(--graphite); }
-  .more-item.active svg, .more-item.active span { color: #fff; }
-  .more-item svg { display: block; flex-shrink: 0; color: var(--steel); }
-  .more-item span {
-    font-size: 12.5px; font-weight: 600; color: var(--ink);
-    display: block; line-height: 1.2; text-align: center;
+  .more-item:active { background: rgba(251,177,20,.28); }
+  .more-item:active > svg, .more-item:active > span { color: var(--amber); }
+  .more-item.active { background: rgba(251,177,20,.16); }
+  .more-item.active > svg, .more-item.active > span { color: var(--amber); }
+  .more-item > svg { display: block; width: 26px; height: 26px; color: #C7CBD0; }
+  .more-item > span {
+    font-size: 11.5px; font-weight: 600; color: #C7CBD0;
+    display: block; line-height: 16px; height: 16px; text-align: center;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .more-item .nav-badge { position: absolute; top: 8px; right: 10px; }
@@ -1339,7 +1340,7 @@
   <div id="more-sheet-overlay" onclick="if(event.target===this) closeMoreSheet()">
     <div id="more-sheet">
       <div class="more-sheet-handle"></div>
-      <div style="font-size:12px;color:var(--steel);text-transform:uppercase;letter-spacing:1px;
+      <div style="font-size:11.5px;color:#8A9199;text-transform:uppercase;letter-spacing:1.2px;
                   font-weight:700;padding:0 6px 10px;">Resto de secciones</div>
       <div id="more-sheet-items"></div>
     </div>
