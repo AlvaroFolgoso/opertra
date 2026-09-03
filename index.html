@@ -194,6 +194,7 @@
   }
   .nav-item i { width: 17px; text-align: center; }
   .nav-item.active { background: var(--graphite-line); color: var(--amber); }
+  #mobile-nav .nav-item.active { background: rgba(255,255,255,.07); }
   .nav-item:hover:not(.active) { color: white; }
   .nav-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--graphite-line); display: flex; flex-direction: column; gap: 4px; }
 
@@ -475,7 +476,7 @@
   #overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: stretch; justify-content: flex-end; z-index: 50; }
   #overlay.active { display: flex; }
   #drawer { width: 380px; max-width: 100%; height: 100%; background: var(--card); padding: 24px;
-    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); overflow-y: auto;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); overflow-y: auto;
     -webkit-overflow-scrolling: touch; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
   .drawer-top { display: flex; justify-content: space-between; align-items: center; }
   .drawer-top-left { display: flex; align-items: center; gap: 12px; }
@@ -636,7 +637,7 @@
   }
   #install-banner-inner { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
   @media (max-width: 768px) {
-    #main { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+    #main { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* ============ BANNER DE COOKIES ============ */
@@ -711,7 +712,7 @@
 
   @media (max-width: 768px) {
     #app { flex-direction: column; }
-    #main { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+    #main { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
     #sidebar { display: none; }
 
     /* Se desplaza el CONTENIDO, no la pagina entera. Asi Safari no esconde
@@ -771,25 +772,35 @@
   #mobile-nav { display: none; }
   @media (max-width: 768px) {
     #mobile-nav {
-      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
-      background: var(--graphite); border-top: 1px solid var(--graphite-line);
+      /* En bloque, NO en flex. Con flex, el botón se estiraba hasta llenar
+         también la franja de abajo del iPhone y su fondo bajaba hasta el
+         borde de la pantalla: ese era el rectángulo raro. */
+      display: block; position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+      background: var(--graphite);
+      /* Sin línea de separación: una sombra hace que la barra se lea como
+         algo que flota por encima del contenido, no como un trozo pegado. */
+      box-shadow: 0 -6px 18px rgba(0,0,0,.22);
       padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-      /* El fondo del botón activo se salía por debajo de la barra y quedaba
-         un rectángulo suelto sobre el contenido. */
-      overflow: hidden; align-items: stretch;
       /* En su propia capa: así el navegador no la recoloca cada vez que
          algo se mueve en la pantalla, que es lo que la hacía saltar. */
       transform: translateZ(0); will-change: transform; backface-visibility: hidden;
-      contain: paint;
     }
-    #mobile-nav-items { display: flex; width: 100%; justify-content: space-around; }
+    /* La fila de botones tiene su propia altura fija. Lo de debajo es solo
+       el hueco de la franja del iPhone, y ahí no llega ningún fondo. */
+    #mobile-nav-items {
+      display: flex; width: 100%; justify-content: space-around;
+      align-items: stretch; height: 52px;
+    }
     #mobile-nav .nav-item {
-      flex: 1; flex-direction: column; gap: 4px; font-size: 10px; padding: 7px 1px;
+      flex: 1; flex-direction: column; justify-content: center; gap: 3px;
+      font-size: 10px; padding: 0 1px; height: 100%;
       border-radius: 10px; position: relative; max-width: none; min-width: 0;
-      overflow: hidden; transition: transform .09s ease;
+      overflow: hidden; transition: transform .09s ease, background .14s ease;
       -webkit-tap-highlight-color: transparent; touch-action: manipulation;
     }
-    #mobile-nav .nav-item:active { transform: scale(.93); }
+    /* Al pulsar solo cambia el color, no el tamaño: cambiar el tamaño de un
+       botón dentro de una barra fija es lo que daba sensación de trompicón. */
+    #mobile-nav .nav-item:active { transform: none; background: rgba(255,255,255,.09); }
     #mobile-nav .nav-item span {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
