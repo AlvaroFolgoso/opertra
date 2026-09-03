@@ -202,7 +202,11 @@
 
   #topbar {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 32px; border-bottom: 1px solid var(--border); gap: 12px;
+    padding: 20px 32px; gap: 12px;
+    /* Igual que la barra de abajo: una sombra suave en vez de una raya.
+       Las rayas de 1 px cortan la pantalla y dan aspecto de plantilla. */
+    border-bottom: 1px solid transparent;
+    box-shadow: 0 6px 20px rgba(0,0,0,.05);
   }
   #topbar > div:first-child { min-width: 0; }
   #topbar h1 { margin: 0; font-size: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -637,7 +641,9 @@
   }
   #install-banner-inner { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
   @media (max-width: 768px) {
-    #main { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+    /* Exactamente lo que mide la barra: 6 + 52 + 6. Ni un pixel mas, o se
+       ve una banda de fondo entre el contenido y la barra. */
+    #main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* ============ BANNER DE COOKIES ============ */
@@ -712,7 +718,7 @@
 
   @media (max-width: 768px) {
     #app { flex-direction: column; }
-    #main { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+    #main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
     #sidebar { display: none; }
 
     /* Se desplaza el CONTENIDO, no la pagina entera. Asi Safari no esconde
@@ -779,7 +785,7 @@
       background: var(--graphite);
       /* Sin línea de separación: una sombra hace que la barra se lea como
          algo que flota por encima del contenido, no como un trozo pegado. */
-      box-shadow: 0 -6px 18px rgba(0,0,0,.22);
+      box-shadow: 0 -12px 28px rgba(0,0,0,.10);
       padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
       /* En su propia capa: así el navegador no la recoloca cada vez que
          algo se mueve en la pantalla, que es lo que la hacía saltar. */
@@ -1924,7 +1930,44 @@ function pintarPestanaActual() {
   // Las horas del mes las calcula la base de datos: se piden al entrar
   if (currentTab === 'informes' && horasDelMes === null && !cargandoInforme) cargarHorasDelMes();
   // El panel general muestra avisos y cobros, así que necesita esos datos al día
-  if (currentTab !== 'dashboard' && currentTab !== 'avisos') renderNav();
+  if (currentTab !== 'dashboard' && currentTab !== 'avisos') refrescarAvisosDeNav();
+}
+
+/* Solo actualiza el numerito rojo de avisos, sin rehacer los botones.
+   Rehacerlos enteros hacía parpadear el texto en cada toque. */
+function refrescarAvisosDeNav() {
+  const pendientes = incidents.filter(i => !i.resolved).length;
+  document.querySelectorAll('#nav-items .nav-item[data-tab], #mobile-nav-items .nav-item[data-tab], #more-sheet-items .nav-item[data-tab]')
+    .forEach(boton => {
+      const esAvisos = boton.dataset.tab === 'avisos';
+      let marca = boton.querySelector('.nav-badge');
+      if (esAvisos && pendientes > 0) {
+        if (!marca) {
+          marca = document.createElement('span');
+          marca.className = 'nav-badge';
+          boton.appendChild(marca);
+        }
+        marca.textContent = pendientes;
+      } else if (marca && esAvisos) {
+        marca.remove();
+      }
+    });
+  // El botón "Menú" avisa si hay algo pendiente en las secciones de dentro
+  const botonMenu = document.querySelector('#mobile-nav-items .nav-item:not([data-tab])');
+  if (botonMenu) {
+    const dentro = mobileSecondaryItems().some(n => n.key === 'avisos') && pendientes > 0;
+    let marca = botonMenu.querySelector('.nav-badge');
+    if (dentro) {
+      if (!marca) {
+        marca = document.createElement('span');
+        marca.className = 'nav-badge';
+        botonMenu.appendChild(marca);
+      }
+      marca.textContent = pendientes;
+    } else if (marca) {
+      marca.remove();
+    }
+  }
 }
 
 async function loadCompanyData() {
