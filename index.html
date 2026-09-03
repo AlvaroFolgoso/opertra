@@ -109,6 +109,28 @@
     display: flex; flex-direction: column; padding: 16px 12px;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
+  /* ---- Aviso de versión nueva ---- */
+  #aviso-version {
+    position: fixed; z-index: 200;
+    left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    max-width: 420px; margin: 0 auto;
+    background: #262C33; color: #fff; border: 1px solid #3A424B; border-radius: 14px;
+    padding: 14px 15px; font-size: 13.5px; line-height: 1.45;
+    box-shadow: 0 14px 40px rgba(0,0,0,.45); transform: translateZ(0);
+  }
+  #aviso-version .av-linea { display: flex; align-items: flex-start; gap: 10px; }
+  #aviso-version .av-linea > i { color: var(--amber); margin-top: 2px; flex-shrink: 0; }
+  #aviso-version .av-linea > span { flex: 1; min-width: 0; }
+  #aviso-version .av-cerrar { color: #9AA5AF; padding: 0 2px; margin: -2px -4px 0 0; }
+  #aviso-version .av-boton {
+    width: 100%; justify-content: center; margin-top: 12px; padding: 11px;
+  }
+  /* En el ordenador cabe todo en una línea */
+  @media (min-width: 560px) {
+    #aviso-version { bottom: 20px; }
+    #aviso-version .av-boton { width: auto; margin-top: 10px; padding: 9px 16px; }
+  }
+
   /* ---- Avisos, confirmaciones y fichas de datos ---- */
   /* ---- Pantalla de arranque ---- */
   #arranque {
@@ -351,7 +373,7 @@
   .btn-ghost:active:not(:disabled), .drawer-close:active, .auth-tab:active {
     transform: scale(.94);
   }
-  .nav-item:not(.more-item):active { filter: brightness(1.25); }
+  .nav-item:not(.more-item):active { background: rgba(255,255,255,.10); }
   .obra-card:active, .doc-row:active, .vac-row:active { filter: brightness(.95); }
   .land-nav-brand:active, .land-footer-brand:active, .brand:active { opacity: .7; }
 
@@ -802,15 +824,18 @@
       flex: 1; flex-direction: column; justify-content: center; gap: 3px;
       font-size: 10px; padding: 0 1px; height: 100%;
       border-radius: 10px; position: relative; max-width: none; min-width: 0;
-      overflow: hidden;
       -webkit-tap-highlight-color: transparent; touch-action: manipulation;
-      /* Sin transición: el color cambia en el mismo momento del toque. Una
-         transición aquí se percibe como que el botón se queda a medias. */
-      transition: none;
+      /* Sin recorte y sin transición: nada de lo que el navegador tenga que
+         componer aparte. El texto se ajusta solo si no cabe. */
+      overflow: visible; transition: none;
     }
-    /* Al pulsar solo cambia el color, no el tamaño: cambiar el tamaño de un
-       botón dentro de una barra fija es lo que daba sensación de trompicón. */
-    #mobile-nav .nav-item:active { background: rgba(255,255,255,.09); }
+    #mobile-nav .nav-item span {
+      display: block; width: 100%; text-align: center;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #mobile-nav .nav-item i { line-height: 1; }
+    /* Solo el color, igual que en las celdas del menú, que ya van bien */
+    #mobile-nav .nav-item:active { background: rgba(255,255,255,.10); }
     #mobile-nav .nav-item i, #mobile-nav .nav-item span { transition: none; }
     #mobile-nav .nav-item span {
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -856,8 +881,9 @@
     transition: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   }
   /* Al pulsar, solo el color. Nada de tamaños dentro de una hoja que flota. */
-  .more-item:active { transform: none; background: var(--border); }
-  .more-item.active { background: var(--border); }
+  .more-item:active { transform: none; background: #D7DBDF; }
+  .more-item.active { background: var(--graphite); }
+  .more-item.active i, .more-item.active span { color: #fff; }
   .more-item i { font-size: 20px; color: var(--steel); }
   .more-item span { font-size: 12px; font-weight: 500; color: var(--ink); }
   .more-item .nav-badge { position: absolute; top: 8px; right: 10px; }
@@ -10548,16 +10574,19 @@ function avisarVersionNueva() {
   if (document.getElementById('aviso-version')) return;
   const av = document.createElement('div');
   av.id = 'aviso-version';
-  av.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:200;'
-    + 'background:var(--graphite);color:white;padding:12px 16px;border-radius:12px;font-size:13px;'
-    + 'box-shadow:0 14px 40px rgba(0,0,0,.45);display:flex;align-items:center;gap:11px;'
-    + 'max-width:min(440px,92vw);border:1px solid #3A424B;';
-  av.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="color:var(--amber);"></i>'
-    + '<span style="flex:1;">Hay una versión nueva de Opertra.</span>'
-    + '<button class="btn btn-amber" style="padding:7px 12px;font-size:12.5px;white-space:nowrap;" '
-    + 'onclick="location.reload()">Actualizar</button>'
-    + '<button class="btn-ghost" style="color:#B7BCC1;" aria-label="Cerrar" '
-    + 'onclick="this.parentNode.remove()"><i class="fa-solid fa-xmark"></i></button>';
+  av.setAttribute('role', 'status');
+  av.innerHTML = `
+    <div class="av-linea">
+      <i class="fa-solid fa-arrows-rotate"></i>
+      <span>Hay una versión nueva de Opertra.</span>
+      <button class="btn-ghost av-cerrar" aria-label="Cerrar"
+              onclick="this.closest('#aviso-version').remove()">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <button class="btn btn-amber av-boton" onclick="location.reload()">
+      <i class="fa-solid fa-arrows-rotate"></i> Actualizar ahora
+    </button>`;
   document.body.appendChild(av);
 }
 
