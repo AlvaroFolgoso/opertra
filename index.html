@@ -2494,9 +2494,38 @@ function refrescarAvisosDeNav(forzar) {
   }
 }
 
+/* El trabajador con PIN no tiene sesion de Supabase: para la base de datos
+   es un anonimo, y el RLS no le deja leer NI UNA fila de projects, machines
+   ni workers. Sin esto entraba, no veia ninguna obra y la pantalla le decia
+   "pide a tu responsable que cree una" habiendola. No podia fichar.
+   Sus datos vienen por worker_datos, que valida el PIN en la base y
+   devuelve solo lo de su empresa. */
+async function cargarDatosDeTrabajador() {
+  const ficha = { dbId: currentUser.id, pin: currentUser.pin };
+  const { data, error } = await getSupabase().rpc('worker_datos', {
+    p_worker_id: ficha.dbId, p_pin: ficha.pin,
+  });
+  if (error) throw error;
+  const d = data || {};
+  return {
+    projRes: { data: d.projects  || [], error: null },
+    machRes: { data: d.machines  || [], error: null },
+    docRes:  { data: d.documents || [], error: null },
+    workRes: { data: d.workers   || [], error: null },
+    vacRes:  { data: d.vacations || [], error: null },
+    cliRes:  { data: [], error: null },
+    logs:    d.time_logs || [],
+  };
+}
+
 async function loadCompanyData() {
   const sb = getSupabase();
   try {
+    if (currentUser.isWorker) {
+      const r = await cargarDatosDeTrabajador();
+      _fichajesDelTrabajador = r.logs;
+      return volcarDatosEmpresa(r.projRes, r.machRes, r.docRes, r.workRes, r.vacRes, r.cliRes);
+    }
     const [projRes, machRes, docRes, workRes, vacRes, cliRes] = await Promise.all([
       sb.from('projects').select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').order('created_at'),
       sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,medidor,updated_at').order('created_at'),
@@ -2513,6 +2542,18 @@ async function loadCompanyData() {
         ? Promise.resolve({ data: [], error: null })
         : sb.from('clients').select('id,name,tax_id,email,phone,address,contact_name,notes,updated_at').order('name'),
     ]);
+    return volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cliRes);
+  } catch (err) {
+    console.error('Error cargando datos:', err);
+    aviso(mensajeError(err));
+  }
+}
+
+/* El volcado de los datos a las listas de la aplicacion. Es identico venga
+   de las consultas normales (administrador) o de worker_datos (trabajador),
+   por eso esta aqui una sola vez. */
+async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cliRes) {
+  try {
     if (projRes.error) throw projRes.error;
     if (machRes.error) throw machRes.error;
     if (docRes.error) throw docRes.error;
@@ -5335,6 +5376,16 @@ let recargaPendiente = null;
 async function refrescarAntesDeFichar() {
   const antes = projects.length;
   try {
+    // El trabajador no puede leer projects directamente (es anonimo).
+    // Se le vuelve a pedir el paquete entero, que es una sola llamada.
+    if (currentUser.isWorker) {
+      const r = await cargarDatosDeTrabajador();
+      _fichajesDelTrabajador = r.logs;
+      projects = (r.projRes.data || []).map(mapearObra);
+      _totalesObra = null;
+      if (projects.length !== antes) pintarPestanaActual();
+      return;
+    }
     const { data, error } = await getSupabase()
       .from('projects').select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at')
       .order('created_at');
@@ -5451,12 +5502,21 @@ function cortarSuscripcion() {
    consultan la base de datos bajo demanda. Los totales y resúmenes los
    calcula Postgres — así da igual que haya 100 fichajes o 10 millones. */
 const DIAS_FICHAJES_EN_MEMORIA = 60;
+/* Las jornadas del trabajador con PIN, que llegan dentro de worker_datos
+   porque el RLS no le deja leer la tabla directamente. */
+let _fichajesDelTrabajador = [];
 /* Tope de filas que se traen sin filtrar. Es un tope de PANTALLA, no del
    registro: con 100 trabajadores estas 300 lineas son un par de dias, asi
    que la pantalla lo avisa y manda a filtrar por fechas para exportar. */
 const TOPE_FICHAJES_EN_MEMORIA = 300;
 
 async function cargarFichajes() {
+  // El trabajador con PIN es anonimo para la base: el RLS no le deja leer
+  // time_logs. Sus jornadas llegan dentro de worker_datos.
+  if (currentUser.isWorker) {
+    timeLogs = (_fichajesDelTrabajador || []).map(mapearFichaje);
+    return;
+  }
   try {
     const desde = new Date(Date.now() - DIAS_FICHAJES_EN_MEMORIA * 86400000).toISOString();
     const { data, error } = await getSupabase()
