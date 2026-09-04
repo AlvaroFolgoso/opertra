@@ -61,7 +61,11 @@
 <link rel="preload" as="font" type="font/woff2" crossorigin
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js" defer></script>
+<!-- cdnjs NO sirve jsQR en esa ruta: daba 404 en produccion y el escaneo
+     de codigos QR (el titular de la portada) no funcionaba en ningun movil.
+     jsDelivr si lo sirve, y ya esta en la lista de dominios que cachea el
+     service worker, asi que despues de la primera carga va sin conexion. -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
