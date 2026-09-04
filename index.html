@@ -270,6 +270,32 @@
   .plate {
     position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 8px;
   }
+
+  /* Tablas anchas: se desplazan dentro de su caja en CUALQUIER pantalla.
+     Antes esto solo valia por debajo de 768px. */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+
+  /* Boton de papelera. Antes solo tenia estilo por debajo de 768px. */
+  .vac-delete {
+    background: none; border: none; color: var(--steel); cursor: pointer;
+    padding: 4px; border-radius: 6px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 32px; min-height: 32px;
+  }
+  .vac-delete:hover { color: var(--danger); }
+
+  /* En cualquier pantalla que se maneje con el dedo (movil Y tablet), lo que
+     se pulsa necesita 44px. Antes esto dependia del ANCHO, asi que un iPad
+     de 1024px recibia botones de raton de 24-28px aunque solo tenga dedos. */
+  @media (hover: none) and (pointer: coarse) {
+    .btn, .btn-ghost, .btn-outline, .resolve-btn, .mode-btn,
+    .vac-delete, .drawer-close, .load-more-btn, .filter-chip {
+      min-height: 44px;
+    }
+    .vac-delete { min-width: 44px; }
+    .btn-ghost, .resolve-btn, .mode-btn { padding-top: 10px; padding-bottom: 10px; }
+    select.form-select, input.form-input, textarea.form-input { min-height: 44px; }
+  }
   .plate::before, .plate::after,
   .plate .dot-tl, .plate .dot-tr, .plate .dot-bl, .plate .dot-br { content: ''; }
   .plate .rivet { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--border); }
@@ -353,8 +379,15 @@
   .incident-thumb { width: 52px; height: 52px; border-radius: 6px; object-fit: cover; flex-shrink: 0; cursor: pointer; }
 
   /* ============ INFORMES ============ */
-  .report-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+  .report-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; min-width: 0; }
+  .report-row > * { min-width: 0; }
   .report-label { width: 150px; flex-shrink: 0; font-size: 13px; }
+  /* 150px fijos + separacion + la cifra no caben en pantallas estrechas:
+     se salia 36px en un iPhone SE. */
+  @media (max-width: 400px) {
+    .report-label { width: 108px; font-size: 12.5px; }
+    .report-row { gap: 8px; }
+  }
   .report-bar-track { flex: 1; height: 10px; border-radius: 99px; background: var(--surface); overflow: hidden; }
   .report-bar-fill { height: 100%; border-radius: 99px; background: var(--blue); }
   .report-value { width: 90px; flex-shrink: 0; text-align: right; font-size: 12.5px; font-weight: 600; }
@@ -483,13 +516,23 @@
   /* ============ DASHBOARD ============ */
   .stat-row { display: flex; gap: 16px; margin-bottom: 24px; }
   .stat-card { flex: 1; padding: 16px; }
-  .stat-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  /* Igual que arriba: el bloque de texto tiene que poder encogerse o el
+     icono de 36px lo empuja fuera. Pasaba en moviles de 421-768px de ancho
+     (iPhone 16 Pro Max, 14 Plus, Android grandes), que se quedaban entre
+     dos reglas y no recibian ningun ajuste. */
+  .stat-top { display: flex; justify-content: space-between; align-items: flex-start; min-width: 0; gap: 10px; }
+  .stat-top > * { min-width: 0; }
+  .stat-card { min-width: 0; }
   .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--steel); letter-spacing: 0.03em; }
   .stat-value { font-family: 'Oswald', sans-serif; font-size: 30px; margin-top: 4px; }
   .stat-sub { font-size: 12px; color: var(--steel); margin-top: 2px; }
   .stat-icon { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-  .dash-cols { display: flex; gap: 24px; }
+  /* min-width:0 tambien aqui: los paneles del panel general y de informes
+     no podian encogerse por debajo de su contenido y se salian 36px en un
+     iPhone SE. */
+  .dash-cols { display: flex; gap: 24px; min-width: 0; }
+  .dash-cols > * { min-width: 0; }
   .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
   .worker-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; }
   .worker-left { display: flex; align-items: center; gap: 12px; }
@@ -522,20 +565,24 @@
 
   /* ============ MAQUINARIA ============ */
   .toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
-  .machine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .machine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; }
   .machine-card { padding: 16px; cursor: pointer; transition: box-shadow 0.15s; }
   .machine-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-  .machine-top { display: flex; gap: 12px; }
+  /* min-width:0 en el hueco del texto: sin el, un modelo o una matricula
+     largos no pueden partirse y estiran la tarjeta hasta salirse de la
+     pantalla. En un iPhone SE se salia 52px. */
+  .machine-top { display: flex; gap: 12px; min-width: 0; }
+  .machine-top > * { min-width: 0; }
   .machine-photo { width: 112px; height: 84px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); overflow: hidden; }
   .machine-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 22px; }
   .machine-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 2px; font-size: 10px; }
   .machine-id { font-size: 12px; color: var(--steel); font-family: 'IBM Plex Mono', monospace; }
   .machine-type { font-family: 'Oswald', sans-serif; font-size: 18px; margin-top: 2px; }
-  .machine-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--steel); }
+  .machine-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--steel); flex-wrap: wrap; min-width: 0; }
   .plate-badge { font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
-  .machine-loc-row { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; color: var(--steel); }
+  .machine-loc-row { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; color: var(--steel); flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
   .gps-age { display: flex; align-items: center; gap: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--idle); }
-  .machine-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--steel); }
+  .machine-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--steel); flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
 
   /* Drawer */
   #overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: stretch; justify-content: flex-end; z-index: 50; }
@@ -796,12 +843,16 @@
   .vac-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); margin-bottom: 8px; }
   .vac-dates { font-size: 13px; font-weight: 500; }
   .vac-days { font-size: 11px; color: var(--steel); margin-top: 2px; }
-  .vac-delete { background: none; border: none; color: var(--steel); cursor: pointer; padding: 4px; }
+  /* .vac-delete estaba definido aqui dentro, solo para moviles. Por encima
+     de 768px se pintaba como un boton gris del navegador, sin estilo. */
   .vac-form { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
   .vac-form .form-group { margin-top: 0; flex: 1; }
 
   /* ============ REGISTRO DE HORAS ============ */
-  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Movido fuera del bloque de movil: estaba dentro de
+     @media (max-width: 768px), asi que entre 769px y ~1100px (iPad en
+     vertical, ventana estrecha en el portatil) las tablas anchas no tenian
+     desplazamiento propio y se salian de la pagina. */
   .load-more-btn { width: 100%; padding: 10px; text-align: center; font-size: 13px; font-weight: 600; color: var(--blue); background: var(--surface); border: none; border-top: 1px solid var(--border); cursor: pointer; }
 
   /* ======================================================================
@@ -1086,8 +1137,19 @@
     .user-avatar { width: 32px; height: 32px; font-size: 11px; }
   }
 
+  /* Moviles estrechos (iPhone SE y Androids de 320-360px). Ahi la foto de
+     112px + separacion + el texto no caben, y la tarjeta estiraba toda la
+     pantalla de lado: 52px de mas en un iPhone SE. Se reduce la foto y se
+     deja que las palabras largas puedan partirse. */
+  @media (max-width: 400px) {
+    .machine-photo { width: 72px; height: 60px; }
+    .machine-top { gap: 8px; }
+    .machine-type { font-size: 16px; }
+    .view, .plate { overflow-wrap: break-word; word-break: break-word; }
+  }
+
   /* ============ DASHBOARD PRO ============ */
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 14px; margin-bottom: 20px; }
   .kpi-card { padding: 16px; cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
   .kpi-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.07); transform: translateY(-1px); }
   .kpi-trend { font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px; margin-top: 6px; }
@@ -1110,7 +1172,7 @@
   .activity-feed-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; }
   .activity-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; margin-top: 1px; }
 
-  .obras-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .obras-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px; }
   .obra-card { padding: 16px; }
   .obra-progress-track { width: 100%; height: 6px; border-radius: 99px; background: var(--surface); margin-top: 10px; overflow: hidden; }
   .obra-progress-fill { height: 100%; background: var(--amber); border-radius: 99px; }
@@ -3448,7 +3510,7 @@ function renderDashboard() {
         </div>
       </div>
 
-      <div class="plate" style="width:280px;flex-shrink:0;padding:20px;">${rivets}
+      <div class="plate" style="width:280px;max-width:100%;flex-shrink:0;padding:20px;">${rivets}
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span class="f-display" style="font-size:15px;">AVISOS</span>
           <button class="btn-ghost enlace" onclick="switchTab('avisos')">Ver todos <i class="fa-solid fa-arrow-right" style="font-size:10px;"></i></button>
@@ -5385,6 +5447,10 @@ function cortarSuscripcion() {
    consultan la base de datos bajo demanda. Los totales y resúmenes los
    calcula Postgres — así da igual que haya 100 fichajes o 10 millones. */
 const DIAS_FICHAJES_EN_MEMORIA = 60;
+/* Tope de filas que se traen sin filtrar. Es un tope de PANTALLA, no del
+   registro: con 100 trabajadores estas 300 lineas son un par de dias, asi
+   que la pantalla lo avisa y manda a filtrar por fechas para exportar. */
+const TOPE_FICHAJES_EN_MEMORIA = 300;
 
 async function cargarFichajes() {
   try {
@@ -5393,7 +5459,7 @@ async function cargarFichajes() {
       .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed,verified,horometro_inicio,horometro_fin,gasoil_inicio,gasoil_fin,gasoil_repostado')
       .gte('check_in', desde)
       .order('check_in', { ascending: false })
-      .limit(300);
+      .limit(TOPE_FICHAJES_EN_MEMORIA);
     if (error) throw error;
     timeLogs = (data || []).map(mapearFichaje);
     await cargarJornadasAbiertas();
@@ -6415,6 +6481,10 @@ function mapearFichaje(l) {
   const m = machines.find(x => x.dbId === l.machine_id);
   return {
     dbId: l.id, workerId: l.worker_id, worker: w ? w.name : 'Trabajador dado de baja',
+    // La exportacion escribe una columna "Codigo" con l.workerCode, y aqui
+    // nunca se rellenaba: el registro de jornada salia con esa columna
+    // vacia en todas las filas.
+    workerCode: w ? w.id : '',
     projectDbId: l.project_id, project: p ? p.name : '—', projectCode: p ? p.id : '—',
     machine: m ? m.id : '—',
     checkInISO: l.check_in, checkOutISO: l.check_out,
@@ -6497,6 +6567,12 @@ function renderRegistroHoras() {
         <button class="btn btn-outline" style="padding:9px 14px;" onclick="exportarFichajes()"><i class="fa-solid fa-file-arrow-down"></i> Descargar mis horas</button>
       </div>
     </div>`}
+
+    ${resultadosFiltro === null && lista.length >= TOPE_FICHAJES_EN_MEMORIA ? `
+    <div class="plate" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start;background:var(--amber-bg);">
+      <i class="fa-solid fa-circle-exclamation" style="color:var(--amber-deep);margin-top:2px;"></i>
+      <div style="font-size:12.5px;color:var(--ink);">Esto es solo <b>lo mas reciente</b>, no el registro completo. Con muchos trabajadores estas ${TOPE_FICHAJES_EN_MEMORIA} lineas pueden ser un par de dias. Para el registro de jornada de un periodo, <b>pon las fechas en el filtro</b> y exporta desde ahi.</div>
+    </div>` : ''}
 
     ${filtroTruncado && resultadosFiltro !== null ? `
     <div class="plate" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start;background:var(--amber-bg);">
@@ -8549,7 +8625,9 @@ async function cargarIncidencias() {
     } else {
       // Todas las abiertas siempre, y solo las 30 resueltas más recientes
       const [abiertas, resueltas] = await Promise.all([
-        sb.from('incidents').select('id,worker_id,project_id,machine_id,title,description,priority,photo_path,resolved,created_at,resolved_at').eq('resolved', false).order('created_at', { ascending: false }),
+        // Con tope: una empresa que no resuelve avisos acumula miles y sin
+        // limite se descargaban todos en cada carga.
+        sb.from('incidents').select('id,worker_id,project_id,machine_id,title,description,priority,photo_path,resolved,created_at,resolved_at').eq('resolved', false).order('created_at', { ascending: false }).limit(500),
         sb.from('incidents').select('id,worker_id,project_id,machine_id,title,description,priority,photo_path,resolved,created_at,resolved_at').eq('resolved', true).order('resolved_at', { ascending: false }).limit(30),
       ]);
       error = abiertas.error || resueltas.error;
@@ -9534,7 +9612,8 @@ async function cargarCobros() {
   try {
     const sb = getSupabase();
     const [pend, pag] = await Promise.all([
-      sb.from('invoices').select('id,project_id,client,client_id,reference,concept,amount,due_date,status,paid_at').neq('status', 'paid').order('due_date', { ascending: false }),
+      // Con tope, por lo mismo que los avisos: los pendientes se acumulan.
+      sb.from('invoices').select('id,project_id,client,client_id,reference,concept,amount,due_date,status,paid_at').neq('status', 'paid').order('due_date', { ascending: false }).limit(500),
       sb.from('invoices').select('id,project_id,client,client_id,reference,concept,amount,due_date,status,paid_at').eq('status', 'paid').order('paid_at', { ascending: false }).limit(50),
     ]);
     const error = pend.error || pag.error;
@@ -9652,7 +9731,7 @@ function renderInformes() {
             : hoursByWorker.map(h => reportBar(esc(h.name), h.hours, maxHours, h.hours.toLocaleString('es-ES',{maximumFractionDigits:1})+' h')).join('')}
         </div>
       </div>
-      <div class="plate" style="width:340px;flex-shrink:0;padding:20px;">${rivets}
+      <div class="plate" style="width:340px;max-width:100%;flex-shrink:0;padding:20px;">${rivets}
         <span class="f-display" style="font-size:15px;">USO DE ${tm('PP')}</span>
         <div style="margin-top:12px;">
           ${machineUse.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Todavía no hay ${tm('p')} registrad${tm('g')}s.</div>` : machineUse.map(m => reportBar(esc(m.name), m.active, m.total || 1, `${m.active}/${m.total}`, 'var(--success)')).join('')}
@@ -9667,7 +9746,7 @@ function renderInformes() {
           ${billingByProject.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Todavía no hay cobros anotados.</div>` : billingByProject.map(b => reportBar(esc(b.name), b.amount, maxBilling, b.amount.toLocaleString('es-ES',{maximumFractionDigits:0})+' €', 'var(--amber-deep)')).join('')}
         </div>
       </div>
-      <div class="plate" style="width:340px;flex-shrink:0;padding:20px;">${rivets}
+      <div class="plate" style="width:340px;max-width:100%;flex-shrink:0;padding:20px;">${rivets}
         <span class="f-display" style="font-size:15px;">INCIDENCIAS POR ${t('S').toUpperCase()}</span>
         <div style="margin-top:12px;">
           ${incByProject.length === 0 ? `<div style="font-size:13px;color:var(--steel);padding:10px 0;">Sin incidencias registradas.</div>` : incByProject.map(i => reportBar(esc(i.name), i.count, maxInc, `${i.count} (${i.open} abiertas)`, i.open>0?'var(--danger)':'var(--idle)')).join('')}
