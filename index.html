@@ -6760,7 +6760,19 @@ function openDrawer(id) {
       <div id="qr-render-${esc(m.id)}" style="background:white;padding:6px;border-radius:4px;flex-shrink:0;"></div>
       <div style="font-size:12.5px;color:var(--steel);flex:1;">
         Pégalo en ${tm('el')} ${tm('s')}. Los trabajadores lo escanean con la cámara para fichar entrada/salida — el código solo es válido para <span class="f-mono">${esc(m.id)}</span>.
-        ${esAdministrador() ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 12px;margin-top:10px;" onclick="imprimirQR('${esc(m.id)}')"><i class="fa-solid fa-print"></i> Imprimir etiqueta</button>` : ''}
+        ${esAdministrador() ? `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px;">
+            <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;"
+                    onclick="imprimirQR('${esc(m.id)}')"><i class="fa-solid fa-print"></i> Imprimir etiqueta</button>
+            <button class="btn-ghost peligro" style="font-size:12px;"
+                    title="Solo si la pegatina se ha estropeado o han copiado el código"
+                    onclick="cambiarCodigoQR('${esc(m.dbId)}')">
+              <i class="fa-solid fa-rotate"></i> Generar código nuevo
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--steel);margin-top:8px;line-height:1.45;">
+            El código no cambia nunca por su cuenta: la misma pegatina vale siempre.
+          </div>` : ''}
       </div>
     </div>
 
@@ -6861,6 +6873,55 @@ function closeDrawer() {
 }
 
 /* ============ AÑADIR MÁQUINA (modal) ============ */
+/* El contenido del QR de una máquina. Lleva un tramo al azar para que no
+   se pueda deducir el de una máquina a partir del de otra. */
+function generarCodigoQR(codigoMaquina) {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const n = new Uint32Array(10);
+  crypto.getRandomValues(n);
+  const azar = Array.from(n, x => abc[x % abc.length]).join('');
+  return 'OPERTRA-' + currentUser.companyId.slice(0, 8) + '-' + codigoMaquina + '-' + azar;
+}
+
+/* Cambiar el código de una máquina: se usa cuando la pegatina se ha
+   despegado, se ha estropeado o alguien ha copiado el código. La pegatina
+   antigua deja de valer en el momento. */
+async function cambiarCodigoQR(machineDbId) {
+  const m = machines.find(x => x.dbId === machineDbId);
+  if (!m) return yaNoExiste(tm('el') + ' ' + tm('s'));
+  if (!esAdministrador()) return;
+
+  const ok = await confirmar({
+    peligro: true,
+    titulo: 'Generar un código nuevo',
+    aceptar: 'Sí, generar uno nuevo',
+    texto: `Se va a crear un código QR nuevo para ${m.id}.
+
+`
+         + 'La pegatina que tiene puesta DEJARÁ DE FUNCIONAR en ese momento. '
+         + 'Tendrás que imprimir la nueva y pegarla antes de que nadie vuelva a fichar '
+         + `con ${tm('el')} ${tm('s')}.
+
+`
+         + 'Hazlo solo si la pegatina se ha estropeado o alguien ha copiado el código.',
+  });
+  if (!ok) return;
+
+  try {
+    const nuevo = generarCodigoQR(m.id);
+    const { error } = await getSupabase().from('machines')
+      .update({ qr_code: nuevo }).eq('id', m.dbId);
+    if (error) throw error;
+    m.qrCode = nuevo;
+    registrarEnHistorial('código QR nuevo', tm('S'), m.id, 'la pegatina anterior ya no vale');
+    pintarPestanaActual();
+    openDrawer(m.id);
+    aviso('Código nuevo generado. Imprime la etiqueta y pégala antes de que nadie fiche.', 'bien');
+  } catch (e) {
+    aviso('No se pudo generar el código nuevo: ' + mensajeError(e));
+  }
+}
+
 function openAddMachineModal() {
   if (!esAdministrador()) return;
   document.getElementById('add-machine-modal').innerHTML = `
@@ -7010,7 +7071,7 @@ async function submitAddMachine() {
   if (!empezarOperacion('crear-maquina')) return;
   try {
     const newCode = await siguienteCodigo('machine', type.slice(0,2).toUpperCase(), 3);
-    const qrCode = 'OPERTRA-' + currentUser.companyId.slice(0,8) + '-' + newCode;
+    const qrCode = generarCodigoQR(newCode);
     let rutaFoto = null;
     if (foto) {
       if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Subiendo foto...';
