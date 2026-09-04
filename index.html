@@ -537,7 +537,49 @@
     -webkit-overflow-scrolling: touch; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
   .drawer-top { display: flex; justify-content: space-between; align-items: center; }
   .drawer-top-left { display: flex; align-items: center; gap: 12px; }
-  .drawer-close { background: none; border: none; cursor: pointer; color: var(--steel); font-size: 18px; }
+  /* ---- Sugerencias del buscador ---- */
+  .search-box { position: relative; }
+  .sugerencias {
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 60;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 14px 36px rgba(0,0,0,.16); overflow: hidden;
+    max-height: 320px; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .sugerencias:empty { display: none; }
+  .sug-item {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 12px 14px; background: none; border: none; cursor: pointer;
+    text-align: left; border-bottom: 1px solid var(--border);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sug-item:last-child { border-bottom: none; }
+  .sug-item:hover, .sug-item.marcada { background: var(--surface); }
+  .sug-item:active { background: var(--amber-bg); }
+  .sug-codigo {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--steel);
+    flex-shrink: 0; min-width: 62px;
+  }
+  .sug-texto { flex: 1; min-width: 0; }
+  .sug-nombre {
+    font-size: 14px; font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sug-detalle {
+    font-size: 12px; color: var(--steel); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sug-nombre mark { background: var(--amber-bg); color: var(--amber-deep); padding: 0 1px; }
+  .sug-vacio { padding: 14px; font-size: 13px; color: var(--steel); text-align: center; }
+
+  .drawer-close {
+    background: none; border: none; cursor: pointer; color: var(--steel); font-size: 18px;
+    /* 44 px es lo mínimo que se acierta con el dedo. Antes era del tamaño
+       del dibujo y había que apuntar. */
+    width: 44px; height: 44px; display: inline-flex; align-items: center;
+    justify-content: center; border-radius: 10px; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .drawer-close:hover { background: var(--surface); color: var(--ink); }
   .drawer-back { background: none; border: none; cursor: pointer; color: var(--blue); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; font-family: 'Manrope', sans-serif; }
   .drawer-photo { width: 100%; height: 220px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; }
   .drawer-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 40px; }
@@ -801,7 +843,18 @@
     .search-box { max-width: 100%; }
     .avisos-tabs { flex-direction: column; }
 
-    #drawer { width: 100%; }
+    #drawer {
+      width: 100%;
+      /* Debajo de la hora y la cobertura del móvil: si no, la equis para
+         volver queda tapada y el dedo no llega a ella. */
+      padding-top: calc(18px + env(safe-area-inset-top, 0px));
+    }
+    /* La cabecera se queda arriba aunque bajes por la ficha */
+    #drawer .drawer-top {
+      position: sticky; top: calc(-18px - env(safe-area-inset-top, 0px));
+      background: var(--card); z-index: 2;
+      padding: 10px 0; margin: -10px 0 0;
+    }
     /* Con el teclado abierto en el móvil queda poco alto: la ventana se ajusta
        y los botones de acción se quedan siempre visibles abajo. */
     #add-machine-modal, #legal-modal { width: 94vw; padding: 18px; max-height: 92vh; }
@@ -1896,6 +1949,97 @@ function irAlInicio() {
   showScreen('landing');
 }
 
+/* ======================================================================
+   SUGERENCIAS AL ESCRIBIR
+
+   Antes había que escribir, mirar la lista de abajo y buscar con la vista.
+   En el móvil, además, el teclado tapaba justo los resultados. Ahora salen
+   debajo del buscador conforme escribes y con un toque entras.
+   ====================================================================== */
+
+/* Quita acentos y mayúsculas: buscar "jose" tiene que encontrar "José". */
+function paraBuscar(t) {
+  return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/* Resalta en el nombre la parte que se ha escrito */
+function resaltar(texto, consulta) {
+  const limpio = esc(texto);
+  if (!consulta) return limpio;
+  const sin = paraBuscar(texto), q = paraBuscar(consulta);
+  const i = sin.indexOf(q);
+  if (i < 0) return limpio;
+  return esc(texto.slice(0, i)) + '<mark>' + esc(texto.slice(i, i + q.length))
+       + '</mark>' + esc(texto.slice(i + q.length));
+}
+
+let sugerenciaMarcada = -1;
+
+/* Pinta las sugerencias de un buscador.
+   campos: qué se mira de cada elemento; pinta: cómo se enseña cada uno. */
+function mostrarSugerencias(idCaja, consulta, lista, comoSeVe, alElegir) {
+  const caja = document.getElementById(idCaja);
+  if (!caja) return;
+  const q = paraBuscar(consulta);
+  sugerenciaMarcada = -1;
+
+  if (q.length < 1) { caja.innerHTML = ''; return; }
+
+  const encontrados = lista.slice(0, 8);
+  if (!encontrados.length) {
+    caja.innerHTML = `<div class="sug-vacio">Nada coincide con "${esc(consulta)}"</div>`;
+    return;
+  }
+  caja.innerHTML = encontrados.map((el, i) => {
+    const v = comoSeVe(el, consulta);
+    return `<button class="sug-item" data-i="${i}" type="button">
+      ${v.codigo ? `<span class="sug-codigo">${esc(v.codigo)}</span>` : ''}
+      <span class="sug-texto">
+        <span class="sug-nombre">${v.nombre}</span>
+        ${v.detalle ? `<span class="sug-detalle">${esc(v.detalle)}</span>` : ''}
+      </span>
+    </button>`;
+  }).join('');
+
+  [...caja.querySelectorAll('.sug-item')].forEach((b, i) => {
+    // pointerdown, no click: en el móvil el teclado se cierra al perder el
+    // foco y el click llegaría cuando el botón ya se ha movido de sitio.
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      caja.innerHTML = '';
+      alElegir(encontrados[i]);
+    });
+  });
+}
+
+/* Flechas y Enter, para quien use teclado */
+function tecladoEnSugerencias(e, idCaja) {
+  const caja = document.getElementById(idCaja);
+  if (!caja || !caja.children.length) return;
+  const items = [...caja.querySelectorAll('.sug-item')];
+  if (!items.length) return;
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    sugerenciaMarcada += (e.key === 'ArrowDown' ? 1 : -1);
+    if (sugerenciaMarcada < 0) sugerenciaMarcada = items.length - 1;
+    if (sugerenciaMarcada >= items.length) sugerenciaMarcada = 0;
+    items.forEach((b, i) => b.classList.toggle('marcada', i === sugerenciaMarcada));
+    items[sugerenciaMarcada].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter' && sugerenciaMarcada >= 0) {
+    e.preventDefault();
+    items[sugerenciaMarcada].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  } else if (e.key === 'Escape') {
+    caja.innerHTML = '';
+  }
+}
+
+/* Se cierran al tocar fuera */
+document.addEventListener('pointerdown', (e) => {
+  if (e.target.closest && e.target.closest('.search-box')) return;
+  document.querySelectorAll('.sugerencias').forEach(c => { c.innerHTML = ''; });
+}, true);
+
 function esc(txt) {
   if (txt === null || txt === undefined) return '';
   return String(txt)
@@ -2783,6 +2927,11 @@ function switchTab(tab) {
   if (!canAccess(tab)) tab = 'dashboard'; // sin permiso para este módulo
   // Si se llega desde la hoja del menú, se suelta el bloqueo del fondo
   document.body.classList.remove('hoja-abierta');
+  // Se cierra lo que estuviera abierto encima: si no, cambias de sección y
+  // la ficha de la obra se queda flotando sobre la pantalla nueva.
+  closeDrawer();
+  closeAddMachineModal();
+  closeMoreSheet();
   if (currentTab === 'fichaje' && tab !== 'fichaje' && typeof stopQRScan === 'function') {
     stopQRScan(); stopNFCScan();
   }
@@ -3289,7 +3438,10 @@ function renderObras() {
   document.getElementById('view-obras').innerHTML = `
     <div class="toolbar">
       <div class="search-box">
-        <input class="search-input" id="obras-search" placeholder="Buscar obra, cliente..." oninput="filterObras(this.value)">
+        <input class="search-input" id="obras-search" placeholder="Buscar ${t('s')}, cliente..."
+               autocomplete="off" oninput="filterObras(this.value)"
+               onkeydown="tecladoEnSugerencias(event,'obras-sug')">
+        <div class="sugerencias" id="obras-sug"></div>
       </div>
       ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddObraModal()"><i class="fa-solid fa-plus"></i> Añadir ${t('s')}</button>` : ''}
     </div>
@@ -3304,9 +3456,31 @@ function renderObras() {
   `;
 }
 function filterObras(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { obrasVisibles = 24; renderObras(); return; }
-  const results = projects.filter(p => !q || (p.name||'').toLowerCase().includes(q) || nombreClienteDe(p).toLowerCase().includes(q) || (p.id||'').toLowerCase().includes(q));
+  const escrito = q;
+  q = paraBuscar(q).trim();
+  if (!q) {
+    const caja = document.getElementById('obras-sug');
+    if (caja) caja.innerHTML = '';
+    obrasVisibles = 24; renderObras(); return;
+  }
+  const results = projects.filter(p =>
+    paraBuscar(p.name).includes(q)
+    || paraBuscar(nombreClienteDe(p)).includes(q)
+    || paraBuscar(p.id).includes(q));
+
+  // Sugerencias debajo del buscador: en el móvil el teclado tapa la lista
+  // de abajo y no se veía nada de lo que salía.
+  mostrarSugerencias('obras-sug', escrito, results,
+    (p) => ({
+      codigo: p.id,
+      nombre: resaltar(p.name, escrito),
+      detalle: [nombreClienteDe(p), statusLabel[p.status]].filter(Boolean).join(' · '),
+    }),
+    (p) => {
+      const campo = document.getElementById('obras-search');
+      if (campo) campo.blur();
+      openDrawer(p.id);
+    });
   document.getElementById('obras-results').innerHTML = results.length
     ? results.map(p => obraCardHTML(p, true)).join('')
     : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
@@ -4573,7 +4747,7 @@ function openObraDrawer(id) {
 
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
-      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${esc(p.id)}</span></div>
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:14px;font-weight:600;color:var(--ink);">${esc(p.id)}</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
@@ -6305,9 +6479,28 @@ function machineCardHTML(m) {
     </div>`;
 }
 function filterMachines(q) {
-  q = q.trim().toLowerCase();
-  if (!q) { maquinasVisibles = 24; renderMaquinaria(); return; }
-  const results = machines.filter(m => !q || (m.id||'').toLowerCase().includes(q) || (m.type||'').toLowerCase().includes(q) || (m.model||'').toLowerCase().includes(q) || (m.plate||'').toLowerCase().includes(q));
+  const escrito = q;
+  q = paraBuscar(q).trim();
+  if (!q) {
+    const caja = document.getElementById('maquinaria-sug');
+    if (caja) caja.innerHTML = '';
+    maquinasVisibles = 24; renderMaquinaria(); return;
+  }
+  const results = machines.filter(m =>
+    paraBuscar(m.id).includes(q) || paraBuscar(m.type).includes(q)
+    || paraBuscar(m.model).includes(q) || paraBuscar(m.plate).includes(q));
+
+  mostrarSugerencias('maquinaria-sug', escrito, results,
+    (m) => ({
+      codigo: m.id,
+      nombre: resaltar(m.type + (m.model && m.model !== 'Sin especificar' ? ' · ' + m.model : ''), escrito),
+      detalle: [m.plate !== '—' ? m.plate : null, m.project || 'Sin ' + t('s')].filter(Boolean).join(' · '),
+    }),
+    (m) => {
+      const campo = document.getElementById('maquinaria-search');
+      if (campo) campo.blur();
+      openDrawer(m.id);
+    });
   const el = document.getElementById('machine-results');
   if (!el) return;
   el.innerHTML = results.length ? results.map(machineCardHTML).join('') : `<div class="plate empty-state" style="grid-column:1/-1;">${rivets}<i class="fa-solid fa-magnifying-glass"></i><div style="font-size:13px;">Sin resultados para "${q}"</div></div>`;
@@ -6320,7 +6513,10 @@ function renderMaquinaria() {
   document.getElementById('view-maquinaria').innerHTML = `
     <div class="toolbar">
       <div class="search-box">
-        <input class="search-input" id="maquinaria-search" placeholder="Buscar ${tm('s')}, matrícula..." oninput="filterMachines(this.value)">
+        <input class="search-input" id="maquinaria-search" placeholder="Buscar ${tm('s')}, matrícula..."
+               autocomplete="off" oninput="filterMachines(this.value)"
+               onkeydown="tecladoEnSugerencias(event,'maquinaria-sug')">
+        <div class="sugerencias" id="maquinaria-sug"></div>
       </div>
       <div style="display:flex;gap:8px;">
         <div class="mode-toggle" style="margin-top:0;">
@@ -6422,7 +6618,7 @@ function yaNoExiste(queEra) {
 function fichaNoDisponible(queEra) {
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
-      <div class="drawer-top-left"><span class="f-mono" style="font-size:12px;color:var(--steel);">NO DISPONIBLE</span></div>
+      <div class="drawer-top-left"><span class="f-mono" style="font-size:14px;font-weight:600;color:var(--ink);">NO DISPONIBLE</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="empty-state" style="padding:40px 20px;">
@@ -6439,7 +6635,7 @@ function openDrawer(id) {
   if (!m) return fichaNoDisponible('Esta maquina');
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
-      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${esc(m.id)}</span></div>
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:14px;font-weight:600;color:var(--ink);">${esc(m.id)}</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="drawer-photo ${m.photoUrl ? 'has-photo' : 'no-photo'}" id="drawer-photo-${esc(m.id)}">
@@ -7374,7 +7570,7 @@ function workerRowHTML(w) {
   const esAdmin = esAdministrador();
   return `
     <tr style="cursor:pointer;" onclick="openWorkerDrawer('${esc(w.id)}')">
-      <td class="f-mono" style="font-size:12px;color:var(--steel);">${esc(w.id)}</td>
+      <td class="f-mono" style="font-size:14px;font-weight:600;color:var(--ink);">${esc(w.id)}</td>
       <td style="font-weight:500;">${esc(w.name)}</td>
       <td style="color:var(--steel);">${esc(w.role)}</td>
       ${esAdmin ? `<td class="f-mono" style="font-size:13px;letter-spacing:2px;color:var(--amber-deep);font-weight:600;">${w.pin || '—'}</td>` : ''}
@@ -7408,7 +7604,33 @@ function enVacacionesHoy() {
 }
 
 function setWorkerFilter(f) { workerFilter = f; trabajadoresVisibles = 50; renderTrabajadores(); }
-function searchWorkers(q) { workerQuery = q; applyWorkerFilters(); }
+function searchWorkers(q) {
+  workerQuery = q;
+  applyWorkerFilters();
+
+  const escrito = q;
+  const busq = paraBuscar(q).trim();
+  if (!busq) {
+    const caja = document.getElementById('trabajadores-sug');
+    if (caja) caja.innerHTML = '';
+    return;
+  }
+  const results = workers.filter(w =>
+    paraBuscar(w.name).includes(busq) || paraBuscar(w.id).includes(busq)
+    || paraBuscar(w.role).includes(busq));
+
+  mostrarSugerencias('trabajadores-sug', escrito, results,
+    (w) => ({
+      codigo: w.id,
+      nombre: resaltar(w.name, escrito),
+      detalle: [w.role, w.project || 'Sin ' + t('s')].filter(Boolean).join(' · '),
+    }),
+    (w) => {
+      const campo = document.getElementById('trabajadores-search');
+      if (campo) campo.blur();
+      openWorkerDrawer(w.id);
+    });
+}
 
 function renderTrabajadores() {
   const upcoming = [];
@@ -7431,7 +7653,10 @@ function renderTrabajadores() {
   document.getElementById('view-trabajadores').innerHTML = `
     <div class="toolbar">
       <div class="search-box">
-        <input class="search-input" id="trabajadores-search" placeholder="Buscar trabajador..." value="${workerQuery}" oninput="searchWorkers(this.value)">
+        <input class="search-input" id="trabajadores-search" placeholder="Buscar trabajador..."
+               value="${workerQuery}" autocomplete="off" oninput="searchWorkers(this.value)"
+               onkeydown="tecladoEnSugerencias(event,'trabajadores-sug')">
+        <div class="sugerencias" id="trabajadores-sug"></div>
       </div>
       ${esAdministrador() ? `<button class="btn btn-amber" onclick="openAddWorkerModal()"><i class="fa-solid fa-plus"></i> Añadir trabajador</button>` : ''}
     </div>
@@ -7574,7 +7799,7 @@ function openWorkerDrawer(id) {
   if (!w) return fichaNoDisponible('Este trabajador');
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
-      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">${esc(w.id)}</span></div>
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:14px;font-weight:600;color:var(--ink);">${esc(w.id)}</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="drawer-photo ${w.photoPath ? 'has-photo' : 'no-photo'}" style="height:120px;" id="drawer-photo-w-${esc(w.id)}">
@@ -8334,7 +8559,7 @@ function openClientDrawer(clientId) {
 
   document.getElementById('drawer').innerHTML = `
     <div class="drawer-top">
-      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:12px;color:var(--steel);">CLIENTE</span></div>
+      <div class="drawer-top-left">${backButtonHTML()}<span class="f-mono" style="font-size:14px;font-weight:600;color:var(--ink);">CLIENTE</span></div>
       <button class="drawer-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
