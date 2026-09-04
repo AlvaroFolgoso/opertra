@@ -99,7 +99,15 @@
      enseñar un símbolo raro que luego cambia de tamaño y recoloca todo. */
   .fa-solid, .fa-regular, .fa-brands { font-display: block; }
 
-  body { margin: 0; font-family: 'Manrope', sans-serif; background: var(--surface); color: var(--ink); line-height: 1.45; }
+  html {
+    background: var(--surface);
+    /* Nada de rebote al llegar al final: es lo que enseña el blanco de
+       detras y lo que a veces deja el desplazamiento trabado. */
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  body { overscroll-behavior: none; background: var(--surface);
+    margin: 0; font-family: 'Manrope', sans-serif; background: var(--surface); color: var(--ink); line-height: 1.45; }
   .f-display { font-family: 'Oswald', sans-serif; letter-spacing: 0.015em; }
   .f-mono { font-family: 'IBM Plex Mono', monospace; }
 
@@ -121,7 +129,7 @@
     display: flex; flex-direction: column; padding: 16px 12px;
     /* Si la pantalla es baja no cabían las nueve secciones más Ajustes y
        Salir, y se quedaban fuera sin forma de llegar a ellas. */
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
   /* ---- Aviso de versión nueva ---- */
@@ -624,6 +632,15 @@
   .land-nav-links a:hover { color: white; }
   @media (max-width: 768px) { .land-nav-links { display: none; } }
 
+  /* En el movil, TODO lo que se escribe mide 16 px. Por debajo de eso
+     Safari hace zoom automatico al tocarlo y se queda agrandado: por eso
+     al entrar en una obra desde el buscador se veia todo mas grande.
+     No se prohibe el zoom a mano, que hace falta para quien no ve bien. */
+  @media (max-width: 900px) {
+    input, select, textarea,
+    .form-input, .form-select, .search-input { font-size: 16px !important; }
+  }
+
   .land-hero { text-align: center; padding: 72px 6vw 56px; background: linear-gradient(180deg, var(--graphite) 0%, var(--graphite) 55%, var(--card) 55%); }
   .land-eyebrow { display: inline-block; color: var(--amber); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 16px; }
   .land-h1 { font-family: 'Oswald', sans-serif; font-size: clamp(28px, 4.5vw, 46px); color: white; max-width: 780px; margin: 0 auto; line-height: 1.15; }
@@ -679,7 +696,7 @@
   @media (max-width: 640px) { .land-footer { flex-direction: column; text-align: center; } .land-footer-brand { justify-content: center; } }
 
   /* ============ LOGIN ============ */
-  #login-screen, #trial-expired-screen { position: fixed; inset: 0; background: var(--graphite); z-index: 100; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 40px 16px; box-sizing: border-box; }
+  #login-screen, #trial-expired-screen { position: fixed; inset: 0; background: var(--graphite); z-index: 100; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 40px 16px; box-sizing: border-box; }
   #login-screen.hidden, #trial-expired-screen.hidden { display: none; }
   .login-box { width: 420px; max-width: 100%; margin: 0 auto; background: var(--card); border-radius: 12px; padding: 36px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
   .login-brand { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 24px; }
