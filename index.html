@@ -279,6 +279,51 @@
      Antes esto solo valia por debajo de 768px. */
   .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
+  /* ---- Trabajadores en el móvil ----
+     Ocho columnas no caben en una pantalla de 390 px: los nombres se
+     parten por la mitad y los datos se amontonan. En el móvil cada
+     trabajador va en su tarjeta, que se lee de un vistazo y no hay que
+     deslizar nada de lado. */
+  .trab-tarjetas { display: none; }
+  @media (max-width: 780px) {
+    .trab-tabla { display: none; }
+    .trab-tarjetas { display: flex; flex-direction: column; gap: 8px; }
+  }
+  .trab-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 14px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--border);
+    cursor: pointer; text-align: left; width: 100%;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .trab-card:active { filter: brightness(.96); }
+  .trab-card .ini {
+    width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+    background: var(--graphite); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600;
+  }
+  .trab-card .cuerpo { flex: 1; min-width: 0; }
+  .trab-card .nombre {
+    font-size: 15px; font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .trab-card .sub {
+    font-size: 12.5px; color: var(--steel); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .trab-card .abajo {
+    display: flex; gap: 8px; align-items: center; margin-top: 7px; flex-wrap: wrap;
+  }
+  .trab-card .dato {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px;
+    padding: 3px 8px; border-radius: 6px; background: var(--surface);
+    color: var(--steel); white-space: nowrap;
+  }
+  .trab-card .dato.pin { color: var(--amber-deep); letter-spacing: 1.5px; font-weight: 600; }
+  .trab-card .dato.obra { color: var(--amber-deep); }
+  .trab-card .dato.maq { color: var(--blue); }
+
   /* Boton de papelera. Antes solo tenia estilo por debajo de 768px. */
   .vac-delete {
     background: none; border: none; color: var(--steel); cursor: pointer;
@@ -8103,6 +8148,35 @@ function obraActualDe(w) {
   return null;
 }
 
+/* Iniciales del nombre, para la tarjeta del móvil */
+function inicialesDe(nombre) {
+  const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return '?';
+  return (partes[0][0] + (partes[1] ? partes[1][0] : '')).toUpperCase();
+}
+
+/* En el móvil, cada trabajador en su tarjeta: se lee de un vistazo y no
+   hay que deslizar de lado para ver sus datos. */
+function workerCardHTML(w) {
+  const esAdmin = esAdministrador();
+  const obra = obraActualDe(w);
+  return `
+    <button type="button" class="trab-card" onclick="openWorkerDrawer('${esc(w.id)}')">
+      <span class="ini">${esc(inicialesDe(w.name))}</span>
+      <span class="cuerpo">
+        <span class="nombre">${esc(w.name)}</span>
+        <span class="sub">${esc(w.id)}${w.role ? ' · ' + esc(w.role) : ''}</span>
+        <span class="abajo">
+          ${chip(w.status)}
+          ${obra ? `<span class="dato obra">${esc(obra)}</span>` : ''}
+          ${w.machine && w.machine !== '—' ? `<span class="dato maq">${esc(w.machine)}</span>` : ''}
+          ${esAdmin && w.pin ? `<span class="dato pin">PIN ${esc(w.pin)}</span>` : ''}
+        </span>
+      </span>
+      <i class="fa-solid fa-chevron-right" style="color:var(--steel);font-size:13px;flex-shrink:0;"></i>
+    </button>`;
+}
+
 function workerRowHTML(w) {
   const esAdmin = esAdministrador();
   return `
@@ -8130,9 +8204,17 @@ function applyWorkerFilters() {
   const q = workerQuery.trim().toLowerCase();
   const results = workers.filter(w => workerMatchesFilter(w) && (!q || (w.name||'').toLowerCase().includes(q) || (w.role||'').toLowerCase().includes(q) || (w.id||'').toLowerCase().includes(q)));
   const tbody = document.getElementById('workers-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = results.length ? results.map(workerRowHTML).join('') :
-    `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Sin resultados.</td></tr>`;
+  if (tbody) {
+    tbody.innerHTML = results.length ? results.map(workerRowHTML).join('') :
+      `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Sin resultados.</td></tr>`;
+  }
+  // Las tarjetas del movil son otra lista distinta: hay que refrescarlas
+  // tambien, o al filtrar el movil se queda enseñando la lista entera.
+  const tarjetas = document.getElementById('workers-cards');
+  if (tarjetas) {
+    tarjetas.innerHTML = results.length ? results.map(workerCardHTML).join('') :
+      `<div style="text-align:center;padding:24px;color:var(--steel);font-size:13px;">Sin resultados.</div>`;
+  }
 }
 /* Quién está de vacaciones HOY. Se usa para el resumen y para el filtro. */
 function enVacacionesHoy() {
@@ -8234,7 +8316,17 @@ function renderTrabajadores() {
     </div>` : ''}
 
     <div class="plate" style="padding:0;overflow:hidden;">${rivets}
-      <div class="table-scroll">
+      <div class="trab-tarjetas" id="workers-cards">
+        ${workers.length === 0
+          ? `<div class="plate empty-state">${rivets}
+               <i class="fa-solid fa-users"></i>
+               <div style="font-size:14px;font-weight:600;color:var(--ink);">Todavía no hay trabajadores</div>
+               <div style="font-size:13px;margin-top:3px;">Dale a "Añadir trabajador" para dar de alta a tu equipo.</div>
+             </div>`
+          : workers.filter(workerMatchesFilter).slice(0, trabajadoresVisibles).map(workerCardHTML).join('')}
+      </div>
+
+      <div class="table-scroll trab-tabla">
       <table>
         <thead><tr>
           <th>ID</th><th>Nombre</th><th>Puesto</th>${esAdministrador() ? '<th>PIN</th>' : ''}<th>${t('S')}</th><th>${tm('S')}</th><th>Estado</th><th></th>
