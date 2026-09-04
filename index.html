@@ -3853,7 +3853,7 @@ async function exportarTodo() {
       },
     ];
 
-    const esc = (c) => `"${String(c === null || c === undefined ? '' : c).replace(/"/g,'""')}"`;
+    const esc = celdaCSV;   // protege ademas de las formulas de Excel
     let csv = `"OPERTRA · EXPORTACIÓN DE DATOS"\n`;
     csv += `"Empresa";${esc(currentUser.company)}\n`;
     csv += `"Fecha";${esc(new Date().toLocaleString('es-ES'))}\n`;
@@ -4254,7 +4254,7 @@ function exportarCodigosQR() {
   if (!esAdministrador()) return;
   if (machines.length === 0) { aviso('Todavía no hay ' + tm('p') + '.'); return; }
 
-  const esc2 = (c) => `"${String(c === null || c === undefined ? '' : c).replace(/"/g,'""')}"`;
+  const esc2 = celdaCSV;   // protege ademas de las formulas de Excel
   const cab = ['Código ' + tm('s'),'Tipo','Modelo','Matrícula','Contenido del QR'];
   const filas = machines.map(m => [m.id, m.type, m.model, m.plate === '—' ? '' : m.plate, m.qrCode]);
   const csv = [cab, ...filas].map(f => f.map(esc2).join(';')).join('\n');
@@ -5390,7 +5390,7 @@ async function cargarFichajes() {
   try {
     const desde = new Date(Date.now() - DIAS_FICHAJES_EN_MEMORIA * 86400000).toISOString();
     const { data, error } = await getSupabase()
-      .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed')
+      .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed,verified,horometro_inicio,horometro_fin,gasoil_inicio,gasoil_fin,gasoil_repostado')
       .gte('check_in', desde)
       .order('check_in', { ascending: false })
       .limit(300);
@@ -6381,7 +6381,7 @@ async function aplicarFiltroFichaje() {
   filtrando = true;
   renderFichaje();
   try {
-    let q = getSupabase().from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed').order('check_in', { ascending: false }).limit(2000);
+    let q = getSupabase().from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed,verified,horometro_inicio,horometro_fin,gasoil_inicio,gasoil_fin,gasoil_repostado').order('check_in', { ascending: false }).limit(2000);
     if (filtroFichajeDesde) q = q.gte('check_in', filtroFichajeDesde + 'T00:00:00');
     if (filtroFichajeHasta) q = q.lte('check_in', filtroFichajeHasta + 'T23:59:59');
     if (filtroFichajeTrabajador) q = q.eq('worker_id', filtroFichajeTrabajador);
@@ -6427,6 +6427,11 @@ function mapearFichaje(l) {
     hours: l.check_out ? horasDecimales(l.check_in, l.check_out) : 0,
     editedBy: l.edited_by, editedAt: l.edited_at, editReason: l.edit_reason,
     autoClosed: l.auto_closed,
+    // Si se escaneó el código de la máquina o se fichó sin poder hacerlo
+    verificado: l.verified !== false,
+    horometroInicio: l.horometro_inicio, horometroFin: l.horometro_fin,
+    gasoilInicio: l.gasoil_inicio, gasoilFin: l.gasoil_fin,
+    gasoilRepostado: l.gasoil_repostado,
   };
 }
 
@@ -6547,25 +6552,48 @@ function renderRegistroHoras() {
 }
 
 /* Exportar a CSV — se abre directamente en Excel */
+/* Prepara una celda para el archivo de Excel.
+   Excel ejecuta como fórmula cualquier celda que empiece por = + - o @.
+   Un trabajador que se llame "=algo" no debe ejecutar nada al abrirlo. */
+function celdaCSV(valor) {
+  let t = String(valor == null ? '' : valor);
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+  return '"' + t.replace(/"/g, '""') + '"';
+}
+
+/* Junta cabecera y filas en un archivo que Excel abre bien.
+   El punto y coma es el separador que espera el Excel en español, y la
+   marca del principio hace que las tildes salgan correctas. */
+function armarCSV(cabecera, filas) {
+  return '\ufeff' + [cabecera, ...filas]
+    .map(f => f.map(celdaCSV).join(';'))
+    .join('\r\n');
+}
+
 function exportarFichajes() {
   const lista = fichajesFiltrados();
   if (lista.length === 0) { aviso('No hay fichajes que exportar con estos filtros.'); return; }
-  const cab = ['Trabajador', t('S'), tm('S'), 'Fecha', 'Entrada', 'Salida', 'Horas', 'Termina día siguiente', 'Corregido por', 'Motivo'];
+  const num = (v) => (v == null || v === '') ? '' : String(v).replace('.', ',');
+  const cab = ['Código', 'Trabajador', t('S'), tm('S'), 'Fecha', 'Entrada', 'Salida', 'Horas',
+               'Termina día siguiente', 'Cerrada por el sistema', 'Código escaneado',
+               'Horómetro inicio', 'Horómetro fin', 'Gasoil inicio (L)', 'Gasoil fin (L)',
+               'Gasoil repostado (L)', 'Corregido por', 'Motivo'];
   const filas = lista.map(l => [
-    l.worker, l.project, l.machine, l.date, l.checkIn, l.checkOut,
+    l.workerCode || '', l.worker, l.project, l.machine, l.date, l.checkIn, l.checkOut,
     l.checkOut === '—' ? '' : l.hours.toFixed(2).replace('.', ','),
     l.cruzaMedianoche ? 'Sí' : '',
+    l.autoClosed ? 'Sí' : '',
+    l.verificado === false ? 'No' : 'Sí',
+    num(l.horometroInicio), num(l.horometroFin),
+    num(l.gasoilInicio), num(l.gasoilFin), num(l.gasoilRepostado),
     l.editedBy || '', l.editReason || '',
   ]);
-  const csv = [cab, ...filas]
-    .map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';'))
-    .join('\n');
-  // El BOM hace que Excel abra bien las tildes
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const csv = armarCSV(cab, filas);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `fichajes-${currentUser.company.replace(/[^a-zA-Z0-9]/g,'-')}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `registro-jornada-${currentUser.company.replace(/[^a-zA-Z0-9]/g,'-')}-${fechaLocalHoy()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -9492,7 +9520,7 @@ function exportarCobros() {
     i.reference || '', nombreClienteDe(i), i.projectName || '', i.concept || '',
     i.amount.toFixed(2).replace('.', ','), i.dueDate, estadoTexto[estadoCobro(i)],
   ]);
-  const csv = [cab, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const csv = armarCSV(cab, filas);
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -10662,7 +10690,7 @@ async function renovarEmpresa(id, meses) {
 
 /* Listado para pasarle a la gestoria: quien es cliente y hasta cuando paga. */
 function exportarEmpresasCSV() {
-  const esc2 = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const esc2 = celdaCSV;   // protege ademas de las formulas de Excel
   let csv = '\ufeff' + ['Empresa','Sector','Alta','Paga hasta','Estado','Trabajadores','Maquinas','Fichajes del mes']
     .map(esc2).join(';') + '\n';
   empresasPanel.forEach(e => {
