@@ -2805,17 +2805,73 @@ const docStatusLabel = { vigente: "Vigente", proximo: "Caduca pronto", caducado:
 function docChip(status) {
   return `<span class="chip status-${status}"><span class="dot"></span>${docStatusLabel[status]}</span>`;
 }
+/* Quitar un documento y, con él, su archivo. Si solo se borrara la ficha,
+   el archivo se quedaría ocupando sitio en el almacén hasta la limpieza
+   nocturna; y si esa fallara, para siempre. */
+async function borrarDocumento(docId) {
+  if (!esAdministrador()) return;
+
+  // Se busca en máquinas y en trabajadores, que es donde puede estar
+  let doc = null, duenoMaquina = null, duenoTrabajador = null;
+  machines.forEach(m => (m.documents || []).forEach(d => {
+    if (d.dbId === docId) { doc = d; duenoMaquina = m; }
+  }));
+  workers.forEach(w => (w.documents || []).forEach(d => {
+    if (d.dbId === docId) { doc = d; duenoTrabajador = w; }
+  }));
+  if (!doc) return yaNoExiste('el documento');
+
+  const ok = await confirmar({
+    peligro: true,
+    titulo: 'Borrar documento',
+    aceptar: 'Sí, borrar',
+    texto: `¿Borrar "${doc.name}"?\n\nSe borrará también el archivo adjunto. `
+         + 'Esta acción no se puede deshacer.',
+  });
+  if (!ok) return;
+
+  try {
+    const { error } = await getSupabase().from('documents').delete().eq('id', docId);
+    if (error) throw error;
+
+    // El archivo se va con la ficha, no se espera a la limpieza nocturna
+    if (doc.filePath) await borrarArchivo(doc.filePath);
+
+    if (duenoMaquina) {
+      duenoMaquina.documents = duenoMaquina.documents.filter(d => d.dbId !== docId);
+      registrarEnHistorial('documento borrado', tm('S'), duenoMaquina.id, doc.name);
+    }
+    if (duenoTrabajador) {
+      duenoTrabajador.documents = duenoTrabajador.documents.filter(d => d.dbId !== docId);
+      registrarEnHistorial('documento borrado', 'Trabajador', duenoTrabajador.name, doc.name);
+    }
+    pintarPestanaActual();
+    if (duenoMaquina) openDrawer(duenoMaquina.id);
+    if (duenoTrabajador) openWorkerDrawer(duenoTrabajador.id);
+    aviso('Documento y archivo borrados.', 'bien');
+  } catch (e) {
+    aviso('No se pudo borrar el documento: ' + mensajeError(e));
+  }
+}
+
 function docList(docs) {
   if (!docs || docs.length === 0) {
     return `<div style="font-size:13px;color:var(--steel);padding:8px 0;">Sin documentos todavía.</div>`;
   }
+  const puedeBorrar = esAdministrador();
   return docs.map(d => `
-    <div class="doc-row" ${d.filePath ? `style="cursor:pointer;" onclick="abrirDocumento('${d.filePath}')"` : ''}>
-      <div>
+    <div class="doc-row">
+      <div ${d.filePath ? `style="cursor:pointer;flex:1;min-width:0;" onclick="abrirDocumento('${d.filePath}')"` : 'style="flex:1;min-width:0;"'}>
         <div class="doc-name">${esc(d.name)} ${d.filePath ? '<i class="fa-solid fa-paperclip" style="font-size:11px;color:var(--blue);margin-left:4px;"></i>' : ''}</div>
         <div class="doc-expiry f-mono">Caduca: ${esc(d.expiry)}</div>
       </div>
-      ${docChip(d.status)}
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        ${docChip(d.status)}
+        ${puedeBorrar ? `<button class="btn-ghost peligro" title="Borrar este documento"
+            aria-label="Borrar ${esc(d.name)}"
+            onclick="event.stopPropagation();borrarDocumento('${esc(d.dbId)}')">
+            <i class="fa-solid fa-trash"></i></button>` : ''}
+      </div>
     </div>`).join('');
 }
 
