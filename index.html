@@ -3479,7 +3479,8 @@ function filterObras(q) {
     (p) => {
       const campo = document.getElementById('obras-search');
       if (campo) campo.blur();
-      openDrawer(p.id);
+      // openDrawer es la ficha de MAQUINA; la de obra es esta otra
+      openObraDrawer(p.id);
     });
   document.getElementById('obras-results').innerHTML = results.length
     ? results.map(p => obraCardHTML(p, true)).join('')
@@ -5854,6 +5855,19 @@ function stopNFCScan() {
   if (nfcAbortController) { try { nfcAbortController.abort(); } catch(e) {} nfcAbortController = null; }
 }
 
+/* La salida cuando la cámara no colabora: el código va escrito debajo del
+   QR en cada etiqueta, así que se puede teclear. */
+function confirmarCodigoAMano() {
+  const campo = document.getElementById('qr-manual');
+  if (!campo) return;
+  const texto = campo.value.trim();
+  if (!texto) {
+    aviso('Escribe el código que aparece debajo del QR de la ' + tm('s') + '.');
+    return;
+  }
+  comprobarCodigo(texto);
+}
+
 function cerrarEscaneo() {
   stopQRScan(); stopNFCScan();
   escaneando = false; escanearError = '';
@@ -5906,8 +5920,21 @@ function pintarEscaneo() {
         <video id="qr-video" autoplay playsinline muted></video>
         <div class="qr-scan-frame"></div>
       </div>
-      <div style="font-size:12.5px;color:var(--steel);margin-top:10px;text-align:center;">
+      <div id="qr-pista" style="font-size:12.5px;color:var(--steel);margin-top:10px;text-align:center;line-height:1.5;">
         Apunta con la cámara al código QR de ${tm('el')} ${tm('s')}
+      </div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <label class="form-label" for="qr-manual" style="font-size:12px;">
+          ¿No lee la cámara? Escribe el código que hay debajo del QR
+        </label>
+        <div style="display:flex;gap:8px;">
+          <input class="form-input f-mono" id="qr-manual" maxlength="40"
+                 placeholder="${esc(machine.id)}" autocomplete="off"
+                 style="text-transform:uppercase;flex:1;"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();confirmarCodigoAMano();}">
+          <button class="btn btn-outline" style="white-space:nowrap;"
+                  onclick="confirmarCodigoAMano()">Confirmar</button>
+        </div>
       </div>
     ` : `
       <div class="scan-ring ${escaneando ? 'scanning' : ''}" style="margin-top:20px;">
@@ -5950,27 +5977,62 @@ async function iniciarQR() {
 
   try {
     qrStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } }, audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        // Se pide una imagen mediana: más grande no se lee mejor y sí
+        // mucho más lento. Y enfoque continuo, para el código de cerca.
+        width: { ideal: 1280 }, height: { ideal: 720 },
+        focusMode: 'continuous',
+      },
+      audio: false,
     });
     video.srcObject = qrStream;
     // En iPhone hace falta esperar a que el vídeo esté listo antes de reproducir
     video.setAttribute('playsinline', 'true');
     await video.play();
 
+    if (!window.jsQR) {
+      escanearError = 'No se ha podido cargar el lector de códigos. '
+        + 'Comprueba la conexión, o escribe el código a mano.';
+      pintarEscaneo();
+      return;
+    }
+
     const lienzo = document.createElement('canvas');
     const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+    const ANCHO = 480;            // medido: a este tamaño lee igual y 6 veces más rápido
+    let intentos = 0;
 
     const mirar = () => {
       if (!qrStream) return;
       if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
-        lienzo.width = video.videoWidth;
-        lienzo.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, lienzo.width, lienzo.height);
+        // Se mira solo el cuadrado del centro, que es donde apunta la guía:
+        // menos imagen que analizar y menos posibilidad de confundirse con
+        // algo del fondo.
+        const lado = Math.min(video.videoWidth, video.videoHeight);
+        const x0 = (video.videoWidth - lado) / 2;
+        const y0 = (video.videoHeight - lado) / 2;
+        lienzo.width = ANCHO;
+        lienzo.height = ANCHO;
+        ctx.drawImage(video, x0, y0, lado, lado, 0, 0, ANCHO, ANCHO);
         try {
-          const datos = ctx.getImageData(0, 0, lienzo.width, lienzo.height);
-          const codigo = window.jsQR ? jsQR(datos.data, datos.width, datos.height) : null;
+          const datos = ctx.getImageData(0, 0, ANCHO, ANCHO);
+          const codigo = jsQR(datos.data, datos.width, datos.height,
+            { inversionAttempts: 'dontInvert' });
           if (codigo && codigo.data) { comprobarCodigo(codigo.data); return; }
         } catch (e) { /* seguimos mirando */ }
+
+        // Si tras unos segundos no hay manera, se le dice qué hacer en vez
+        // de dejarlo enfocando indefinidamente.
+        intentos++;
+        if (intentos === 90) {
+          const pista = document.getElementById('qr-pista');
+          if (pista) {
+            pista.textContent = 'Acerca el móvil a unos 20 cm, con buena luz '
+              + 'y el código plano. Si no hay manera, escríbelo a mano.';
+            pista.style.color = 'var(--amber-deep)';
+          }
+        }
       }
       qrAnimFrame = requestAnimationFrame(mirar);
     };
