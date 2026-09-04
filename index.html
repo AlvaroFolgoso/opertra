@@ -5197,14 +5197,18 @@ function horasDecimales(desdeISO, hastaISO) {
    PIN, o un admin que se ha dado de alta a sí mismo como trabajador. */
 function miFichaTrabajador() {
   if (currentUser.isWorker) {
-    // Si la lista de trabajadores aún no ha cargado, se reconstruye la ficha
-    // con lo que ya sabemos de la sesión: sin esto, el trabajador no podía
-    // fichar durante los primeros segundos tras entrar.
-    return workers.find(x => x.dbId === currentUser.id)
-        || (currentUser.id && currentUser.pin
-            ? { dbId: currentUser.id, pin: currentUser.pin, name: currentUser.name,
-                role: currentUser.role, machineDbId: null, projectDbId: null }
-            : null);
+    const dela = workers.find(x => x.dbId === currentUser.id);
+    if (dela) {
+      // La lista de trabajadores YA NO trae los PINs (no deben viajar al
+      // móvil). El suyo es el que ha tecleado al entrar, y sin él no puede
+      // fichar: la base de datos lo pide para saber que es él.
+      return { ...dela, pin: dela.pin || currentUser.pin };
+    }
+    // Si la lista aún no ha cargado, se reconstruye con lo de la sesión
+    return (currentUser.id && currentUser.pin)
+      ? { dbId: currentUser.id, pin: currentUser.pin, name: currentUser.name,
+          role: currentUser.role, machineDbId: null, projectDbId: null }
+      : null;
   }
   return workers.find(x => x.profileId === currentUser.id) || null;
 }
