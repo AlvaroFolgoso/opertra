@@ -5331,6 +5331,103 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('offline', () => avisarSinConexion(false));
 
 /* Comprueba antes de guardar: mejor avisar que fallar a medias */
+/* ======================================================================
+   FICHAJES SIN COBERTURA
+
+   En una obra con dos rayas, la llamada al servidor falla y hasta ahora
+   el fichaje se perdía: el trabajador se quedaba sin registro de su
+   jornada. Ahora se guarda en el propio móvil y se manda solo en cuanto
+   vuelve la señal, CON LA HORA REAL a la que se fichó.
+   ====================================================================== */
+const COLA_FICHAJES = 'opertra_fichajes_pendientes';
+
+function leerCola() {
+  try {
+    const t = localStorage.getItem(COLA_FICHAJES);
+    const c = t ? JSON.parse(t) : [];
+    return Array.isArray(c) ? c : [];
+  } catch (e) { return []; }
+}
+
+function guardarCola(cola) {
+  try { localStorage.setItem(COLA_FICHAJES, JSON.stringify(cola)); } catch (e) {}
+}
+
+/* Guarda un fichaje que no se ha podido enviar. El PIN NO se guarda en
+   claro más de lo imprescindible: se necesita para reenviarlo, y se borra
+   en cuanto se manda. */
+function encolarFichaje(datos) {
+  const cola = leerCola();
+  // Más de 3 días no sirve: el servidor no los acepta y solo estorban
+  const limite = Date.now() - 3 * 24 * 3600 * 1000;
+  const viva = cola.filter(f => f.momento > limite);
+  viva.push({ ...datos, momento: Date.now(), intentos: 0 });
+  guardarCola(viva);
+  return viva.length;
+}
+
+let enviandoCola = false;
+/* Manda lo que haya pendiente. Se llama al recuperar la conexión, al
+   abrir la app y después de cada fichaje que sí ha salido. */
+async function enviarColaFichajes(avisarAlTerminar) {
+  if (enviandoCola) return;
+  let cola = leerCola();
+  if (!cola.length) return;
+  if (navigator.onLine === false) return;
+
+  enviandoCola = true;
+  const quedan = [];
+  let enviados = 0;
+
+  for (const f of cola) {
+    try {
+      const { data, error } = await getSupabase().rpc('worker_fichar_pendiente', {
+        p_worker_id: f.workerId, p_pin: f.pin,
+        p_project_id: f.projectId || null, p_machine_id: f.machineId || null,
+        p_horas_previstas: f.horasPrevistas || null,
+        p_verificado: f.verificado !== false,
+        p_momento: new Date(f.momento).toISOString(),
+      });
+      if (error) throw error;
+      enviados++;
+
+      // Las lecturas de la máquina, si las apuntó
+      const logId = data && data[0] ? data[0].log_id : null;
+      const accion = data && data[0] ? data[0].accion : null;
+      if (logId && f.lecturas) {
+        await guardarLecturas(logId, accion === 'salida', f.lecturas);
+      }
+    } catch (e) {
+      // Si es cosa de la red, se reintenta luego. Si el servidor lo
+      // rechaza (PIN cambiado, trabajador dado de baja), se descarta tras
+      // varios intentos para no reintentar eternamente.
+      const intentos = (f.intentos || 0) + 1;
+      if (intentos < 8) quedan.push({ ...f, intentos });
+    }
+  }
+
+  guardarCola(quedan);
+  enviandoCola = false;
+
+  if (enviados > 0) {
+    aviso(enviados === 1
+      ? 'Se ha enviado el fichaje que quedó pendiente sin cobertura.'
+      : `Se han enviado ${enviados} fichajes que quedaron pendientes sin cobertura.`, 'bien');
+    try { await refrescarAntesDeFichar(); } catch (e) {}
+    pintarPestanaActual();
+  } else if (avisarAlTerminar && quedan.length) {
+    aviso('Sigue sin poder enviarse. Se reintentará solo.', 'malo');
+  }
+}
+
+/* Cuántos quedan por enviar, para poder decírselo al trabajador */
+function fichajesPendientes() { return leerCola().length; }
+
+window.addEventListener('online', () => enviarColaFichajes(false));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) enviarColaFichajes(false);
+});
+
 function hayConexion() {
   if (navigator.onLine === false) {
     aviso('No hay conexión a internet.\n\nEspera a recuperarla e inténtalo de nuevo: los cambios no se guardarían.');
@@ -5381,7 +5478,11 @@ async function refrescarAntesDeFichar() {
     if (currentUser.isWorker) {
       const r = await cargarDatosDeTrabajador();
       _fichajesDelTrabajador = r.logs;
-      projects = (r.projRes.data || []).map(mapearObra);
+      const llegadas = (r.projRes.data || []).map(mapearObra);
+      // Si antes había obras y ahora llega la lista vacía, es un fallo de
+      // red, no que la empresa las haya borrado todas de golpe. Se conserva
+      // lo que había: fichar sin obra deja esas horas sin imputar a nada.
+      if (llegadas.length > 0 || antes === 0) projects = llegadas;
       _totalesObra = null;
       if (projects.length !== antes) pintarPestanaActual();
       return;
@@ -5391,7 +5492,8 @@ async function refrescarAntesDeFichar() {
       .order('created_at');
     if (error || !data) return;
 
-    projects = data.map(mapearObra);
+    const llegadas = data.map(mapearObra);
+    if (llegadas.length > 0 || antes === 0) projects = llegadas;
     _totalesObra = null;
 
     // Si han aparecido obras nuevas, se repinta. Lo que había elegido se
@@ -5667,6 +5769,7 @@ function renderFicharCard() {
                   : `Previsto terminar sobre las ${horaDe(abierto.previstaFin)}. Te avisaremos.`}
               </div>`;
             })() : ''}
+            ${avisoFichajesPendientes()}
             ${bloqueLecturas(true)}
             ${(() => {
               const dela = machines.find(m => m.dbId === abierto.machineId) || null;
@@ -5720,6 +5823,7 @@ function renderFicharCard() {
                     : 'Sin aviso. Recuerda fichar la salida al terminar.'}
                 </div>
               </div>
+              ${avisoFichajesPendientes()}
               ${bloqueLecturas(false)}
               ${(() => {
                 // La que ha elegido HOY, que puede no ser la suya de siempre
@@ -5857,6 +5961,31 @@ function campoLectura(id, etiqueta, unidad, valor, pista) {
 
 /* Los campos que se enseñan al fichar. Todos opcionales: una empresa que
    no lleve el gasoil no tiene por qué rellenarlos. */
+/* Mientras haya fichajes sin enviar se dice claramente, para que nadie
+   vuelva a fichar creyendo que no se guardó. */
+function avisoFichajesPendientes() {
+  const n = fichajesPendientes();
+  if (!n) return '';
+  return `
+    <div style="margin-top:16px;padding:13px 15px;border-radius:10px;
+                background:var(--amber-bg);border:1px solid var(--amber);
+                display:flex;gap:11px;align-items:flex-start;text-align:left;">
+      <i class="fa-solid fa-clock-rotate-left" style="color:var(--amber-deep);margin-top:2px;"></i>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13.5px;font-weight:600;color:var(--amber-deep);">
+          ${n === 1 ? 'Tienes 1 fichaje guardado en el móvil' : `Tienes ${n} fichajes guardados en el móvil`}
+        </div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">
+          Se ${n === 1 ? 'enviará' : 'enviarán'} solo${n === 1 ? '' : 's'} en cuanto haya cobertura,
+          con la hora a la que fichaste. No hace falta volver a fichar.
+        </div>
+        <button class="btn-ghost" style="margin-top:7px;" onclick="enviarColaFichajes(true)">
+          Intentar enviar ahora
+        </button>
+      </div>
+    </div>`;
+}
+
 function bloqueLecturas(esSalida) {
   const maq = esSalida
     ? (fichajeAbierto ? machines.find(m => m.dbId === fichajeAbierto.machineId) : null)
@@ -5960,7 +6089,6 @@ async function guardarLecturas(logId, esSalida, lecturas) {
 }
 
 async function ficharAhora(opciones) {
-  if (!hayConexion()) return;
   if (fichajeCargando) return;
   // Lo primero de todo: lo que haya escrito en los campos, antes de que
   // cualquier repintado los deje en blanco.
@@ -6024,8 +6152,49 @@ async function ficharAhora(opciones) {
     renderFichaje();
     arrancarContador();
     renderDashboard();
+    // Hay cobertura ahora mismo: buen momento para soltar lo que quedara
+    enviarColaFichajes(false);
   } catch (err) {
-    aviso('No se pudo registrar el fichaje: ' + mensajeError(err));
+    // ¿Es que no hay red, o es que el servidor ha dicho que no?
+    // Si es la red, el fichaje se guarda en el móvil y sale solo despues.
+    // Si el servidor lo rechaza (PIN mal, dado de baja), guardarlo no
+    // arreglaria nada y solo confundiria al trabajador.
+    const esDeRed = navigator.onLine === false
+      || /fetch|network|failed to fetch|timeout|load failed/i.test(String(err && err.message));
+
+    if (esDeRed) {
+      try {
+        const ficha = miFichaTrabajador();
+        const maq = fichajeAbierto
+          ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
+          : maquinaDeHoy();
+        const cuantos = encolarFichaje({
+          workerId: ficha ? ficha.dbId : null,
+          pin: ficha ? ficha.pin : null,
+          projectId: fichajeAbierto ? fichajeAbierto.projectId : (obraElegida() || null),
+          machineId: maq ? maq.dbId : null,
+          horasPrevistas: fichajeAbierto ? null : horasPrevistas,
+          verificado: !(opciones && opciones.verificado === false),
+          lecturas: lecturasApuntadas,
+        });
+        mostrarDatos({
+          titulo: 'Guardado en tu móvil',
+          texto: 'Aquí no hay cobertura, así que tu fichaje se ha guardado en el teléfono '
+               + 'con la hora de ahora mismo. Se enviará solo en cuanto vuelva la señal.\n\n'
+               + 'No hace falta que hagas nada más. No vuelvas a fichar.',
+          datos: [
+            { etiqueta: 'Hora registrada', valor: horaDe(new Date().toISOString()) },
+            { etiqueta: 'Pendientes de enviar', valor: String(cuantos) },
+          ],
+          pie: 'Si sales de la app no se pierde: queda guardado en el móvil.',
+        });
+        renderFichaje();
+      } catch (e) {
+        aviso('No se pudo registrar ni guardar el fichaje. Díselo a tu encargado.', 'malo');
+      }
+    } else {
+      aviso('No se pudo registrar el fichaje: ' + mensajeError(err));
+    }
     if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
   } finally {
     fichajeCargando = false;
