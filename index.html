@@ -3574,7 +3574,7 @@ function renderDashboard() {
           })().map(w => `
             <div class="worker-row">
               <div class="worker-left">
-                <div class="worker-initials">${iniciales(w.name)}</div>
+                <div class="worker-initials">${esc(iniciales(w.name))}</div>
                 <div><div class="worker-name">${esc(w.name)}</div><div class="worker-meta">${esc(w.role)} · ${w.machine !== '—' ? w.machine : 'sin asignar'}</div></div>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
@@ -4098,7 +4098,7 @@ async function pintarListaUsuarios() {
         ${soyYo
           ? `<span class="chip status-vigente"><span class="dot"></span>Activo</span>`
           : activo
-            ? `<button class="btn-ghost peligro" onclick="revocarAcceso('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">
+            ? `<button class="btn-ghost peligro" onclick="revocarAcceso('${esc(u.id)}')">
                  <i class="fa-solid fa-ban"></i> Revocar acceso</button>`
             : `<button class="btn-ghost" onclick="restaurarAcceso('${u.id}')">
                  <i class="fa-solid fa-rotate-left"></i> Restaurar acceso</button>`}
@@ -4234,7 +4234,12 @@ async function expulsarPorRevocacion() {
   setTimeout(() => location.reload(), 6000);
 }
 
-async function revocarAcceso(userId, nombre) {
+async function revocarAcceso(userId) {
+  // El nombre se busca aquí dentro. Antes viajaba metido en el onclick, y
+  // un nombre con comillas se salía del atributo y ejecutaba lo que
+  // quisiera en el navegador del administrador.
+  const u = (usuariosEmpresa || []).find(x => x.id === userId);
+  const nombre = u ? u.name : 'este usuario';
   if (!esAdministrador()) return;
   if (!await confirmar({ peligro: true, titulo: 'Revocar acceso', aceptar: 'Sí, revocar', texto: `¿Revocar el acceso de ${esc(nombre)}?\n\nNo podrá entrar hasta que lo restaures. Sus datos y su actividad se conservan.` })) return;
   try {
@@ -4524,7 +4529,7 @@ function openEditMachineModal(code) {
     </div>
     <div class="form-group">
       <label class="form-label">Matrícula / nº de serie</label>
-      <input class="form-input" id="em-plate" value="${m.plate === '—' ? '' : (m.plate||'')}">
+      <input class="form-input" id="em-plate" value="${esc(m.plate === '—' ? '' : (m.plate||''))}">
     </div>
     <div class="form-group">
       <label class="form-label">Estado</label>
@@ -4822,7 +4827,7 @@ function openEditObraModal(code) {
     </div>
     <div class="form-group">
       <label class="form-label">Notas (opcional)</label>
-      <textarea class="textarea" id="eo-notes" maxlength="2000" placeholder="Cambios de plazo, acuerdos, observaciones...">${p.notes || ''}</textarea>
+      <textarea class="textarea" id="eo-notes" maxlength="2000" placeholder="Cambios de plazo, acuerdos, observaciones...">${esc(p.notes || '')}</textarea>
     </div>
     <div id="eo-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="eo-error-text"></span></div>
 
@@ -5794,8 +5799,8 @@ function renderFicharCard() {
     <div id="fichaje-wrap">
       <div style="width:100%;max-width:420px;">
         <div class="plate fichaje-card">${rivets}
-          <div class="f-mono" style="font-size:12px;color:var(--steel);">${(miFichaTrabajador()||currentUser).name.toUpperCase()}</div>
-          <div style="font-size:13px;color:var(--steel);margin-top:2px;">${(miFichaTrabajador()||currentUser).role}</div>
+          <div class="f-mono" style="font-size:12px;color:var(--steel);">${esc(((miFichaTrabajador()||currentUser).name || '').toUpperCase())}</div>
+          <div style="font-size:13px;color:var(--steel);margin-top:2px;">${esc((miFichaTrabajador()||currentUser).role || '')}</div>
 
           ${abierto ? `
             <div class="fichaje-check" style="flex-direction:column;gap:4px;padding:18px;">
@@ -6800,7 +6805,7 @@ function renderRegistroHoras() {
       <div style="flex:1;min-width:220px;">
         <div style="font-size:14px;font-weight:700;">${jornadasOlvidadas().length} jornada(s) llevan más de 14 horas abiertas</div>
         <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">
-          Seguramente alguien olvidó fichar la salida: ${jornadasOlvidadas().slice(0,3).map(l => l.worker).join(', ')}${jornadasOlvidadas().length>3?'...':''}.
+          Seguramente alguien olvidó fichar la salida: ${esc(jornadasOlvidadas().slice(0,3).map(l => l.worker).join(', '))}${jornadasOlvidadas().length>3?'...':''}.
           Corrígelas una a una, o ciérralas todas y ajusta las horas después.
         </div>
       </div>
