@@ -284,6 +284,64 @@
      parten por la mitad y los datos se amontonan. En el móvil cada
      trabajador va en su tarjeta, que se lee de un vistazo y no hay que
      deslizar nada de lado. */
+  /* Cada fichaje en su tarjeta cuando la pantalla es estrecha */
+  .fich-card {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 12px 14px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--border); text-align: left;
+  }
+  .fich-card .dia {
+    flex-shrink: 0; width: 46px; text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .fich-card .dia b { display: block; font-size: 17px; color: var(--ink); line-height: 1.1; }
+  .fich-card .dia span { font-size: 10.5px; color: var(--steel); text-transform: uppercase; }
+  .fich-card .cuerpo { flex: 1; min-width: 0; }
+  .fich-card .arriba {
+    font-size: 14px; font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fich-card .horas {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12.5px;
+    color: var(--steel); margin-top: 3px;
+  }
+  .fich-card .horas .ent { color: var(--success); }
+  .fich-card .horas .sal { color: var(--ink); }
+  .fich-card .horas .abierta { color: var(--idle); }
+  .fich-card .total {
+    flex-shrink: 0; text-align: right; font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px; font-weight: 600; color: var(--ink);
+  }
+  .cob-card {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 13px 14px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--border);
+  }
+  .cob-card .cuerpo { flex: 1; min-width: 0; }
+  .cob-card .cliente {
+    font-size: 14.5px; font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cob-card .sub {
+    font-size: 12px; color: var(--steel); margin-top: 3px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cob-card .derecha { flex-shrink: 0; text-align: right; }
+  .cob-card .importe {
+    font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: var(--ink);
+  }
+  .cob-tarjetas { display: none; }
+  @media (max-width: 780px) {
+    .cob-tabla { display: none; }
+    .cob-tarjetas { display: flex; flex-direction: column; gap: 8px; }
+  }
+
+  .fich-tarjetas { display: none; }
+  @media (max-width: 780px) {
+    .fich-tabla { display: none; }
+    .fich-tarjetas { display: flex; flex-direction: column; gap: 8px; }
+  }
+
   .trab-tarjetas { display: none; }
   @media (max-width: 780px) {
     .trab-tabla { display: none; }
@@ -966,20 +1024,38 @@
          volver queda tapada y el dedo no llega a ella. */
       padding-top: calc(18px + env(safe-area-inset-top, 0px));
     }
-    /* La cabecera se queda arriba aunque bajes por la ficha */
+    /* La cabecera se queda arriba aunque bajes por la ficha. Va pegada a
+       CERO: antes se pegaba a una posicion negativa, o sea que al bajar se
+       salia por arriba y la equis dejaba de alcanzarse. */
     #drawer .drawer-top {
-      position: sticky; top: calc(-18px - env(safe-area-inset-top, 0px));
-      background: var(--card); z-index: 2;
-      padding: 10px 0; margin: -10px 0 0;
+      position: sticky; top: 0; z-index: 3;
+      background: var(--card); border-bottom: 1px solid var(--border);
+      margin: calc(-18px - env(safe-area-inset-top, 0px)) -24px 10px;
+      padding: calc(14px + env(safe-area-inset-top, 0px)) 24px 12px;
     }
-    /* Con el teclado abierto en el móvil queda poco alto: la ventana se ajusta
-       y los botones de acción se quedan siempre visibles abajo. */
-    #add-machine-modal, #legal-modal { width: 94vw; padding: 18px; max-height: 92vh; }
-    #add-machine-modal { padding-bottom: 0; }
+    /* La ventana ocupa la pantalla de arriba abajo. Centrada, si el
+       contenido no cabia se cortaba por los DOS lados y no se llegaba ni
+       a cerrar ni a guardar. */
+    #modal-overlay.active, #legal-overlay.active { align-items: stretch; }
+    #add-machine-modal, #legal-modal {
+      width: 100%; max-width: 100%; border-radius: 0;
+      max-height: none; height: 100dvh;
+      padding: 0 18px calc(18px + env(safe-area-inset-bottom, 0px));
+      overflow-y: auto; overscroll-behavior: contain;
+    }
+    /* La cabecera se queda pegada arriba: la equis nunca se sale. */
+    #add-machine-modal > .modal-top, #legal-modal > .modal-top {
+      position: sticky; top: 0; z-index: 3; margin: 0 -18px 4px;
+      padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 12px;
+      background: var(--card); border-bottom: 1px solid var(--border);
+    }
+    /* Y los botones pegados abajo, por encima de la franja del movil. */
     #add-machine-modal .modal-actions {
-      position: sticky; bottom: 0; background: var(--card);
-      padding: 14px 0 18px; margin-top: 18px;
-      border-top: 1px solid var(--border);
+      position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom, 0px));
+      z-index: 3; margin: 20px -18px calc(-18px - env(safe-area-inset-bottom, 0px));
+      padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+      background: var(--card); border-top: 1px solid var(--border);
+      box-shadow: 0 -8px 20px rgba(0,0,0,.06);
     }
     .modal-actions { flex-wrap: wrap; }
     .modal-actions .btn { min-width: 100px; }
@@ -6882,7 +6958,11 @@ function renderRegistroHoras() {
           <div style="font-size:14px;font-weight:600;color:var(--ink);">${resultadosFiltro !== null ? 'Sin fichajes con estos filtros' : 'Todavía no hay fichajes'}</div>
           <div style="font-size:13px;margin-top:3px;">Aparecerán aquí en cuanto tu equipo empiece a fichar.</div>
         </div>` : `
-      <div class="table-scroll">
+      <div class="fich-tarjetas">
+        ${visible.map(l => fichajeCardHTML(l, esAdmin)).join('')}
+      </div>
+
+      <div class="table-scroll fich-tabla">
         <table>
           <thead><tr>
             ${esAdmin ? '<th>Trabajador</th>' : ''}<th>Fecha</th><th>${t('S')}</th><th>Entrada</th><th>Salida</th><th>Horas</th>${esAdmin ? '<th></th>' : ''}
@@ -8162,6 +8242,61 @@ function inicialesDe(nombre) {
 
 /* En el móvil, cada trabajador en su tarjeta: se lee de un vistazo y no
    hay que deslizar de lado para ver sus datos. */
+/* Un fichaje en el móvil: el día grande a la izquierda, la obra, las horas
+   de entrada y salida, y el total a la derecha. Se lee de un vistazo sin
+   deslizar de lado. */
+/* Un cobro en el móvil: cliente arriba, obra y vencimiento debajo, e
+   importe y estado a la derecha. */
+function cobroCardHTML(i) {
+  const e = estadoCobro(i);
+  return `
+    <div class="cob-card">
+      <div class="cuerpo">
+        <div class="cliente">${esc(nombreClienteDe(i)) || '—'}</div>
+        <div class="sub">
+          ${esc(i.reference) || 'Sin referencia'}
+          ${i.projectName ? ' · ' + esc(i.projectName) : ''}
+        </div>
+        <div class="sub" style="color:${e === 'overdue' ? 'var(--danger)' : 'var(--steel)'};">
+          Vence ${esc(fmtDate(i.dueDate))}${i.concept ? ' · ' + esc(i.concept) : ''}
+        </div>
+      </div>
+      <div class="derecha">
+        <div class="importe">${i.amount.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>
+        <div style="margin-top:6px;">${invStatusChip(e)}</div>
+      </div>
+    </div>`;
+}
+
+function fichajeCardHTML(l, esAdmin) {
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const p = String(l.date || '').split('-');
+  const dia = p.length === 3 ? p[2] : '—';
+  const mes = p.length === 3 ? (meses[parseInt(p[1], 10) - 1] || '') : '';
+  const total = l.checkOut === '—'
+    ? '<span class="abierta">en curso</span>'
+    : l.hours.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' h';
+  return `
+    <div class="fich-card">
+      <div class="dia"><b>${esc(dia)}</b><span>${esc(mes)}</span></div>
+      <div class="cuerpo">
+        <div class="arriba">${esc(esAdmin ? l.worker : (l.project || '—'))}</div>
+        <div class="horas">
+          <span class="ent">${esc(l.checkIn)}</span> →
+          <span class="${l.checkOut === '—' ? 'abierta' : 'sal'}">${esc(l.checkOut)}</span>
+          ${l.cruzaMedianoche ? ' <span style="font-size:10px;">+1d</span>' : ''}
+          ${esAdmin && l.project ? ' · ' + esc(l.project) : ''}
+          ${l.autoClosed ? ' <i class="fa-solid fa-robot" style="color:var(--danger);font-size:10px;" title="La cerró el sistema"></i>' : ''}
+          ${l.editedBy ? ' <i class="fa-solid fa-pen" style="color:var(--amber-deep);font-size:10px;" title="Corregido"></i>' : ''}
+        </div>
+      </div>
+      <div class="total">${total}</div>
+      ${esAdmin ? `<button class="btn-ghost" style="flex-shrink:0;"
+           aria-label="Corregir" title="Corregir este fichaje"
+           onclick="openEditFichajeModal('${esc(l.dbId)}')"><i class="fa-solid fa-pen"></i></button>` : ''}
+    </div>`;
+}
+
 function workerCardHTML(w) {
   const esAdmin = esAdministrador();
   const obra = obraActualDe(w);
@@ -9730,7 +9865,11 @@ function renderFacturacion() {
           <div style="font-size:14px;font-weight:600;color:var(--ink);">${invoices.length === 0 ? 'Todavía no hay cobros anotados' : 'Sin resultados con este filtro'}</div>
           <div style="font-size:13px;margin-top:3px;">${invoices.length === 0 ? 'Anota lo que factures a cada cliente para llevar el control.' : 'Prueba con otro filtro.'}</div>
         </div>` : `
-      <div class="table-scroll">
+      <div class="cob-tarjetas">
+        ${lista.map(cobroCardHTML).join('')}
+      </div>
+
+      <div class="table-scroll cob-tabla">
         <table>
           <thead><tr>
             <th>Referencia</th><th>Cliente</th><th>${t('S')}</th><th>Concepto</th><th>Importe</th><th>Vence</th><th>Estado</th><th></th>
