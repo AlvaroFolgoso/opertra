@@ -10610,6 +10610,19 @@ async function handleWorkerLogin() {
 
   setButtonLoading('pin-submit-btn', true, 'Entrando...', 'Entrar');
   try {
+    // ¿Esta empresa está frenada por demasiados intentos fallidos?
+    try {
+      const { data: freno } = await getSupabase().rpc('puedo_intentar', { p_access_code: code });
+      const f = Array.isArray(freno) ? freno[0] : freno;
+      if (f && f.espera_segundos > 0) {
+        document.getElementById('pin-error-text').textContent = f.mensaje
+          || 'Demasiados intentos fallidos. Espera un poco antes de volver a probar.';
+        errBox.style.display = 'flex';
+        setButtonLoading('pin-submit-btn', false, '', 'Entrar');
+        return;
+      }
+    } catch (e) { /* si el freno no está instalado, se entra como siempre */ }
+
     // La validación se hace en la base de datos, no aquí: el navegador nunca
     // recibe la lista de PINs, solo el resultado de comprobar uno concreto.
     const { data, error } = await getSupabase().rpc('worker_login', {
@@ -10617,10 +10630,16 @@ async function handleWorkerLogin() {
     });
     if (error) throw error;
     if (!data || data.length === 0) {
+      // Se apunta el fallo. Va aparte a propósito: si esto lo hiciera la
+      // propia función de entrar, el error borraría el apunte y el freno
+      // no llegaría a saltar nunca.
+      try { await getSupabase().rpc('fallo_de_acceso', { p_access_code: code }); } catch (e) {}
       document.getElementById('pin-error-text').textContent = 'Código de empresa o PIN incorrectos.';
       errBox.style.display = 'flex';
       return;
     }
+    // Ha entrado bien: se le perdonan los fallos anteriores
+    try { await getSupabase().rpc('acceso_correcto', { p_access_code: code }); } catch (e) {}
     const w = data[0];
     currentUser = {
       id: w.worker_id, name: w.worker_name, role: w.worker_role,
