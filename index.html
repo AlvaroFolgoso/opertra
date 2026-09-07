@@ -3272,6 +3272,15 @@ function switchTab(tab) {
   //    instantáneo porque solo cambia una clase.
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   const vistaNueva = document.getElementById('view-' + tab);
+  // Si el pre-pintado en el rato libre todavía no ha llegado a esta pestaña
+  // (pasa sobre todo justo tras iniciar sesión, o en un móvil con poca
+  // holgura), enseñarla ya mismo la dejaba en blanco un fotograma entero
+  // hasta que el punto 2) de abajo la rellenaba — eso es el "a veces se ve
+  // blanca" al cambiar de pestaña en móvil. Si no tiene nada pintado
+  // todavía, se pinta ya, antes de enseñarla; si ya tenía contenido de
+  // antes, se enseña al instante como siempre.
+  const yaTeniaContenido = vistaNueva && vistaNueva.innerHTML.length > 0;
+  if (!yaTeniaContenido) pintarPestanaActual(true);
   vistaNueva.classList.add('active');
   vistaNueva.scrollTop = 0;
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -3279,14 +3288,17 @@ function switchTab(tab) {
   // y la hoja de secciones dicen siempre lo mismo.
   document.getElementById('view-title').textContent =
     VIEW_META[tab][0] || nombreSeccion({ key: tab });
-  // 2) Y el contenido se pinta en el siguiente fotograma, ya con el dedo
-  //    respondido. Pintar antes es lo que daba el tirón.
-  requestAnimationFrame(() => {
-    if (currentTab !== tab) return;   // ha vuelto a tocar: manda lo último
-    pintarPestanaActual(true);        // si ya está pintada, no se toca
-    const v = document.getElementById('view-' + tab);
-    if (v) v.scrollTop = 0;
-  });
+  // 2) Si ya tenía contenido (rama de arriba no ha pintado nada), se repinta
+  //    en el siguiente fotograma, ya con el dedo respondido. Pintar antes es
+  //    lo que daba el tirón.
+  if (yaTeniaContenido) {
+    requestAnimationFrame(() => {
+      if (currentTab !== tab) return;   // ha vuelto a tocar: manda lo último
+      pintarPestanaActual(true);        // si ya está pintada, no se toca
+      const v = document.getElementById('view-' + tab);
+      if (v) v.scrollTop = 0;
+    });
+  }
   document.getElementById('view-subtitle').textContent =
     tab === 'dashboard' ? 'Vista de hoy, ' + new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) :
     tab === 'obras' ? projects.length + ' ' + (projects.length===1?t('s'):t('p')) + ' registrada' + (projects.length===1?'':'s') :
@@ -11597,7 +11609,7 @@ const DATOS_TITULAR = {
   nombre: '[NOMBRE DEL TITULAR]',
   nif: '[NIF]',
   domicilio: '[DOMICILIO A EFECTOS DE NOTIFICACIONES]',
-  email: '[CORREO DE CONTACTO]',
+  email: 'info@opertra.com',
   web: 'opertra.vercel.app',
 };
 
