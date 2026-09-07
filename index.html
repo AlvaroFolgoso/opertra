@@ -112,6 +112,10 @@
   }
   body { overscroll-behavior: none; background: var(--surface);
     margin: 0; font-family: 'Manrope', sans-serif; background: var(--surface); color: var(--ink); line-height: 1.45; }
+  /* Puesto por showScreen() mientras login/trial-expired está en pantalla:
+     así el rebote del scroll en iOS enseña este color oscuro por detrás
+     en vez del claro de siempre, que no pegaba con esas pantallas. */
+  body.fondo-oscuro { background: var(--graphite); }
   .f-display { font-family: 'Oswald', sans-serif; letter-spacing: 0.015em; }
   .f-mono { font-family: 'IBM Plex Mono', monospace; }
 
@@ -10466,6 +10470,12 @@ function showScreen(which) {
   document.getElementById('login-screen').classList.toggle('hidden', which !== 'login');
   document.getElementById('app').classList.toggle('hidden', which !== 'app');
   document.getElementById('trial-expired-screen').classList.toggle('hidden', which !== 'trial-expired');
+  // El fondo de la página (body) era siempre claro, diera igual qué pantalla
+  // estuviera activa. login y trial-expired son oscuras a pantalla completa:
+  // al rebotar el scroll en iOS se ve un parpadeo de ese fondo claro por
+  // detrás. Con esto, el fondo de verdad (el que se ve en el rebote) es del
+  // mismo color que la pantalla que toca en cada momento.
+  document.body.classList.toggle('fondo-oscuro', which === 'login' || which === 'trial-expired');
   window.scrollTo(0,0);
   quitarArranque();
 }
@@ -10898,7 +10908,14 @@ async function entrarConGoogle() {
   try {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + '/' },
+      options: {
+        redirectTo: window.location.origin + '/',
+        // Sin esto, si el navegador ya tenía una sesión de Google abierta,
+        // Google entraba directo con esa cuenta sin dar opción a elegir
+        // otra — nada que ver con si esa cuenta ya se había usado en
+        // Opertra antes o no, es Google recordando la sesión del navegador.
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) throw error;
   } catch (err) {
