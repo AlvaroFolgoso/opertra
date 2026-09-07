@@ -3170,7 +3170,12 @@ const VIEW_META = {
 
 const rivets = `<span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>`;
 function chip(status) {
-  return `<span class="chip status-${status}"><span class="dot"></span>${statusLabel[status]}</span>`;
+  // Si status no es uno de los conocidos (undefined porque algo falló al
+  // cargar, por ejemplo), se enseña un chip neutro en vez de literalmente
+  // la palabra "undefined" en pantalla.
+  const etiqueta = statusLabel[status] || 'Sin datos';
+  const clase = statusLabel[status] ? status : 'idle';
+  return `<span class="chip status-${clase}"><span class="dot"></span>${etiqueta}</span>`;
 }
 
 /* Se mantiene el nombre por compatibilidad, pero ahora el orden lo pone el
@@ -3178,7 +3183,9 @@ function chip(status) {
 
 const docStatusLabel = { vigente: "Vigente", proximo: "Caduca pronto", caducado: "Caducado" };
 function docChip(status) {
-  return `<span class="chip status-${status}"><span class="dot"></span>${docStatusLabel[status]}</span>`;
+  const etiqueta = docStatusLabel[status] || 'Sin datos';
+  const clase = docStatusLabel[status] ? status : 'vigente';
+  return `<span class="chip status-${clase}"><span class="dot"></span>${etiqueta}</span>`;
 }
 /* Quitar un documento y, con él, su archivo. Si solo se borrara la ficha,
    el archivo se quedaría ocupando sitio en el almacén hasta la limpieza
