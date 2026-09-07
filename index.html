@@ -130,13 +130,6 @@
      barra del navegador. La barra de abajo se quedaría fuera de la pantalla.
      En esos casos la altura la mide JavaScript y se guarda en --alto-app. */
   html.sin-dvh #app { height: var(--alto-app, 100vh); }
-  /* Bug conocido de iOS/Android: al CERRAR el teclado, 100dvh se queda con
-     la medida de "con teclado abierto" hasta que algo fuerza a recalcular
-     — se veía como una franja blanca pegada debajo de la barra de abajo,
-     justo después de escribir en un campo y cerrar el teclado. En cuanto
-     JavaScript mide la altura real por primera vez (ver visualViewport
-     más abajo), se usa esa medida siempre en lugar de fiarse del dvh. */
-  html.alto-medido #app { height: var(--alto-app); }
   #app.hidden { display: none; }
 
   #sidebar {
@@ -1117,7 +1110,15 @@
 
     /* UNA sola zona que se desplaza: la vista. Antes tambien se desplazaba
        #main, una dentro de otra, y se peleaban por el mismo dedo. */
-    #app { overflow: hidden; }
+    /* Y anclada al viewport con position:fixed en vez de depender de una
+       altura calculada (100dvh o medida a mano). El teclado del móvil era
+       un problema sin fin con las alturas: al abrirse encogía la app, y si
+       al cerrarse el navegador no avisaba a tiempo, la barra de abajo se
+       quedaba subida con un bloque blanco debajo — que es exactamente lo
+       que pasaba cada vez. Con position:fixed no hay altura que recalcular:
+       el navegador la pega él solo a los cuatro bordes de lo que se ve, y
+       la barra de abajo no se puede quedar a medias. */
+    #app { overflow: hidden; position: fixed; inset: 0; height: auto; width: auto; }
     /* #main es la fila que se estira. min-height:0 es obligatorio: sin el,
        una columna flexible se niega a encoger por debajo de su contenido y
        la barra de abajo se sale de la pantalla. */
@@ -1175,12 +1176,6 @@
       max-height: none; height: 100dvh;
       padding: 0 18px;
       overflow-y: auto; overscroll-behavior: contain;
-    }
-    /* Mismo fallo de dvh que #app (ver más arriba, alturaRealConVisualViewport):
-       sin esto, tras cerrar el teclado el modal se podía quedar más bajo de
-       lo que debería hasta que algo más lo obligara a recalcular. */
-    html.alto-medido #add-machine-modal, html.alto-medido #legal-modal {
-      height: var(--alto-app);
     }
     /* La cabecera se queda pegada arriba: la equis nunca se sale. */
     #add-machine-modal > .modal-top, #legal-modal > .modal-top {
@@ -2077,50 +2072,14 @@
   window.addEventListener('orientationchange', function () { setTimeout(medir, 300); });
 })();
 
-/* ======================================================================
-   ALTURA REAL EN MÓVILES MODERNOS: el teclado cerrándose
-
-   100dvh en sí es correcto, pero iOS y Android tienen un fallo conocido:
-   al CERRAR el teclado (tocar fuera de un campo, o el botón de bajarlo),
-   el navegador no siempre vuelve a calcular el 100dvh a tiempo — se queda
-   con la medida de "con teclado abierto" hasta que algo fuerza un
-   redibujado. Se veía como una franja blanca pegada justo debajo de la
-   barra de Fichaje/Obras de abajo, y solo después de escribir en un campo.
-
-   window.visualViewport SÍ avisa siempre, de verdad, cada vez que cambia
-   lo que se ve (teclado, barra de Safari, rotación) — así que en vez de
-   fiarse de que el navegador recalcule 100dvh solo, se mide aquí y se le
-   da esa altura a #app directamente. La regla CSS "html.alto-medido #app"
-   (más arriba) es la que hace que esta medida mande sobre el dvh nativo.
-   ====================================================================== */
-(function alturaRealConVisualViewport() {
-  if (!window.visualViewport) return;
-  var pendiente = false;
-  function medir() {
-    pendiente = false;
-    var alto = window.visualViewport.height;
-    if (alto > 0) {
-      document.documentElement.style.setProperty('--alto-app', alto + 'px');
-      document.documentElement.classList.add('alto-medido');
-    }
-  }
-  function remedir() {
-    if (pendiente) return;
-    pendiente = true;
-    setTimeout(medir, 0);
-  }
-  medir();
-  window.visualViewport.addEventListener('resize', remedir);
-  // Redes de seguridad extra: en el iPhone real (más aún instalada como
-  // app, no como pestaña de Safari) visualViewport no siempre avisa a
-  // tiempo de que el teclado se ha cerrado. window/resize es otra señal
-  // que a veces sí llega cuando la otra no. Y al perder el foco un campo
-  // (blur/focusout) es justo el momento en que el teclado empieza a
-  // cerrarse — se mide otra vez un poco después (la animación de cerrar
-  // el teclado en iOS tarda), por si para entonces ya ha terminado.
-  window.addEventListener('resize', remedir);
-  document.addEventListener('focusout', function () { setTimeout(medir, 350); }, true);
-})();
+/* Aquí vivía un medidor que le daba a #app la altura de visualViewport en
+   cada cambio. La idea era buena pero el efecto era el contrario del
+   buscado: al abrirse el teclado encogía la app de verdad, y si al
+   cerrarse el aviso no llegaba (pasa en iOS instalada como app), la barra
+   de abajo se quedaba subida con un bloque blanco debajo — el fallo que
+   se veía cada vez que se cerraba el teclado. Se ha quitado: ahora #app va
+   con position:fixed pegada a los cuatro bordes (ver la CSS del móvil), y
+   no hay ninguna altura que calcular ni que se pueda quedar desfasada. */
 
 /* ======================================================================
    TECLADO DEL MÓVIL TAPANDO LOS BOTONES DE ABAJO DE UN MODAL
