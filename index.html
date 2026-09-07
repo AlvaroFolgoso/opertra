@@ -5186,8 +5186,13 @@ function compartirAcceso(workerCode) {
   const w = workers.find(x => x.id === workerCode);
   if (!w || !esAdministrador()) return;
 
-  const texto = `Hola ${esc(w.name)}, ya puedes fichar con Opertra:\n\n`
-    + `1. Entra en https://opertra.vercel.app desde el móvil\n`
+  /* OJO: aquí va el nombre TAL CUAL, sin esc(). Esto es texto plano que
+     acaba en WhatsApp, no HTML. Al meterlo abajo en el <textarea> ya se
+     escapa una vez, y el navegador lo vuelve a convertir al leer .value —
+     así que si lo escapáramos aquí también, a un trabajador llamado
+     O'Donnell le llegaría "Hola O&#39;Donnell". */
+  const texto = `Hola ${w.name}, ya puedes fichar con Opertra:\n\n`
+    + `1. Entra en https://opertra.com desde el móvil\n`
     + `2. Pulsa "Con PIN"\n`
     + `3. Código de empresa: ${currentUser.accessCode}\n`
     + `4. Tu PIN: ${w.pin}\n\n`
@@ -12342,7 +12347,7 @@ const DATOS_TITULAR = {
   nif: '[NIF]',
   domicilio: '[DOMICILIO A EFECTOS DE NOTIFICACIONES]',
   email: 'info@opertra.com',
-  web: 'opertra.vercel.app',
+  web: 'opertra.com',
 };
 
 function bloqueTitular() {
