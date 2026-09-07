@@ -832,19 +832,22 @@
   .land-hero-bg {
     position: absolute; inset: 0; z-index: 0; pointer-events: none;
     background-image:
-      linear-gradient(rgba(240,162,2,.10) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(240,162,2,.10) 1px, transparent 1px);
+      linear-gradient(rgba(240,162,2,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(240,162,2,.06) 1px, transparent 1px);
     background-size: 42px 42px;
-    -webkit-mask-image: radial-gradient(ellipse 85% 65% at 28% 22%, #000 40%, transparent 88%);
-            mask-image: radial-gradient(ellipse 85% 65% at 28% 22%, #000 40%, transparent 88%);
+    /* Elipse grande y centrada, con caída muy suave: antes se concentraba
+       toda en la esquina de arriba y se notaba muy amarilla ahí, y casi
+       nada en el resto del hero. Así se reparte por toda la sección. */
+    -webkit-mask-image: radial-gradient(ellipse 100% 85% at 50% 40%, #000 35%, transparent 96%);
+            mask-image: radial-gradient(ellipse 100% 85% at 50% 40%, #000 35%, transparent 96%);
     animation: land-grid-drift 44s linear infinite;
   }
-  .land-hero-glow { position: absolute; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(64px); opacity: .32; }
-  .land-hero-glow.a { width: 360px; height: 360px; background: var(--amber); top: -130px; left: 4%; animation: land-float 17s ease-in-out infinite; }
-  .land-hero-glow.b { width: 280px; height: 280px; background: var(--blue); bottom: -110px; right: 8%; animation: land-float 21s ease-in-out infinite reverse; }
+  .land-hero-glow { position: absolute; z-index: 0; pointer-events: none; border-radius: 50%; filter: blur(80px); opacity: .16; }
+  .land-hero-glow.a { width: 420px; height: 420px; background: var(--amber); top: -140px; left: 2%; animation: land-float 17s ease-in-out infinite; }
+  .land-hero-glow.b { width: 340px; height: 340px; background: var(--blue); bottom: -140px; right: 4%; animation: land-float 21s ease-in-out infinite reverse; }
   @keyframes land-grid-drift { from { background-position: 0 0, 0 0; } to { background-position: 42px 42px, 42px 42px; } }
   @keyframes land-float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(22px, -16px) scale(1.05); } }
-  @keyframes land-phone-float { 0%, 100% { transform: rotate(-3deg) translateY(0); } 50% { transform: rotate(-3deg) translateY(-12px); } }
+  @keyframes land-phone-float { 0%, 100% { transform: rotate(var(--rot, -3deg)) translateY(0); } 50% { transform: rotate(var(--rot, -3deg)) translateY(-12px); } }
   @media (prefers-reduced-motion: reduce) {
     .land-hero-bg, .land-hero-glow, .land-phone { animation: none !important; }
   }
@@ -854,7 +857,7 @@
   .land-h1 { font-family: 'Oswald', sans-serif; font-size: clamp(28px, 3.6vw, 44px); color: white; max-width: 560px; margin: 0; line-height: 1.15; }
   .land-sub { color: #C7CBD0; font-size: 16px; max-width: 480px; margin: 18px 0 0; line-height: 1.6; }
   .land-cta-row { display: flex; gap: 12px; justify-content: flex-start; margin-top: 28px; flex-wrap: wrap; }
-  .land-hero-stats { display: flex; gap: 32px; margin-top: 44px; flex-wrap: wrap; padding-top: 28px; border-top: 1px solid rgba(255,255,255,.12); }
+  .land-hero-stats { display: flex; gap: 32px; margin-top: 48px; flex-wrap: wrap; }
   .land-hero-stats > div { display: flex; flex-direction: column; }
   .land-stat-num { font-family: 'Oswald', sans-serif; font-size: 26px; color: var(--amber); }
   .land-stat-label { font-size: 12px; color: #9AA1A8; margin-top: 2px; }
@@ -866,12 +869,29 @@
 
   /* ---- Móvil con una recreación de la app real (no es una captura: es HTML
      con los mismos colores y clases, así nunca se desincroniza del diseño real) ---- */
-  .land-phone-wrap { position: relative; z-index: 1; display: flex; justify-content: center; }
+  /* Grupo de 3: el de Fichaje delante y centrado, Maquinaria y Trabajadores
+     asomando detrás a los lados — así se ve de un vistazo que no es una
+     pantalla suelta, es toda la app. En el móvil se queda solo el de
+     Fichaje (ver media query más abajo): con poco ancho, tres móviles en
+     abanico se amontonan más de lo que ayudan. */
+  .land-phone-wrap { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; min-height: 520px; padding: 0 10px; }
   .land-phone {
     width: 250px; background: #0F1114; border-radius: 34px; padding: 9px;
     box-shadow: 0 40px 80px -20px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
-    transform: rotate(-3deg);
+    transform: rotate(var(--rot, -3deg));
     animation: land-phone-float 6.5s ease-in-out infinite;
+  }
+  .land-phone.principal { --rot: -3deg; position: relative; z-index: 3; }
+  .land-phone.secundario {
+    --rot: -14deg; position: absolute; z-index: 1; width: 208px;
+    opacity: .82; filter: saturate(.85);
+    animation-delay: .4s;
+  }
+  .land-phone.secundario.izq { left: -4%; top: 12%; }
+  .land-phone.secundario.dcha { --rot: 12deg; right: -4%; top: 20%; animation-delay: .8s; }
+  @media (max-width: 1080px) {
+    .land-phone.secundario.izq { left: -8%; }
+    .land-phone.secundario.dcha { right: -8%; }
   }
   .land-phone-screen { background: var(--surface); border-radius: 26px; overflow: hidden; position: relative; padding: 26px 14px 12px; }
   .land-phone-island { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 64px; height: 16px; background: #0F1114; border-radius: 10px; }
@@ -894,7 +914,11 @@
   .land-phone-nav { display: flex; justify-content: space-around; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
   .land-phone-nav i { font-size: 13px; color: var(--steel); }
   .land-phone-nav .on i { color: var(--amber); }
-  @media (max-width: 900px) { .land-phone { transform: rotate(0); } .land-phone-wrap { margin-top: 44px; } }
+  @media (max-width: 900px) {
+    .land-phone.secundario { display: none; }
+    .land-phone.principal { --rot: 0deg; }
+    .land-phone-wrap { margin-top: 44px; min-height: 0; }
+  }
 
   .land-section { padding: 64px 6vw; max-width: 1160px; margin: 0 auto; }
   .land-h2 { font-family: 'Oswald', sans-serif; font-size: clamp(22px, 3vw, 30px); text-align: center; color: var(--ink); }
@@ -1487,7 +1511,59 @@
     </div>
 
     <div class="land-phone-wrap" aria-hidden="true">
-      <div class="land-phone">
+      <div class="land-phone secundario izq">
+        <div class="land-phone-screen">
+          <div class="land-phone-island"></div>
+          <div class="land-phone-top">
+            <div><b>Maquinaria</b><span>8 máquinas registradas</span></div>
+          </div>
+          <div class="land-phone-card main">
+            <i class="fa-solid fa-truck-fast"></i>
+            <div><b>EX-114 · Excavadora</b><span>GPS en directo · justo ahora</span></div>
+          </div>
+          <div class="land-phone-card alt">
+            <i class="fa-solid fa-oil-can"></i>
+            <div><b>CAM-002 · Camión</b><span>Combustible 20% · revisar</span></div>
+          </div>
+          <div class="land-phone-nav">
+            <div><i class="fa-solid fa-gauge-high"></i></div>
+            <div><i class="fa-solid fa-clock"></i></div>
+            <div class="on"><i class="fa-solid fa-truck-fast"></i></div>
+            <div><i class="fa-solid fa-users"></i></div>
+            <div><i class="fa-solid fa-bars"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="land-phone secundario dcha">
+        <div class="land-phone-screen">
+          <div class="land-phone-island"></div>
+          <div class="land-phone-top">
+            <div><b>Trabajadores</b><span>12 en plantilla</span></div>
+          </div>
+          <div class="land-phone-card alt">
+            <div class="land-phone-avatar" style="margin-right:2px;">PG</div>
+            <div><b>Pedro Gómez · Peón</b><span style="color:var(--success);">● Trabajando</span></div>
+          </div>
+          <div class="land-phone-card alt">
+            <div class="land-phone-avatar" style="margin-right:2px;">JM</div>
+            <div><b>Julia Moya · Oficial</b><span style="color:var(--success);">● Trabajando</span></div>
+          </div>
+          <div class="land-phone-card alt">
+            <div class="land-phone-avatar" style="margin-right:2px;">RS</div>
+            <div><b>Raúl Soto · Peón</b><span>Sin fichar</span></div>
+          </div>
+          <div class="land-phone-nav">
+            <div><i class="fa-solid fa-gauge-high"></i></div>
+            <div><i class="fa-solid fa-clock"></i></div>
+            <div><i class="fa-solid fa-diagram-project"></i></div>
+            <div class="on"><i class="fa-solid fa-users"></i></div>
+            <div><i class="fa-solid fa-bars"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="land-phone principal">
         <div class="land-phone-screen">
           <div class="land-phone-island"></div>
           <div class="land-phone-top">
@@ -1507,8 +1583,8 @@
             <div><b>23</b><span>en marcha</span></div>
           </div>
           <div class="land-phone-nav">
-            <div class="on"><i class="fa-solid fa-gauge-high"></i></div>
-            <div><i class="fa-solid fa-clock"></i></div>
+            <div><i class="fa-solid fa-gauge-high"></i></div>
+            <div class="on"><i class="fa-solid fa-clock"></i></div>
             <div><i class="fa-solid fa-diagram-project"></i></div>
             <div><i class="fa-solid fa-users"></i></div>
             <div><i class="fa-solid fa-bars"></i></div>
