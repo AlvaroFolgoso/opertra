@@ -2479,7 +2479,10 @@ const gpsDataProvider = (() => {
     } else if (!pollHandle) {
       startMockPolling();
     }
-    return () => { listeners.delete(callback); if (listeners.size === 0) stopMockPolling(); };
+    return () => {
+      listeners.delete(callback);
+      if (listeners.size === 0) { stopMockPolling(); unsubscribeRealtime(); }
+    };
   }
 
   function startMockPolling() {
@@ -2496,20 +2499,35 @@ const gpsDataProvider = (() => {
   }
   function stopMockPolling() { clearInterval(pollHandle); pollHandle = null; }
 
-  /* ---- Implementación real con Supabase (queda lista, solo hace falta
-     activar SUPABASE_CONFIG.enabled y descomentar este bloque) ----
+  // Escucha de verdad los cambios de lat/lng que vayan llegando a la tabla
+  // machines — los escriba quien los escriba (el webhook de
+  // supabase/functions/gps-webhook, o cualquier otra cosa que actualice esa
+  // fila). En cuanto se vincule un localizador real a una máquina y ese
+  // localizador empiece a mandar posición, esto la refleja solo, sin tocar
+  // nada más de la app.
+  let canalRealtime = null;
   function subscribeRealtime() {
-    getSupabase()
+    if (canalRealtime) return; // ya suscrito: no se abre un canal por cada listener
+    canalRealtime = getSupabase()
       .channel('machine_locations')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'machines' }, (payload) => {
         const m = machines.find(x => x.dbId === payload.new.id); // dbId = uuid real, id = código (ej. EX-114)
-        if (m) { m.lat = payload.new.lat; m.lng = payload.new.lng; m.gpsAge = 'justo ahora'; }
-        listeners.forEach(cb => cb(getLocations()));
+        if (!m) return;
+        // Solo cuenta como "ha llegado GPS" si de verdad ha cambiado la
+        // posición — si no, cualquier otro cambio en la máquina (estado,
+        // combustible...) se leería como una señal nueva y mentiría en
+        // "hace cuánto que se sabe dónde está".
+        if (payload.new.lat !== payload.old.lat || payload.new.lng !== payload.old.lng) {
+          m.lat = payload.new.lat; m.lng = payload.new.lng;
+          m.gpsAge = payload.new.gps_updated_at ? 'justo ahora' : m.gpsAge;
+          listeners.forEach(cb => cb(getLocations()));
+        }
       })
       .subscribe();
   }
-  ---- fin implementación real ---- */
-  function subscribeRealtime() { startMockPolling(); } // se sustituye por la de arriba al activar Supabase
+  function unsubscribeRealtime() {
+    if (canalRealtime) { getSupabase().removeChannel(canalRealtime); canalRealtime = null; }
+  }
 
   return { getLocations, subscribe };
 })();
