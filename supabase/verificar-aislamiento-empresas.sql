@@ -19,20 +19,25 @@
 -- hablar con la API de Supabase directamente con las herramientas del
 -- navegador, sin tocar tu página en absoluto.
 --
--- CÓMO USAR ESTO
---   1. Pega y ejecuta la consulta de abajo en el SQL Editor de Supabase.
---   2. Revisa la columna "rls_activado": TIENE que decir "true" en TODAS
---      las tablas de negocio (companies, profiles, workers, projects,
---      machines, time_logs, documents, invoices, incidents, vacations,
---      clients, demo_leads). Si alguna sale en "false", esa tabla es
---      visible/editable por cualquiera con la anon key — que es pública,
---      está literalmente en el código fuente de tu página.
---   3. Revisa "num_politicas": si una tabla tiene RLS activado pero CERO
---      políticas, el efecto por defecto de Postgres es BLOQUEAR todo el
---      acceso (ni se ve ni se puede escribir) — no es un agujero de
---      seguridad, pero sí es una tabla que se quedaría "muda" en la app.
+-- ESTADO CONOCIDO (comprobado 2026-09-07): RLS está activado en las 18
+-- tablas de public. Las únicas con 0 políticas son intentos_fallidos y
+-- login_intentos, y eso es lo correcto — solo las tocan las funciones RPC
+-- por dentro, nadie debe poder leerlas ni escribirlas directamente.
 --
--- PRUEBA MANUAL COMPLEMENTARIA (la más fiable de todas)
+-- LO QUE FALTA COMPROBAR: que la política existe no dice qué hace. Una
+-- política puede existir y aun así decir "USING (true)" (deja pasar
+-- cualquier fila) por error. La consulta de abajo (PASO 2) enseña el
+-- texto real de cada política para poder revisar que de verdad compara
+-- contra la empresa del usuario que pregunta (normalmente algo con
+-- "company_id" y "auth.uid()" o una función tipo "empresa_actual()").
+--
+-- CÓMO USAR ESTO
+--   1. Pega y ejecuta el PASO 1 en el SQL Editor de Supabase: activado +
+--      número de políticas por tabla (esto ya salió bien la primera vez).
+--   2. Pega y ejecuta el PASO 2: te da el texto de cada política. Pégamelo
+--      aquí y reviso que el filtro por empresa esté bien puesto.
+--
+-- PRUEBA MANUAL COMPLEMENTARIA (la más fiable de todas, hazla igualmente)
 --   Crea una empresa de prueba nueva, dale de alta un par de obras y
 --   trabajadores, e inicia sesión con ella. Si ves cualquier obra,
 --   trabajador o fichaje que no hayas creado tú con esa cuenta de prueba,
@@ -41,6 +46,7 @@
 --   funciona, más allá de leer políticas en el SQL Editor.
 -- ============================================================================
 
+-- PASO 1 — activado + cuántas políticas por tabla
 select
   t.tablename,
   t.rowsecurity as rls_activado,
@@ -51,3 +57,14 @@ left join pg_policies p
 where t.schemaname = 'public'
 group by t.tablename, t.rowsecurity
 order by (t.rowsecurity is false) desc, t.tablename;
+
+-- PASO 2 — qué dice cada política de verdad (esto es lo que hay que leer)
+select
+  tablename,
+  policyname,
+  cmd as operacion,           -- select / insert / update / delete
+  qual as condicion_using,    -- filtro para leer/editar/borrar filas existentes
+  with_check as condicion_with_check  -- filtro para lo que se inserta/actualiza
+from pg_policies
+where schemaname = 'public'
+order by tablename, cmd;
