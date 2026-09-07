@@ -2389,6 +2389,11 @@ function pintarImagenDiferida(elId, ruta, alt) {
 /* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
    sesión (ver loadCompanyData). Empiezan vacíos, ya no hay datos de mentira aquí. */
 let machines = [];
+/* Se pone a true la primera vez que loadCompanyData termina. Antes de eso,
+   pintarPestanaActual() no pinta la pantalla con arrays vacíos (que se veía
+   como "0 obras, 0 trabajadores" durante un segundo y luego saltaba a los
+   datos reales): pinta un cargando en su lugar. */
+let datosEmpresaCargados = false;
 
 /* ======================================================================
    CONFIGURACIÓN DE PRODUCCIÓN
@@ -2510,6 +2515,20 @@ function pintarPestanaActual(permitirSaltar) {
   // se llama desde refrescos automaticos. Si no se comprueba aqui, un trabajador
   // podria acabar viendo pantallas de facturacion o clientes por un refresco.
   if (!canAccess(currentTab)) { currentTab = 'dashboard'; }
+
+  // Todavía no ha llegado la primera carga de datos: se pinta un cargando
+  // en vez de la pantalla real con arrays vacíos, que es lo que se veía
+  // como "0 obras, 0 trabajadores" un instante y luego saltaba a lo real.
+  if (!datosEmpresaCargados) {
+    const vistaCargando = document.getElementById('view-' + currentTab);
+    if (vistaCargando) {
+      vistaCargando.innerHTML = `<div class="empty-state" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px;"></i>
+        <span>Cargando tus datos…</span>
+      </div>`;
+    }
+    return;
+  }
 
   const huella = huellaDeDatos();
   const vista = document.getElementById('view-' + currentTab);
@@ -2745,13 +2764,14 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     });
 
     resultadosFiltro = null;
-    await cargarFichajes();
-    await cargarEstadoFichaje();
-    await cargarIncidencias();
-    await cargarCobros();
+    // Las 4 iban una detrás de otra (4 viajes de ida y vuelta al servidor en
+    // fila), y eso es justo lo que se notaba como el segundo de espera tras
+    // iniciar sesión. Son independientes entre sí, así que van a la vez.
+    await Promise.all([cargarFichajes(), cargarEstadoFichaje(), cargarIncidencias(), cargarCobros()]);
 
     // Solo se pinta lo que se está viendo: el resto se pinta al abrir su pestaña.
     // Con 9 módulos, repintarlos todos en cada recarga era trabajo tirado.
+    datosEmpresaCargados = true;
     renderNav();
     pintarPestanaActual();
     arrancarContador();
