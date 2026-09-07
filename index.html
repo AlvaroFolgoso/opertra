@@ -1071,6 +1071,13 @@
       background: var(--card); border-top: 1px solid var(--border);
       box-shadow: 0 -8px 20px rgba(0,0,0,.06);
     }
+    /* Con un campo del formulario enfocado (teclado abierto), la barra deja
+       de ir pegada abajo y pasa a ser una fila más del formulario: así la
+       sube el propio scroll-al-foco del navegador, sin tener que calcular
+       ningún píxel a mano (ver bottomBarSigueAlTeclado en el JS). */
+    #add-machine-modal.campo-enfocado .modal-actions {
+      position: static; box-shadow: none;
+    }
     .modal-actions { flex-wrap: wrap; }
     .modal-actions .btn { min-width: 100px; }
     #login-screen { padding: 20px 12px; }
@@ -1830,28 +1837,38 @@
 /* ======================================================================
    TECLADO DEL MÓVIL TAPANDO LOS BOTONES DE ABAJO DE UN MODAL
 
-   El meta "interactive-widget=resizes-content" de arriba ya le pide al
-   navegador que encoja el viewport cuando sale el teclado (así 100dvh se
-   entera y la barra de "Guardar" sube). Pero eso solo lo entienden Chrome
-   108+ y derivados; en el resto (Safari/iOS, webviews, Chrome viejo) el
-   modal se queda con la altura de ANTES de que saliera el teclado, y sus
-   botones de abajo quedan tapados detrás — ahí es donde "no se pueden
-   pulsar". De red de seguridad, si el navegador soporta visualViewport
-   (lo soportan todos los que importan hoy) se mide la zona visible de
-   verdad y se le da esa altura al modal a mano mientras el teclado esté
-   abierto.
+   Primer intento: calcular a mano con visualViewport.height la altura
+   visible de verdad y dársela al modal mientras el teclado estuviera
+   abierto. Se quitó: con la barra de autorrelleno de contacto de iOS
+   (la que sugiere "Alvaro" al escribir un nombre) el cálculo no
+   encajaba y dejaba un hueco gris feo entre los botones y el teclado —
+   un bug distinto, pero igual de visible.
+
+   La solución de verdad no necesita calcular ningún píxel: mientras
+   haya un campo del formulario con el foco (teclado abierto, se
+   entiende), la barra de "Guardar" deja de estar pegada abajo y pasa a
+   ser una fila más del formulario, justo después del último campo. Así
+   el propio Safari/Chrome la sube solo con su scroll nativo al foco,
+   que es el único que de verdad conoce la altura exacta del teclado en
+   cada instante — no hace falta perseguirlo. Suelta el foco (se cierra
+   el teclado) y vuelve a quedarse pegada abajo, como siempre.
    ====================================================================== */
-(function alturaModalConTeclado() {
-  if (!window.visualViewport) return;
-  function ajustar() {
-    var modal = document.getElementById('add-machine-modal');
-    var overlay = document.getElementById('modal-overlay');
-    if (!modal || !overlay || !overlay.classList.contains('active')) return;
-    if (!window.matchMedia('(max-width: 768px)').matches) { modal.style.height = ''; return; }
-    modal.style.height = window.visualViewport.height + 'px';
-  }
-  window.visualViewport.addEventListener('resize', ajustar);
-  window.visualViewport.addEventListener('scroll', ajustar);
+(function bottomBarSigueAlTeclado() {
+  const modal = document.getElementById('add-machine-modal');
+  if (!modal) return;
+  const alCambiarFoco = () => {
+    // Un pequeño respiro: al saltar el foco de un campo a otro (tab, o
+    // tocar directamente otro campo) hay un instante sin ningún elemento
+    // enfocado, y sin este respiro la barra bajaría y subiría de golpe
+    // entre campo y campo.
+    setTimeout(() => {
+      const activo = document.activeElement;
+      const hayFoco = modal.contains(activo) && (activo.tagName === 'INPUT' || activo.tagName === 'SELECT' || activo.tagName === 'TEXTAREA');
+      modal.classList.toggle('campo-enfocado', hayFoco);
+    }, 0);
+  };
+  modal.addEventListener('focusin', alCambiarFoco);
+  modal.addEventListener('focusout', alCambiarFoco);
 })();
 
 /* ======================================================================
@@ -7676,7 +7693,7 @@ function descongelarFondo() {
 function closeAddMachineModal() {
   document.getElementById('modal-overlay').classList.remove('active');
   const modal = document.getElementById('add-machine-modal');
-  if (modal) modal.style.height = ''; // vuelve a mandar el 100dvh de la CSS
+  if (modal) modal.classList.remove('campo-enfocado');
 }
 
 /* Cualquier ventana que se abra o se cierre congela o suelta el fondo, sin
