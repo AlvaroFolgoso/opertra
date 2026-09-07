@@ -53,9 +53,17 @@
 --     sin actividad si nunca llegaron a convertirse en empresa.
 --   - Baja de empresa (companies.borrar_datos_el): esto ya lo anuncia la
 --     propia app en pantalla ("Se conservan X más. Pasado ese plazo se
---     eliminarán de forma definitiva..."). Aquí se cumple esa promesa:
---     borrado total y en cascada de todos los datos de la empresa,
---     incluidos los ficheros del Storage, en cuanto se cumple esa fecha.
+--     eliminarán de forma definitiva..."). La función que cumple esa
+--     promesa (opertra_purgar_empresas_baja, más abajo) está lista, pero
+--     OJO — NO entra en la purga automática de cada noche todavía, a
+--     propósito. Hoy borrar_datos_el se pone igual para cualquier empresa
+--     en cuanto se crea, pague luego o no: todavía no hay nada (eso llega
+--     con Stripe, ver el TODO en index.html junto a daysLeftInTrial) que
+--     mueva o borre esa fecha para las empresas que sí conviertan a
+--     clientes de pago. Programarla ya borraría empresas de prueba (la
+--     tuya incluida) o clientes reales que sí hayan pagado, sin forma de
+--     distinguirlos. Actívala a mano (sección 8, más abajo) el día que
+--     Stripe ya esté actualizando borrar_datos_el de verdad.
 --
 -- ============================================================================
 
@@ -245,6 +253,12 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 7. Función maestra: la que se programa
 -- ---------------------------------------------------------------------------
+-- opertra_purgar_empresas_baja() queda FUERA de esta lista a propósito —
+-- ver la explicación larga en la cabecera del archivo (sección "Baja de
+-- empresa"). En resumen: hasta que Stripe no distinga empresas de pago de
+-- las que no pagaron, borrar_datos_el no significa "no ha pagado", solo
+-- "se creó hace tiempo" — y correrla aquí borraría clientes de pago o tu
+-- propia empresa de pruebas sin ningún criterio real detrás.
 create or replace function opertra_purga_legal_diaria()
 returns void
 language plpgsql
@@ -258,8 +272,7 @@ begin
     'registro_jornada_borrados', opertra_purgar_registro_jornada(),
     'trabajadores_inactivos_borrados', opertra_purgar_trabajadores_inactivos(),
     'documentos_caducados_borrados', opertra_purgar_documentos_caducados(),
-    'leads_demo_borrados', opertra_purgar_leads_demo(),
-    'empresas_dadas_de_baja_borradas', opertra_purgar_empresas_baja()
+    'leads_demo_borrados', opertra_purgar_leads_demo()
   );
   insert into opertra_purga_log (detalle) values (resultado);
 end;
@@ -287,3 +300,10 @@ select cron.schedule(
 --   SELECT * FROM opertra_purga_log ORDER BY ejecutado_en DESC;
 -- Para lanzar una purga ahora mismo, sin esperar a la 1 de la noche:
 --   SELECT opertra_purga_legal_diaria();
+--
+-- El día que Stripe ya esté actualizando borrar_datos_el de verdad (solo
+-- para quien de verdad haya dejado de pagar, no para cualquier empresa
+-- nueva), pídeme que añada opertra_purgar_empresas_baja() a la función
+-- maestra de arriba y vuelve a pegar el archivo — hasta entonces, si algún
+-- día quieres borrar una empresa concreta de baja, hazlo a mano:
+--   SELECT opertra_purgar_empresas_baja();
