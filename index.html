@@ -1040,7 +1040,7 @@
     #add-machine-modal, #legal-modal {
       width: 100%; max-width: 100%; border-radius: 0;
       max-height: none; height: 100dvh;
-      padding: 0 18px calc(18px + env(safe-area-inset-bottom, 0px));
+      padding: 0 18px;
       overflow-y: auto; overscroll-behavior: contain;
     }
     /* La cabecera se queda pegada arriba: la equis nunca se sale. */
@@ -1049,10 +1049,16 @@
       padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 12px;
       background: var(--card); border-bottom: 1px solid var(--border);
     }
-    /* Y los botones pegados abajo, por encima de la franja del movil. */
+    /* Y los botones pegados abajo, por encima de la franja del movil.
+       Sticky a bottom:0 (sin offsets negativos): así el calculo no depende
+       de que el padding del modal y el offset cuadren a la perfeccion, que
+       es lo que fallaba con dvh cuando el teclado entraba en iOS y dejaba
+       el boton fuera de la zona pulsable. El hueco de la barra inferior del
+       movil (safe-area) se mete como padding propio de la barra, no como
+       truco de margen negativo. */
     #add-machine-modal .modal-actions {
-      position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom, 0px));
-      z-index: 3; margin: 20px -18px calc(-18px - env(safe-area-inset-bottom, 0px));
+      position: sticky; bottom: 0;
+      z-index: 3; margin: 20px -18px 0;
       padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
       background: var(--card); border-top: 1px solid var(--border);
       box-shadow: 0 -8px 20px rgba(0,0,0,.06);
@@ -9700,10 +9706,19 @@ function toggleClienteNuevo(id) {
   const sel = document.getElementById(id);
   const caja = document.getElementById(id + '-nuevo');
   if (!sel || !caja) return;
-  caja.style.display = sel.value === '__nuevo__' ? 'block' : 'none';
-  if (sel.value === '__nuevo__') {
-    const campo = document.getElementById(id + '-nuevo-nombre');
-    if (campo) campo.focus();
+  const mostrar = sel.value === '__nuevo__';
+  caja.style.display = mostrar ? 'block' : 'none';
+  if (mostrar) {
+    // Se espera al siguiente frame (ya con el formulario reflowed) y se
+    // hace foco sin que el navegador decida el scroll por su cuenta: así
+    // no se pelea con la barra de "Guardar" pegada abajo ni salta el
+    // teclado a la vez que crece el formulario.
+    setTimeout(() => {
+      const campo = document.getElementById(id + '-nuevo-nombre');
+      if (!campo) return;
+      campo.focus({ preventScroll: true });
+      campo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
   }
 }
 
