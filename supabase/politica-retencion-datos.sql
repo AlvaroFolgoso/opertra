@@ -118,6 +118,20 @@ as $$
 declare
   n integer;
 begin
+  -- La foto de perfil también, no solo la fila: si no, se queda huérfana en
+  -- el Storage. (El barrido diario de archivos huérfanos la habría acabado
+  -- pillando de todas formas, pero solo se dispara cuando un admin abre
+  -- sesión — mejor no depender de eso aquí.)
+  delete from storage.objects
+  where bucket_id = 'opertra'
+    and name in (
+      select photo_path from workers w
+      where w.active = false
+        and w.updated_at < now() - interval '4 years'
+        and photo_path is not null
+        and not exists (select 1 from time_logs tl where tl.worker_id = w.id)
+    );
+
   delete from workers w
   where w.active = false
     and w.updated_at < now() - interval '4 years'
