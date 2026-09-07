@@ -1080,6 +1080,12 @@
       padding: 0 18px;
       overflow-y: auto; overscroll-behavior: contain;
     }
+    /* Mismo fallo de dvh que #app (ver más arriba, alturaRealConVisualViewport):
+       sin esto, tras cerrar el teclado el modal se podía quedar más bajo de
+       lo que debería hasta que algo más lo obligara a recalcular. */
+    html.alto-medido #add-machine-modal, html.alto-medido #legal-modal {
+      height: var(--alto-app);
+    }
     /* La cabecera se queda pegada arriba: la equis nunca se sale. */
     #add-machine-modal > .modal-top, #legal-modal > .modal-top {
       position: sticky; top: 0; z-index: 3; margin: 0 -18px 4px;
