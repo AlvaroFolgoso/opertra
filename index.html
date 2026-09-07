@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Opertra · Gestión de flota y personal</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1C2126">
@@ -1817,6 +1817,33 @@
   medir();
   window.addEventListener('resize', remedir);
   window.addEventListener('orientationchange', function () { setTimeout(medir, 300); });
+})();
+
+/* ======================================================================
+   TECLADO DEL MÓVIL TAPANDO LOS BOTONES DE ABAJO DE UN MODAL
+
+   El meta "interactive-widget=resizes-content" de arriba ya le pide al
+   navegador que encoja el viewport cuando sale el teclado (así 100dvh se
+   entera y la barra de "Guardar" sube). Pero eso solo lo entienden Chrome
+   108+ y derivados; en el resto (Safari/iOS, webviews, Chrome viejo) el
+   modal se queda con la altura de ANTES de que saliera el teclado, y sus
+   botones de abajo quedan tapados detrás — ahí es donde "no se pueden
+   pulsar". De red de seguridad, si el navegador soporta visualViewport
+   (lo soportan todos los que importan hoy) se mide la zona visible de
+   verdad y se le da esa altura al modal a mano mientras el teclado esté
+   abierto.
+   ====================================================================== */
+(function alturaModalConTeclado() {
+  if (!window.visualViewport) return;
+  function ajustar() {
+    var modal = document.getElementById('add-machine-modal');
+    var overlay = document.getElementById('modal-overlay');
+    if (!modal || !overlay || !overlay.classList.contains('active')) return;
+    if (!window.matchMedia('(max-width: 768px)').matches) { modal.style.height = ''; return; }
+    modal.style.height = window.visualViewport.height + 'px';
+  }
+  window.visualViewport.addEventListener('resize', ajustar);
+  window.visualViewport.addEventListener('scroll', ajustar);
 })();
 
 /* ======================================================================
@@ -7576,7 +7603,11 @@ function descongelarFondo() {
   if (vista && desplazamientoMain) vista.scrollTop = desplazamientoMain;
 }
 
-function closeAddMachineModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+function closeAddMachineModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+  const modal = document.getElementById('add-machine-modal');
+  if (modal) modal.style.height = ''; // vuelve a mandar el 100dvh de la CSS
+}
 
 /* Cualquier ventana que se abra o se cierre congela o suelta el fondo, sin
    que haya que acordarse en cada uno de los sitios que las abren. */
