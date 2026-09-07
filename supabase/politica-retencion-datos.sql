@@ -241,12 +241,11 @@ $$;
 
 
 -- ---------------------------------------------------------------------------
--- 6. Facturación antigua — NO programada, disponible para lanzar a mano
+-- 6. Facturación antigua — automática, a los 6 años
 -- ---------------------------------------------------------------------------
--- El Código de Comercio obliga a conservar 6 años; pasado ese tiempo puedes
--- borrar si quieres, pero no es obligatorio. Por eso esta función no entra
--- en la purga diaria: llámala tú cuando decidas hacer limpieza.
---   SELECT opertra_purgar_facturacion_antigua();
+-- El Código de Comercio obliga a conservar 6 años (mínimo); pasado ese
+-- plazo ya no hay base legal para seguir guardándolo sin más, así que entra
+-- en la purga diaria igual que el resto.
 create or replace function opertra_purgar_facturacion_antigua()
 returns integer
 language plpgsql
@@ -286,7 +285,8 @@ begin
     'registro_jornada_borrados', opertra_purgar_registro_jornada(),
     'trabajadores_inactivos_borrados', opertra_purgar_trabajadores_inactivos(),
     'documentos_caducados_borrados', opertra_purgar_documentos_caducados(),
-    'leads_demo_borrados', opertra_purgar_leads_demo()
+    'leads_demo_borrados', opertra_purgar_leads_demo(),
+    'facturacion_antigua_borrada', opertra_purgar_facturacion_antigua()
   );
   insert into opertra_purga_log (detalle) values (resultado);
 end;
