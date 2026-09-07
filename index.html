@@ -12617,17 +12617,46 @@ function sePuedeRecargarSinMolestar() {
   return true;
 }
 
+/* Cada cuánto se mira si hay versión nueva. Antes era CADA MINUTO, y además
+   seguía mirando con la app en segundo plano (el caso normal: el trabajador
+   la deja abierta en el bolsillo toda la jornada). Eran dos peticiones al
+   servidor por minuto y por móvil: con cien empresas y sus cuadrillas, varios
+   millones de peticiones al día a Vercel — que las cobra — solo para
+   preguntar algo que casi siempre es "no, no hay nada nuevo".
+
+   Quince minutos sobra de largo para una app de gestión, y encima se
+   comprueba en el momento justo en que de verdad importa: cuando alguien
+   vuelve a la app después de tenerla apartada. Así se entera antes que con
+   el sondeo de cada minuto, y gastando una fracción. */
+const MINUTOS_ENTRE_COMPROBACIONES = 15;
+
 function arrancarVigilanciaDeVersion() {
   comprobarVersionNueva(false);                       // se guarda la huella actual
-  setInterval(() => comprobarVersionNueva(true), 60 * 1000);   // cada minuto
 
-  // Al service worker también se le dice que mire: es él quien decide qué
-  // archivo se sirve, así que si no busca, la app nunca ve lo nuevo.
-  setInterval(() => {
+  let ultimaComprobacion = Date.now();
+
+  function rondaDeComprobacion(margenMinimoMs) {
+    // En segundo plano no se gasta ni una petición: no hay nadie mirando.
+    if (document.hidden) return;
+    if (Date.now() - ultimaComprobacion < margenMinimoMs) return;
+    ultimaComprobacion = Date.now();
+
+    comprobarVersionNueva(true);
+
+    // Al service worker también se le dice que mire: es él quien decide qué
+    // archivo se sirve, así que si no busca, la app nunca ve lo nuevo.
     if (navigator.serviceWorker && navigator.serviceWorker.ready) {
       navigator.serviceWorker.ready.then(r => r.update()).catch(() => {});
     }
-  }, 60 * 1000);
+  }
+
+  setInterval(() => rondaDeComprobacion(0), MINUTOS_ENTRE_COMPROBACIONES * 60 * 1000);
+
+  // Al volver a la app se mira en el acto, pero como mucho una vez por
+  // minuto: si no, cambiar de pestaña a lo tonto dispararía una ronda cada vez.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) rondaDeComprobacion(60 * 1000);
+  });
 
   // Cuando el service worker nuevo toma el mando, la página se recarga sola
   if (navigator.serviceWorker) {

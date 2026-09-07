@@ -11,7 +11,11 @@
    Este pide siempre la última y usa la guardada solo si no hay red.
    ====================================================================== */
 
-const VERSION = 'opertra-v3';
+/* Subir este número en cada despliegue que cambie sw.js. Al cambiar, el
+   'activate' de abajo borra las cachés de la versión anterior — que es lo
+   que limpia de un plumazo cualquier index.html malo que se hubiera
+   guardado con la versión antigua del service worker. */
+const VERSION = 'opertra-v4';
 const CACHE_APP = VERSION + '-app';
 const CACHE_LIB = 'opertra-librerias';
 
@@ -77,8 +81,16 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       try {
         const red = await fetch(req);
-        const copia = red.clone();
-        caches.open(CACHE_APP).then(c => c.put('/index.html', copia)).catch(() => {});
+        // OJO: fetch() solo falla si NO HAY RED. Un 500, un 502 o un 404 del
+        // servidor llegan aquí como respuesta buena. Sin este if, un error
+        // pasajero de Vercel (un despliegue a medias, por ejemplo) se
+        // guardaba como si fuera la app: a partir de ahí, ese trabajador
+        // abría una página de error cada vez que se quedaba sin cobertura,
+        // y no se arreglaba solo nunca.
+        if (red.ok) {
+          const copia = red.clone();
+          caches.open(CACHE_APP).then(c => c.put('/index.html', copia)).catch(() => {});
+        }
         return red;
       } catch (err) {
         // Sin cobertura: se sirve la última que se guardó
@@ -91,36 +103,48 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // ---- Librerías de fuera: lo guardado primero, que no cambian ----
-  if (DOMINIOS_LIBRERIAS.some(d => url.hostname.endsWith(d))) {
-    e.respondWith((async () => {
-      const guardada = await caches.match(req);
-      if (guardada) return guardada;
-      try {
-        const red = await fetch(req);
-        // Se guarda aunque no se pueda leer (las de otros dominios vienen
-        // "cerradas"), que para servirlas de nuevo vale igual
-        caches.open(CACHE_LIB).then(c => c.put(req, red.clone())).catch(() => {});
-        return red;
-      } catch (err) {
-        return new Response('', { status: 504 });
-      }
-    })());
-    return;
-  }
+  /* ---- Librerías de fuera e iconos nuestros ----
+     Los dos van igual: se sirve al instante lo guardado y, en paralelo, se
+     pide la versión nueva para la próxima vez ("stale-while-revalidate").
 
-  // ---- Iconos y demás archivos nuestros ----
-  if (url.origin === self.location.origin) {
+     Antes se servía lo guardado y NO se volvía a pedir jamás. El problema:
+     si el CDN fallaba justo el día que un trabajador abrió la app por
+     primera vez, se guardaba la respuesta mala y ese móvil se quedaba con
+     la librería rota PARA SIEMPRE — los iconos sin salir o el escáner de
+     QR sin funcionar, sin manera de arreglarlo salvo desinstalar la app.
+     Refrescando por detrás, un fallo así se cura solo la siguiente vez que
+     abra la app con cobertura. */
+  const esLibreria = DOMINIOS_LIBRERIAS.some(d => url.hostname.endsWith(d));
+  if (esLibreria || url.origin === self.location.origin) {
+    const almacen = esLibreria ? CACHE_LIB : CACHE_APP;
+
     e.respondWith((async () => {
       const guardada = await caches.match(req);
-      if (guardada) return guardada;
-      try {
-        const red = await fetch(req);
-        caches.open(CACHE_APP).then(c => c.put(req, red.clone())).catch(() => {});
+
+      const pedirYGuardar = fetch(req).then(red => {
+        /* Solo se guarda si la respuesta es buena. 'opaque' es el caso de
+           las librerías de otros dominios: vienen cerradas y no se puede
+           mirar dentro ni saber el código de estado, así que se aceptan por
+           necesidad — pero como ahora se refrescan cada vez, si una salió
+           mal se sustituye sola en la siguiente visita. */
+        if (red && (red.ok || red.type === 'opaque')) {
+          const copia = red.clone();
+          caches.open(almacen).then(c => c.put(req, copia)).catch(() => {});
+        }
         return red;
-      } catch (err) {
-        return new Response('', { status: 504 });
-      }
+      }).catch(() => null);
+
+      /* waitUntil mantiene vivo el service worker hasta que termine el
+         refresco. Sin esto el navegador lo apaga en cuanto respondemos con
+         lo guardado, la petición de fondo se corta a medias y la caché no
+         se actualizaría nunca. */
+      try { e.waitUntil(pedirYGuardar); } catch (err) {}
+
+      // Con algo guardado: se responde ya y el refresco sigue por detrás.
+      if (guardada) return guardada;
+
+      const red = await pedirYGuardar;
+      return red || new Response('', { status: 504 });
     })());
   }
 });
