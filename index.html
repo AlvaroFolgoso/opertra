@@ -6589,6 +6589,18 @@ function pintarEscaneo() {
   const machine = fichajeAbierto
     ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
     : maquinaDeHoy();
+  // abrirEscaneo() ya no deja llegar aquí sin máquina (ficha directo si no
+  // hay ninguna), pero esta pantalla también se repinta desde los errores
+  // de comprobarCodigo() — por si algún día cambia algo por medio y la
+  // máquina deja de estar disponible a mitad del escaneo. Aquí solo se
+  // cierra la pantalla y se enseña el error que hubiera quedado pendiente:
+  // no se dispara un fichaje por su cuenta, eso lo decide la persona.
+  if (!machine) {
+    const mensaje = escanearError; // cerrarEscaneo() limpia escanearError, se guarda antes
+    cerrarEscaneo();
+    if (mensaje) aviso(mensaje);
+    return;
+  }
   const conNFC = nfcDisponible();
 
   document.getElementById('add-machine-modal').innerHTML = `
