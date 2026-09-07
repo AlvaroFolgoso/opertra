@@ -1599,7 +1599,15 @@
       </div>
       <div id="login-error" class="login-error" style="display:none;"><i class="fa-solid fa-circle-exclamation"></i> <span id="login-error-text">Revisa tu correo y contraseña e inténtalo de nuevo.</span></div>
 
-      <button class="btn btn-amber" id="login-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:16px;" onclick="handleLogin()">
+      <label style="display:flex;align-items:flex-start;gap:9px;margin-top:14px;cursor:pointer;
+                    font-size:13px;color:var(--steel);line-height:1.45;">
+        <input type="checkbox" id="login-recordar" checked
+               style="width:17px;height:17px;margin-top:1px;flex-shrink:0;accent-color:var(--amber);">
+        <span>Mantener la sesión abierta en este dispositivo<br>
+          <span style="font-size:11.5px;">Desmárcalo en un ordenador u ordenador compartido.</span></span>
+      </label>
+
+      <button class="btn btn-amber" id="login-submit-btn" style="width:100%;justify-content:center;padding:12px;margin-top:14px;" onclick="handleLogin()">
         Iniciar sesión
       </button>
 
@@ -2560,9 +2568,44 @@ const SUPABASE_CONFIG = {
   anonKey: 'sb_publishable_Pj-SZbtWz12uZGQESEGUJg_dH1v11nX',
 };
 
+/* ======================================================================
+   RECORDAR SESIÓN AL ENTRAR CON CORREO
+   Por defecto Supabase guarda la sesión en localStorage siempre — en un
+   ordenador compartido (una oficina, un ordenador de la obra que use más
+   gente) eso significa que la sesión de quien entró primero se queda
+   abierta para el siguiente. La casilla "Mantener la sesión abierta" del
+   login decide si se guarda en localStorage (sobrevive a cerrar el
+   navegador) o en sessionStorage (se pierde en cuanto se cierra la
+   pestaña) — igual que ya hacía el acceso de trabajador con PIN, ahora
+   también para el correo.
+
+   El cliente de Supabase se crea una sola vez, así que no puede
+   preguntarle a la casilla en cada momento — en su lugar, se le da un
+   "almacén" a medida que consulta esta preferencia (guardada aparte, en
+   localStorage porque tiene que sobrevivir ella sí o sí) cada vez que
+   Supabase quiere leer o escribir la sesión. */
+const RECORDAR_SESION_KEY = 'opertra_recordar_sesion';
+function ponerPreferenciaSesion(recordar) {
+  try { localStorage.setItem(RECORDAR_SESION_KEY, recordar ? 'si' : 'no'); } catch (e) {}
+}
+function quiereRecordarSesion() {
+  // Por defecto sí se recuerda, como ha sido siempre: solo cambia si
+  // alguien ha desmarcado la casilla explícitamente alguna vez.
+  try { return localStorage.getItem(RECORDAR_SESION_KEY) !== 'no'; } catch (e) { return true; }
+}
+const almacenSesionSupabase = {
+  getItem: (k) => (quiereRecordarSesion() ? localStorage : sessionStorage).getItem(k),
+  setItem: (k, v) => (quiereRecordarSesion() ? localStorage : sessionStorage).setItem(k, v),
+  removeItem: (k) => { try { localStorage.removeItem(k); } catch (e) {} try { sessionStorage.removeItem(k); } catch (e) {} },
+};
+
 let supabaseClient = null;
 function getSupabase() {
-  if (!supabaseClient) supabaseClient = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+  if (!supabaseClient) {
+    supabaseClient = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
+      auth: { storage: almacenSesionSupabase, persistSession: true, autoRefreshToken: true },
+    });
+  }
   return supabaseClient;
 }
 
@@ -2899,7 +2942,7 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
       dbId: m.id, id: m.code, qrCode: m.qr_code,
       project: m.project_id ? (codeByProjectDbId[m.project_id] || null) : null, projectDbId: m.project_id,
       type: m.type, model: m.model, plate: m.plate || '—', status: m.status,
-      operator: '—', operatorDbId: m.operator_id, // TODO: se rellenará al conectar Trabajadores
+      operator: '—', operatorDbId: m.operator_id, // se rellena más abajo, en cuanto se cargan los trabajadores
       location: m.project_id && codeByProjectDbId[m.project_id] ? (projects.find(p => p.dbId === m.project_id)?.name || 'Sin ubicación') : 'Almacén / sin asignar',
       fuel: m.fuel || 0, since: '—',
       gpsAge: m.gps_updated_at ? timeAgo(new Date(m.gps_updated_at).getTime()) : 'sin datos',
@@ -10952,6 +10995,10 @@ async function handleLogin() {
     errBox.style.display = 'flex';
     return;
   }
+  // Se fija ANTES de entrar: en cuanto el login vaya bien, Supabase guarda
+  // la sesión, y para entonces el almacén ya tiene que saber dónde.
+  const recordarEl = document.getElementById('login-recordar');
+  ponerPreferenciaSesion(!recordarEl || recordarEl.checked);
   setButtonLoading('login-submit-btn', true, 'Entrando...', 'Iniciar sesión');
   try {
     const { data, error } = await getSupabase().auth.signInWithPassword({ email, password: pass });
@@ -10973,6 +11020,11 @@ async function handleLogin() {
    que preguntársela en un segundo paso (ver pedirDatosDeEmpresa). */
 async function entrarConGoogle() {
   if (!hayConexion()) return;
+  // Misma casilla que el login por correo: Google redirige y vuelve, pero
+  // la preferencia ya se queda guardada en localStorage antes de irse, así
+  // que sigue ahí cuando Supabase guarde la sesión a la vuelta.
+  const recordarEl = document.getElementById('login-recordar');
+  ponerPreferenciaSesion(!recordarEl || recordarEl.checked);
   try {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
