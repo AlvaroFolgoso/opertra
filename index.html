@@ -4440,7 +4440,12 @@ let expulsando = false;
 async function expulsarPorRevocacion() {
   if (expulsando) return;
   expulsando = true;
-  try { await getSupabase().auth.signOut(); } catch (e) {}
+  // scope:'local' es a propósito: por defecto signOut() también avisa al
+  // servidor de que revoque la sesión, y en una obra con mala cobertura esa
+  // llamada de red puede tardar o fallar. Cerrar sesión tiene que funcionar
+  // sí o sí y al instante, haya conexión o no — lo de avisar al servidor es
+  // secundario y no debe bloquear ni condicionar lo de aquí.
+  try { await getSupabase().auth.signOut({ scope: 'local' }); } catch (e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch (e) {}
   mostrarDatos({
     titulo: 'Tu acceso ha sido revocado',
@@ -10645,7 +10650,7 @@ async function loadCurrentUserProfile(authUser, intentos = 5) {
     throw err;
   }
   if (profile.active === false) {
-    try { await getSupabase().auth.signOut(); } catch(e) {}
+    try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}
     throw new Error('Tu acceso a esta empresa ha sido revocado. Habla con el administrador.');
   }
   currentUser = {
@@ -10982,7 +10987,12 @@ async function crearEmpresaDesdeGoogle() {
 }
 
 async function salirSinEmpresa() {
-  try { await getSupabase().auth.signOut(); } catch (e) {}
+  // scope:'local' es a propósito: por defecto signOut() también avisa al
+  // servidor de que revoque la sesión, y en una obra con mala cobertura esa
+  // llamada de red puede tardar o fallar. Cerrar sesión tiene que funcionar
+  // sí o sí y al instante, haya conexión o no — lo de avisar al servidor es
+  // secundario y no debe bloquear ni condicionar lo de aquí.
+  try { await getSupabase().auth.signOut({ scope: 'local' }); } catch (e) {}
   location.reload();
 }
 
@@ -11177,7 +11187,7 @@ async function handleForgotPassword() {
 async function logout() {
   closeUserDropdown();
   cortarSuscripcion();
-  try { await getSupabase().auth.signOut(); } catch(e) {}
+  try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
   currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
   showScreen('login');
