@@ -1880,6 +1880,16 @@
             <option>1-5</option><option>6-25</option><option>26-100</option><option>Más de 100</option>
           </select>
         </div>
+        <!-- Trampa para bots: un humano nunca ve este campo (esta fuera de
+             pantalla), pero los robots que rellenan formularios automaticamente
+             lo rellenan igual. Si llega con algo escrito, se descarta el envio
+             sin decirselo, para que el bot no aprenda a esquivarlo.
+             aria-hidden + tabindex -1 para que un lector de pantalla o el
+             tabulador tampoco lo encuentren. -->
+        <div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">
+          <label for="demo-web">No rellenar</label>
+          <input id="demo-web" name="demo-web" type="text" tabindex="-1" autocomplete="off">
+        </div>
         <div id="demo-error" class="login-error"><i class="fa-solid fa-circle-exclamation"></i> <span id="demo-error-text"></span></div>
         <button class="btn btn-amber" id="demo-submit" style="width:100%;justify-content:center;padding:12px;margin-top:8px;" onclick="submitDemoRequest()"><i class="fa-solid fa-paper-plane"></i> Solicitar demo</button>
         <p style="font-size:11.5px;color:var(--steel);text-align:center;margin:12px 0 0;line-height:1.5;">
@@ -11010,6 +11020,18 @@ async function submitDemoRequest() {
   const fleet = document.getElementById('demo-fleet').value;
   const box = document.getElementById('demo-error');
   if (box) box.style.display = 'none';
+
+  // Trampa para bots (campo oculto 'demo-web'): si viene relleno, es un robot.
+  // Se le enseña la misma pantalla de exito que a una persona, pero no se
+  // guarda nada. Si le diesemos un error, el bot reintentaria cambiando cosas
+  // hasta dar con el hueco.
+  const trampa = document.getElementById('demo-web');
+  if (trampa && trampa.value) {
+    const ok = document.getElementById('demo-success');
+    if (ok) ok.style.display = 'flex';
+    return;
+  }
+
   if (!name || !company || !correoValido(email)) {
     if (box) {
       document.getElementById('demo-error-text').textContent = 'Rellena tu nombre, empresa y un correo válido.';
@@ -11035,8 +11057,15 @@ async function submitDemoRequest() {
   } catch (err) {
     const box = document.getElementById('demo-error');
     if (box) {
-      document.getElementById('demo-error-text').textContent =
-        'No se pudo enviar la solicitud. Inténtalo de nuevo o escríbenos directamente.';
+      // El límite anti-spam del servidor (proteger-formulario-demo.sql) lanza
+      // el código 53400 con un mensaje ya escrito para la persona: "ya hemos
+      // recibido tu solicitud", "inténtalo dentro de un rato"... Ese sí se
+      // enseña tal cual. Cualquier otro fallo es técnico y no le dice nada a
+      // nadie, así que se cambia por un mensaje normal.
+      const esLimite = err && (err.code === '53400' || err.code === 53400);
+      document.getElementById('demo-error-text').textContent = esLimite && err.message
+        ? err.message
+        : 'No se pudo enviar la solicitud. Inténtalo de nuevo o escríbenos directamente.';
       box.style.display = 'flex';
     }
   } finally {
