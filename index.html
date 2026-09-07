@@ -2330,6 +2330,22 @@ async function subirArchivo(file, carpeta) {
   if (!file) return null;
 
   const tipo = String(carpeta).split('/')[0];
+  // El "accept" del <input type=file> es solo una sugerencia del navegador:
+  // eligiendo "todos los archivos" se puede saltar sin más. Se comprueba
+  // aquí también, para no dejar subir a la carpeta de fotos algo que no sea
+  // una imagen (o, en documentos, que no sea imagen ni PDF). Esto evita
+  // errores de gente subiendo el archivo equivocado, pero no sustituye una
+  // restricción de tipo puesta en el propio bucket de Supabase Storage —
+  // ver GUIA-PRODUCCION / lo que se te ha pasado sobre el bucket.
+  const esImagen = file.type && file.type.startsWith('image/');
+  const esPDF = file.type === 'application/pdf';
+  const permitido = tipo === 'documents' ? (esImagen || esPDF) : esImagen;
+  if (!permitido) {
+    throw new Error(tipo === 'documents'
+      ? 'Ese archivo no es una imagen ni un PDF. Sube una foto o un PDF del documento.'
+      : 'Ese archivo no es una imagen. Sube una foto.');
+  }
+
   const cfg = TAMANOS_FOTO[tipo] || { lado: 1600, calidad: 0.82 };
   const archivo = await comprimirImagen(file, cfg.lado, cfg.calidad);
 
@@ -3944,7 +3960,7 @@ async function openHistorialModal() {
           <div style="min-width:0;">
             <div class="doc-name">${esc(a.entity)}: ${esc(a.entity_name) || ''}</div>
             <div class="doc-expiry" style="font-family:'Manrope',sans-serif;">
-              ${esc(a.action)}${a.detail ? ' · ' + a.detail : ''}
+              ${esc(a.action)}${a.detail ? ' · ' + esc(a.detail) : ''}
             </div>
             <div class="doc-expiry f-mono" style="margin-top:2px;">
               ${esc(a.actor_name) || 'alguien'} · ${new Date(a.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
@@ -4096,7 +4112,7 @@ async function exportarTodo() {
           const diaLocal = fechaLocal(l.check_in);
           return [
             nombreTrab(l.worker_id), nombreObra(l.project_id), codMaquina(l.machine_id),
-            l.check_in.slice(0,10), horaDe(l.check_in), l.check_out ? horaDe(l.check_out) : 'sin cerrar',
+            diaLocal, horaDe(l.check_in), l.check_out ? horaDe(l.check_out) : 'sin cerrar',
             horas !== null ? horas.toFixed(2).replace('.',',') : '',
             l.edited_by || '', l.edit_reason || '',
           ];
@@ -4106,7 +4122,7 @@ async function exportarTodo() {
         titulo: 'INCIDENCIAS',
         cab: ['Fecha','Título','Descripción','Prioridad','Reportada por',tm('S'),t('S'),'Estado'],
         filas: (inc.data || []).map(i => [
-          i.created_at.slice(0,10), i.title, i.description, i.priority,
+          fechaLocal(i.created_at), i.title, i.description, i.priority,
           nombreTrab(i.worker_id), codMaquina(i.machine_id), nombreObra(i.project_id),
           i.resolved ? 'Resuelta' : 'Abierta',
         ]),
@@ -5105,6 +5121,7 @@ async function registrarEnHistorial(accion, entidad, nombre, detalle) {
 }
 
 function openObraDrawer(id) {
+  limpiarMapaDrawer();
   const p = projects.find(x => x.id === id);
   if (!p) return fichaNoDisponible('Esta ' + t('s'));
   const { pct, daysLeft } = obraSchedule(p);
@@ -6288,6 +6305,21 @@ async function ficharAhora(opciones) {
   // Lo primero de todo: lo que haya escrito en los campos, antes de que
   // cualquier repintado los deje en blanco.
   const lecturasApuntadas = leerLecturasDeLaPantalla(!!fichajeAbierto);
+  // El horómetro no puede bajar: si al fichar la salida marca menos que al
+  // fichar la entrada, es casi seguro un dedazo (falta un dígito, se ha
+  // leído mal el contador...). No se bloquea del todo por si de verdad hubo
+  // que cambiar la pieza del contador, pero se avisa antes de guardarlo.
+  if (fichajeAbierto && lecturasApuntadas.horometro != null
+      && fichajeAbierto.horometroInicio != null
+      && lecturasApuntadas.horometro < fichajeAbierto.horometroInicio) {
+    const seguir = await confirmar({
+      titulo: 'El contador ha bajado',
+      texto: `Al entrar marcaba ${fichajeAbierto.horometroInicio} y ahora has puesto ${lecturasApuntadas.horometro}. `
+           + `Un contador no baja solo — revisa que no te hayas dejado ningún dígito.\n\n¿Seguro que es correcto?`,
+      aceptar: 'Sí, es correcto', cancelar: 'Voy a revisarlo', peligro: true,
+    });
+    if (!seguir) return;
+  }
   // Si va a fichar entrada, comprobamos que la lista de trabajos esté al día
   if (!fichajeAbierto) await refrescarAntesDeFichar();
   fichajeCargando = true;
@@ -7302,6 +7334,7 @@ function fichaNoDisponible(queEra) {
 }
 
 function openDrawer(id) {
+  limpiarMapaDrawer();
   const m = machines.find(x => x.id === id);
   if (!m) return fichaNoDisponible('Esta maquina');
   document.getElementById('drawer').innerHTML = `
@@ -7468,17 +7501,28 @@ let drawerBack = null;
 function goBackDrawer() {
   const fn = drawerBack;
   drawerBack = null;
+  limpiarMapaDrawer();
   if (fn) fn(); else closeDrawer();
 }
 function backButtonHTML() {
   return drawerBack ? `<button class="drawer-back" onclick="goBackDrawer()"><i class="fa-solid fa-arrow-left"></i> Volver</button>` : '';
 }
 
+// Apaga el mapa Leaflet de la ficha de máquina y su suscripción al GPS, si
+// había uno abierto. openObraDrawer/openDrawer(máquina)/openWorkerDrawer/
+// openClientDrawer sobrescriben el contenido del drawer directamente (para
+// poder navegar de una ficha a otra sin cerrar y volver a abrir), así que
+// cada una llama a esto al empezar: si no, el mapa se queda enganchado a un
+// contenedor que el innerHTML de abajo acaba de destruir.
+function limpiarMapaDrawer() {
+  if (drawerMapUnsub) { drawerMapUnsub(); drawerMapUnsub = null; }
+  if (drawerMap) { drawerMap.remove(); drawerMap = null; drawerMapMarker = null; }
+}
+
 function closeDrawer() {
   document.getElementById('overlay').classList.remove('active');
   drawerBack = null;
-  if (drawerMapUnsub) { drawerMapUnsub(); drawerMapUnsub = null; }
-  if (drawerMap) { drawerMap.remove(); drawerMap = null; drawerMapMarker = null; }
+  limpiarMapaDrawer();
 }
 
 /* ============ AÑADIR MÁQUINA (modal) ============ */
@@ -8633,6 +8677,7 @@ function verHorasDe(workerDbId) {
 }
 
 function openWorkerDrawer(id) {
+  limpiarMapaDrawer();
   const w = workers.find(x => x.id === id);
   if (!w) return fichaNoDisponible('Este trabajador');
   document.getElementById('drawer').innerHTML = `
@@ -9393,6 +9438,7 @@ function filaFicha(etiqueta, valor, mono) {
 
 function openClientDrawer(clientId) {
   if (!esAdministrador()) return;
+  limpiarMapaDrawer();
   const c = clienteDe(clientId);
   if (!c) return fichaNoDisponible('Este cliente');
   const r = resumenDe(c.dbId);
