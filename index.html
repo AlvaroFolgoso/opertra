@@ -55,21 +55,39 @@
   "areaServed": "ES"
 }
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<!-- ==========================================================================
+     TODAS LAS LIBRERIAS SE SIRVEN DESDE OPERTRA.COM (carpeta /vendor)
+
+     Antes venian de cdnjs y jsDelivr. Eso convertia a dos empresas ajenas en
+     un punto unico de fallo de toda la app: si cualquiera de los dos no
+     respondia — caida del CDN, wifi de empresa que bloquea dominios de
+     terceros, filtro DNS de la operadora, un bloqueador de anuncios — el
+     navegador no cargaba supabase-js y NADIE PODIA ENTRAR NI FICHAR. Con el
+     service worker viejo era peor todavia: guardaba la respuesta fallida y
+     la servia para siempre, dejando ese movil roto de forma permanente
+     ("Can't find variable: supabase").
+
+     Sirviendolas desde el propio dominio no hay nada que pueda fallar por
+     separado: si opertra.com responde, la app entera funciona.
+
+     Las tipografias tambien, y ahi hay ademas un motivo legal: enlazar a
+     fonts.gstatic.com envia la IP de cada visitante a Google sin haber
+     pedido consentimiento, que es justo lo que condeno la sentencia del
+     LG Munchen 3 O 17493/20 (enero de 2022) como infraccion del RGPD.
+     Alojadas aqui, no sale ni un dato hacia Google.
+
+     Para actualizar una libreria: descarga el archivo nuevo a /vendor y
+     sube VERSION en sw.js. Nada mas.
+     ========================================================================== -->
+<link rel="stylesheet" href="/vendor/fonts.css">
 <link rel="preload" as="font" type="font/woff2" crossorigin
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-<!-- cdnjs NO sirve jsQR en esa ruta: daba 404 en produccion y el escaneo
-     de codigos QR (el titular de la portada) no funcionaba en ningun movil.
-     jsDelivr si lo sirve, y ya esta en la lista de dominios que cachea el
-     service worker, asi que despues de la primera carga va sin conexion. -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+      href="/vendor/webfonts/fa-solid-900.woff2">
+<link rel="stylesheet" href="/vendor/fontawesome/all.min.css">
+<link rel="stylesheet" href="/vendor/leaflet.css">
+<script src="/vendor/jsQR.min.js" defer></script>
+<script src="/vendor/qrcode.min.js" defer></script>
+<script src="/vendor/leaflet.js" defer></script>
+<script src="/vendor/supabase.js"></script>
 <style>
   /* ============ DESIGN TOKENS ============ */
   :root {
@@ -5115,7 +5133,7 @@ function imprimirTodasLasEtiquetas() {
   v.document.write(`
     <!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
     <title>Etiquetas QR · ${esc(currentUser.company)}</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <script src="${location.origin}/vendor/qrcode.min.js"><\/script>
     <style>
       @page { size: A4; margin: 12mm; }
       body { font-family: system-ui, sans-serif; margin: 0; }

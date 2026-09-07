@@ -1,0 +1,9 @@
+# Las librerias de /vendor se guardan tal cual salieron del CDN original.
+# Sin esto, git les cambia los saltos de linea al descargar el repo en otro
+# sistema y el archivo deja de ser byte a byte el mismo que se descargo.
+vendor/** -text
+
+# Las fuentes y las imagenes son binarios: que git no intente "arreglarlos".
+*.woff2 binary
+*.png   binary
+*.ico   binary

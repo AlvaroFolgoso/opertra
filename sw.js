@@ -17,19 +17,32 @@
    guardado con la versión antigua del service worker. */
 const VERSION = 'opertra-v4';
 const CACHE_APP = VERSION + '-app';
-const CACHE_LIB = 'opertra-librerias';
+/* El almacén de librerías NO se borra en cada despliegue a propósito: las
+   librerías no cambian y así no se vuelven a descargar. Pero lleva número
+   propio para poder forzar una limpieza cuando hace falta — como ahora.
 
-// Lo mínimo para que la app arranque sin cobertura
-const ARCHIVOS = ['/', '/index.html', '/manifest.json', '/logo.svg'];
+   Por qué se sube a -v2: la versión vieja del service worker guardaba las
+   respuestas AUNQUE FUERAN UN ERROR, y luego las servía de caché sin volver
+   a pedirlas nunca. A quien le fallara el CDN una sola vez se le quedaba la
+   librería rota guardada de forma permanente: supabase-js sin cargar y, con
+   él, "Can't find variable: supabase" al intentar entrar. Cambiar el nombre
+   hace que el activate de abajo borre el almacén viejo entero y todo se
+   vuelva a descargar limpio una vez. */
+const CACHE_LIB = 'opertra-librerias-v2';
 
-// Librerías de fuera: no cambian nunca, se guardan y no se vuelven a pedir
-const DOMINIOS_LIBRERIAS = [
-  'cdnjs.cloudflare.com',
-  'cdn.jsdelivr.net',
-  'unpkg.com',
-  'fonts.googleapis.com',
-  'fonts.gstatic.com',
-];
+/* Lo mínimo para que la app arranque sin cobertura. supabase.js entra aquí
+   porque sin él la app no es que se vea fea: es que no arranca — no se puede
+   ni entrar ni fichar. */
+const ARCHIVOS = ['/', '/index.html', '/manifest.json', '/logo.svg', '/vendor/supabase.js'];
+
+/* Las librerías ya no vienen de fuera: se sirven desde /vendor en nuestro
+   propio dominio (ver el comentario largo en el <head> de index.html). Se
+   guardan en su propio almacén, aparte del de la app, para que NO se
+   vuelvan a descargar en cada despliegue — son 1,4 MB que no cambian casi
+   nunca. Cuando toque actualizar alguna, se sube el número de CACHE_LIB. */
+function esLibreriaPropia(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith('/vendor/');
+}
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -103,20 +116,19 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  /* ---- Librerías de fuera e iconos nuestros ----
+  /* ---- Librerías de /vendor e iconos nuestros ----
      Los dos van igual: se sirve al instante lo guardado y, en paralelo, se
      pide la versión nueva para la próxima vez ("stale-while-revalidate").
 
      Antes se servía lo guardado y NO se volvía a pedir jamás. El problema:
-     si el CDN fallaba justo el día que un trabajador abrió la app por
+     si la descarga fallaba justo el día que un trabajador abrió la app por
      primera vez, se guardaba la respuesta mala y ese móvil se quedaba con
-     la librería rota PARA SIEMPRE — los iconos sin salir o el escáner de
-     QR sin funcionar, sin manera de arreglarlo salvo desinstalar la app.
+     la librería rota PARA SIEMPRE — los iconos sin salir, el escáner de QR
+     sin funcionar o, lo peor, supabase.js sin cargar y sin poder entrar.
      Refrescando por detrás, un fallo así se cura solo la siguiente vez que
      abra la app con cobertura. */
-  const esLibreria = DOMINIOS_LIBRERIAS.some(d => url.hostname.endsWith(d));
-  if (esLibreria || url.origin === self.location.origin) {
-    const almacen = esLibreria ? CACHE_LIB : CACHE_APP;
+  if (url.origin === self.location.origin) {
+    const almacen = esLibreriaPropia(url) ? CACHE_LIB : CACHE_APP;
 
     e.respondWith((async () => {
       const guardada = await caches.match(req);
