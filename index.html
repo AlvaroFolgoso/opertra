@@ -130,6 +130,13 @@
      barra del navegador. La barra de abajo se quedaría fuera de la pantalla.
      En esos casos la altura la mide JavaScript y se guarda en --alto-app. */
   html.sin-dvh #app { height: var(--alto-app, 100vh); }
+  /* Bug conocido de iOS/Android: al CERRAR el teclado, 100dvh se queda con
+     la medida de "con teclado abierto" hasta que algo fuerza a recalcular
+     — se veía como una franja blanca pegada debajo de la barra de abajo,
+     justo después de escribir en un campo y cerrar el teclado. En cuanto
+     JavaScript mide la altura real por primera vez (ver visualViewport
+     más abajo), se usa esa medida siempre en lugar de fiarse del dvh. */
+  html.alto-medido #app { height: var(--alto-app); }
   #app.hidden { display: none; }
 
   #sidebar {
@@ -1867,6 +1874,42 @@
   medir();
   window.addEventListener('resize', remedir);
   window.addEventListener('orientationchange', function () { setTimeout(medir, 300); });
+})();
+
+/* ======================================================================
+   ALTURA REAL EN MÓVILES MODERNOS: el teclado cerrándose
+
+   100dvh en sí es correcto, pero iOS y Android tienen un fallo conocido:
+   al CERRAR el teclado (tocar fuera de un campo, o el botón de bajarlo),
+   el navegador no siempre vuelve a calcular el 100dvh a tiempo — se queda
+   con la medida de "con teclado abierto" hasta que algo fuerza un
+   redibujado. Se veía como una franja blanca pegada justo debajo de la
+   barra de Fichaje/Obras de abajo, y solo después de escribir en un campo.
+
+   window.visualViewport SÍ avisa siempre, de verdad, cada vez que cambia
+   lo que se ve (teclado, barra de Safari, rotación) — así que en vez de
+   fiarse de que el navegador recalcule 100dvh solo, se mide aquí y se le
+   da esa altura a #app directamente. La regla CSS "html.alto-medido #app"
+   (más arriba) es la que hace que esta medida mande sobre el dvh nativo.
+   ====================================================================== */
+(function alturaRealConVisualViewport() {
+  if (!window.visualViewport) return;
+  var pendiente = false;
+  function medir() {
+    pendiente = false;
+    var alto = window.visualViewport.height;
+    if (alto > 0) {
+      document.documentElement.style.setProperty('--alto-app', alto + 'px');
+      document.documentElement.classList.add('alto-medido');
+    }
+  }
+  function remedir() {
+    if (pendiente) return;
+    pendiente = true;
+    setTimeout(medir, 0);
+  }
+  medir();
+  window.visualViewport.addEventListener('resize', remedir);
 })();
 
 /* ======================================================================
