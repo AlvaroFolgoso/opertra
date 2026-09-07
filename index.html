@@ -1161,6 +1161,16 @@
       -webkit-user-select: none; user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
+    /* Red de seguridad contra el hueco blanco intermitente de debajo: 100dvh
+       en iOS no siempre mide el 100% exacto de lo que se ve de verdad (varía
+       con la barra de Safari, justo por eso "a veces sale, a veces no"). En
+       vez de perseguir el píxel perfecto, la barra sigue pintando su mismo
+       color 40px más abajo de donde debería terminar — de sobra para cubrir
+       ese hueco si aparece, e invisible del todo si no aparece. */
+    #mobile-nav::after {
+      content: ''; position: absolute; left: 0; right: 0; top: 100%;
+      height: 40px; background: var(--graphite);
+    }
     /* La fila de botones tiene alto propio y fijo, reservado desde el
        primer fotograma. Aunque los botones tarden en escribirse, el hueco
        ya está hecho y nada se mueve cuando aparecen. */
