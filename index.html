@@ -863,29 +863,60 @@
   /* ---- Móvil con una recreación de la app real (no es una captura: es HTML
      con los mismos colores y clases, así nunca se desincroniza del diseño real) ---- */
   /* Grupo de 3: el de Fichaje delante y centrado, Maquinaria y Trabajadores
-     asomando detrás a los lados — así se ve de un vistazo que no es una
-     pantalla suelta, es toda la app. En el móvil se queda solo el de
-     Fichaje (ver media query más abajo): con poco ancho, tres móviles en
-     abanico se amontonan más de lo que ayudan. */
-  .land-phone-wrap { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; min-height: 520px; padding: 0 10px; }
+     asomando detrás a los lados — de un vistazo se ve que no es una
+     pantalla suelta, es toda la app.
+
+     Colocados en triángulo: Maquinaria y Trabajadores arriba a los lados,
+     y el de Fichaje delante y abajo en el centro.
+
+     El grupo se dibuja SIEMPRE al mismo tamaño (560x650 de "papel") y se
+     encoge entero con transform: scale(). Así las proporciones, los
+     ángulos y los solapes son idénticos en un iPhone pequeño, en una
+     tablet y en un monitor grande — no hay que reajustar posiciones para
+     cada tamaño ni se descuadra nada. El alto del hueco se calcula con la
+     misma escala para que no sobre ni falte espacio. */
+  .land-phone-wrap {
+    --esc: 1;
+    position: relative; z-index: 1;
+    width: 100%; min-width: 0;
+    height: calc(660px * var(--esc));
+  }
+  /* El grupo va absoluto y centrado a propósito: si estuviera en el flujo
+     normal estiraría su columna a los 560px del "papel" de diseño y en un
+     móvil se saldría de la pantalla por la derecha. Así el hueco lo marca
+     solo la altura de arriba, ya multiplicada por la escala. */
+  .land-phone-grupo {
+    position: absolute; top: 50%; left: 50%;
+    width: 560px; height: 650px;
+    transform: translate(-50%, -50%) scale(var(--esc));
+    transform-origin: center center;
+  }
+  /* En pantallas grandes hay sitio de sobra: se le da más peso a la
+     columna de los móviles y se agrandan, que es donde mejor se aprecia
+     el detalle de las pantallas. */
+  @media (min-width: 1400px) { .land-hero { grid-template-columns: 1fr 1.05fr; } .land-phone-wrap { --esc: 1.08; } }
+  @media (min-width: 1700px) { .land-phone-wrap { --esc: 1.18; } }
+  @media (max-width: 1280px) { .land-phone-wrap { --esc: .88; } }
+  @media (max-width: 1080px) { .land-phone-wrap { --esc: .74; } }
+  @media (max-width: 900px)  { .land-phone-wrap { --esc: .82; } }
+  @media (max-width: 700px)  { .land-phone-wrap { --esc: .70; } }
+  @media (max-width: 560px)  { .land-phone-wrap { --esc: .60; } }
+  @media (max-width: 430px)  { .land-phone-wrap { --esc: .50; } }
+  @media (max-width: 360px)  { .land-phone-wrap { --esc: .44; } }
+
   .land-phone {
     width: 250px; background: #0F1114; border-radius: 34px; padding: 9px;
     box-shadow: 0 40px 80px -20px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
     transform: rotate(var(--rot, -3deg));
     animation: land-phone-float 6.5s ease-in-out infinite;
   }
-  .land-phone.principal { --rot: -3deg; position: relative; z-index: 3; }
+  .land-phone.principal { --rot: -2deg; position: absolute; z-index: 3; left: 155px; top: 215px; }
   .land-phone.secundario {
-    --rot: -14deg; position: absolute; z-index: 1; width: 208px;
-    opacity: .82; filter: saturate(.85);
-    animation-delay: .4s;
+    --rot: -9deg; position: absolute; z-index: 1; width: 200px;
+    opacity: .88; filter: saturate(.92);
   }
-  .land-phone.secundario.izq { left: -4%; top: 12%; }
-  .land-phone.secundario.dcha { --rot: 12deg; right: -4%; top: 20%; animation-delay: .8s; }
-  @media (max-width: 1080px) {
-    .land-phone.secundario.izq { left: -8%; }
-    .land-phone.secundario.dcha { right: -8%; }
-  }
+  .land-phone.secundario.izq { left: 4px; top: 0; animation-delay: .5s; }
+  .land-phone.secundario.dcha { --rot: 9deg; right: 4px; top: 26px; animation-delay: 1s; }
   .land-phone-screen { background: var(--surface); border-radius: 26px; overflow: hidden; position: relative; padding: 26px 14px 12px; }
   .land-phone-island { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 64px; height: 16px; background: #0F1114; border-radius: 10px; }
   .land-phone-top { display: flex; justify-content: space-between; align-items: flex-start; }
@@ -907,11 +938,7 @@
   .land-phone-nav { display: flex; justify-content: space-around; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
   .land-phone-nav i { font-size: 13px; color: var(--steel); }
   .land-phone-nav .on i { color: var(--amber); }
-  @media (max-width: 900px) {
-    .land-phone.secundario { display: none; }
-    .land-phone.principal { --rot: 0deg; }
-    .land-phone-wrap { margin-top: 44px; min-height: 0; }
-  }
+  @media (max-width: 900px) { .land-phone-wrap { margin-top: 20px; } }
 
   .land-section { padding: 64px 6vw; max-width: 1160px; margin: 0 auto; }
   .land-h2 { font-family: 'Oswald', sans-serif; font-size: clamp(22px, 3vw, 30px); text-align: center; color: var(--ink); }
@@ -1506,6 +1533,7 @@
     </div>
 
     <div class="land-phone-wrap" aria-hidden="true">
+     <div class="land-phone-grupo">
       <div class="land-phone secundario izq">
         <div class="land-phone-screen">
           <div class="land-phone-island"></div>
@@ -1586,6 +1614,7 @@
           </div>
         </div>
       </div>
+     </div>
     </div>
   </section>
 
