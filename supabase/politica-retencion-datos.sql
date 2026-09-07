@@ -53,17 +53,16 @@
 --     sin actividad si nunca llegaron a convertirse en empresa.
 --   - Baja de empresa (companies.borrar_datos_el): esto ya lo anuncia la
 --     propia app en pantalla ("Se conservan X más. Pasado ese plazo se
---     eliminarán de forma definitiva..."). La función que cumple esa
---     promesa (opertra_purgar_empresas_baja, más abajo) está lista, pero
---     OJO — NO entra en la purga automática de cada noche todavía, a
---     propósito. Hoy borrar_datos_el se pone igual para cualquier empresa
---     en cuanto se crea, pague luego o no: todavía no hay nada (eso llega
---     con Stripe, ver el TODO en index.html junto a daysLeftInTrial) que
---     mueva o borre esa fecha para las empresas que sí conviertan a
---     clientes de pago. Programarla ya borraría empresas de prueba (la
---     tuya incluida) o clientes reales que sí hayan pagado, sin forma de
---     distinguirlos. Actívala a mano (sección 8, más abajo) el día que
---     Stripe ya esté actualizando borrar_datos_el de verdad.
+--     eliminarán de forma definitiva..."). Comprobado contra el código real
+--     de crear_mi_empresa() y renovar_empresa(): nada ponía nunca esa fecha
+--     (se crea en NULL, y lo único que la toca es renovar_empresa, que la
+--     limpia al confirmar un pago — ya sea a mano hoy, o vía Stripe más
+--     adelante, el mecanismo es el mismo). Le faltaba la pieza que decide
+--     cuándo SÍ ponerla: opertra_marcar_empresas_para_borrado() (sección 4b)
+--     marca las pruebas caducadas hace más de 30 días y nunca renovadas, y
+--     opertra_purgar_empresas_baja() (sección 5) borra las que llevan 60
+--     días más así, sin haber pagado ni vuelto a entrar. Las dos ya entran
+--     en la purga automática de cada noche.
 --
 -- ============================================================================
 
@@ -197,6 +196,46 @@ $$;
 
 
 -- ---------------------------------------------------------------------------
+-- 4b. Marcar para borrado las pruebas caducadas y nunca renovadas
+-- ---------------------------------------------------------------------------
+-- Comprobado (2026-09-07): nada ponía nunca borrar_datos_el a una fecha
+-- real — ni al crear la empresa (crear_mi_empresa la deja en NULL), ni en
+-- ningún otro sitio salvo renovar_empresa, que solo la LIMPIA al confirmar
+-- el pago. Sin esto, la purga de empresas de abajo nunca tendría nada que
+-- borrar, y la pantalla de prueba caducada nunca llegaría a anunciar una
+-- fecha de borrado real. Esta función es la pieza que faltaba — y no hace
+-- falta Stripe para nada de esto: renovar_empresa ya limpia la marca al
+-- renovar (aunque hoy renovar sea un botón que pulsas tú a mano al recibir
+-- el pago), así que el circuito ya es coherente de punta a punta.
+--
+-- Plazos elegidos (ajústalos si quieres otros — no son un mínimo legal,
+-- es solo cuánto margen le das a una prueba abandonada antes de borrarla):
+--   30 días de margen tras caducar la prueba de 50 días, sin renovar, antes
+--   de marcarla; y desde que se marca, 60 días más (visibles para el
+--   usuario en la propia app) antes del borrado de verdad. En total, unos
+--   90 días desde que caduca la prueba hasta que se borra si nadie ha
+--   vuelto a entrar ni ha pagado — tiempo de sobra para reclamar el pago o
+--   para que el cliente vuelva.
+create or replace function opertra_marcar_empresas_para_borrado()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n integer;
+begin
+  update companies
+     set borrar_datos_el = now() + interval '60 days'
+   where trial_ends_at < now() - interval '30 days'
+     and borrar_datos_el is null;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+
+-- ---------------------------------------------------------------------------
 -- 5. Baja definitiva de empresa: borrado total en cascada
 -- ---------------------------------------------------------------------------
 -- Se dispara para cada empresa cuya fecha "borrar_datos_el" ya ha pasado —
@@ -266,12 +305,14 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 7. Función maestra: la que se programa
 -- ---------------------------------------------------------------------------
--- opertra_purgar_empresas_baja() queda FUERA de esta lista a propósito —
--- ver la explicación larga en la cabecera del archivo (sección "Baja de
--- empresa"). En resumen: hasta que Stripe no distinga empresas de pago de
--- las que no pagaron, borrar_datos_el no significa "no ha pagado", solo
--- "se creó hace tiempo" — y correrla aquí borraría clientes de pago o tu
--- propia empresa de pruebas sin ningún criterio real detrás.
+-- opertra_purgar_empresas_baja() YA entra aquí (antes se dejaba fuera; ver
+-- el histórico de git si quieres el porqué original). Se destrabó al
+-- comprobar que renovar_empresa() ya limpia borrar_datos_el de verdad al
+-- confirmar un pago — no hacía falta Stripe para que el circuito fuera
+-- seguro, solo faltaba opertra_marcar_empresas_para_borrado() (4b, arriba),
+-- que es quien de verdad decide qué empresa lleva demasiado tiempo sin
+-- pagar. Va primero marcar y después purgar, en ese orden, dentro del mismo
+-- barrido nocturno.
 create or replace function opertra_purga_legal_diaria()
 returns void
 language plpgsql
@@ -286,7 +327,9 @@ begin
     'trabajadores_inactivos_borrados', opertra_purgar_trabajadores_inactivos(),
     'documentos_caducados_borrados', opertra_purgar_documentos_caducados(),
     'leads_demo_borrados', opertra_purgar_leads_demo(),
-    'facturacion_antigua_borrada', opertra_purgar_facturacion_antigua()
+    'facturacion_antigua_borrada', opertra_purgar_facturacion_antigua(),
+    'empresas_marcadas_para_borrado', opertra_marcar_empresas_para_borrado(),
+    'empresas_dadas_de_baja_borradas', opertra_purgar_empresas_baja()
   );
   insert into opertra_purga_log (detalle) values (resultado);
 end;
@@ -315,9 +358,9 @@ select cron.schedule(
 -- Para lanzar una purga ahora mismo, sin esperar a la 1 de la noche:
 --   SELECT opertra_purga_legal_diaria();
 --
--- El día que Stripe ya esté actualizando borrar_datos_el de verdad (solo
--- para quien de verdad haya dejado de pagar, no para cualquier empresa
--- nueva), pídeme que añada opertra_purgar_empresas_baja() a la función
--- maestra de arriba y vuelve a pegar el archivo — hasta entonces, si algún
--- día quieres borrar una empresa concreta de baja, hazlo a mano:
---   SELECT opertra_purgar_empresas_baja();
+-- Cuando conectes Stripe: si el webhook llama a renovar_empresa() en cada
+-- pago (lo lógico), no hay que tocar nada de este archivo — el circuito ya
+-- funciona igual, solo que "renovar" pasa a ser automático en vez de un
+-- botón que pulsas tú. Si en vez de eso Stripe actualiza trial_ends_at por
+-- su cuenta sin pasar por renovar_empresa(), dímelo entonces y lo revisamos
+-- juntos, porque en ese caso sí habría que ajustar algo aquí.
