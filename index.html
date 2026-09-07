@@ -792,7 +792,10 @@
   /* ============ LANDING ============ */
   #landing { background: var(--card); }
   #landing.hidden { display: none; }
-  .land-nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 6vw; background: var(--graphite); position: sticky; top: 0; z-index: 30; }
+  /* padding-top con el hueco del notch/barra de estado sumado: sin esto,
+     el logo y "Iniciar sesión" se pintaban debajo de la hora y los iconos
+     del móvil en vez de empezar después. */
+  .land-nav { display: flex; align-items: center; justify-content: space-between; padding: calc(16px + env(safe-area-inset-top, 0px)) 6vw 16px; background: var(--graphite); position: sticky; top: 0; z-index: 30; }
   .land-nav-brand { display: flex; align-items: center; gap: 10px; }
   .land-nav-links { display: flex; gap: 28px; }
   .land-nav-links a { color: #B7BCC1; font-size: 14px; font-weight: 500; cursor: pointer; }
@@ -863,7 +866,10 @@
   @media (max-width: 640px) { .land-footer { flex-direction: column; text-align: center; } .land-footer-brand { justify-content: center; } }
 
   /* ============ LOGIN ============ */
-  #login-screen, #trial-expired-screen { position: fixed; inset: 0; background: var(--graphite); z-index: 100; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 40px 16px; box-sizing: border-box; }
+  /* padding-top con el hueco del notch sumado: en un iPhone con Dynamic
+     Island ese hueco (~59px) es mayor que los 40px fijos que había, así
+     que el logo podía empezar a pintarse por debajo de la hora. */
+  #login-screen, #trial-expired-screen { position: fixed; inset: 0; background: var(--graphite); z-index: 100; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: calc(40px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; }
   #login-screen.hidden, #trial-expired-screen.hidden { display: none; }
   .login-box { width: 420px; max-width: 100%; margin: 0 auto; background: var(--card); border-radius: 12px; padding: 36px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
   .login-brand { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 24px; }
@@ -1034,17 +1040,23 @@
 
     #drawer {
       width: 100%;
-      /* Debajo de la hora y la cobertura del móvil: si no, la equis para
-         volver queda tapada y el dedo no llega a ella. */
-      padding-top: calc(18px + env(safe-area-inset-top, 0px));
+      /* El hueco de arriba (hora, cobertura, notch) lo pone .drawer-top con
+         su propio padding — ver más abajo — igual que ya hace .modal-top en
+         el modal de Añadir obra. Aquí no hace falta nada. */
+      padding-top: 0;
     }
-    /* La cabecera se queda arriba aunque bajes por la ficha. Va pegada a
-       CERO: antes se pegaba a una posicion negativa, o sea que al bajar se
-       salia por arriba y la equis dejaba de alcanzarse. */
+    /* La cabecera se queda arriba aunque bajes por la ficha. Antes tiraba
+       de un margen negativo para "robarle" al contenedor su padding de
+       arriba, y esa cuenta con el hueco de seguridad del notch dentro no
+       cuadraba siempre igual — se veía el título metido debajo de la hora
+       del móvil al bajar. Con el contenedor sin padding de arriba y todo el
+       hueco puesto aquí como padding normal, no hace falta ese margen ni
+       esa cuenta: es justo el mismo patrón que #add-machine-modal
+       > .modal-top, que ya sabemos que no falla. */
     #drawer .drawer-top {
       position: sticky; top: 0; z-index: 3;
       background: var(--card); border-bottom: 1px solid var(--border);
-      margin: calc(-18px - env(safe-area-inset-top, 0px)) -24px 10px;
+      margin: 0 -24px 10px;
       padding: calc(14px + env(safe-area-inset-top, 0px)) 24px 12px;
     }
     /* La ventana ocupa la pantalla de arriba abajo. Centrada, si el
@@ -5560,7 +5572,9 @@ function avisarSinConexion(hay) {
   if (barra) return;
   barra = document.createElement('div');
   barra.id = 'barra-conexion';
-  barra.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:300;background:var(--danger);color:white;text-align:center;padding:8px 16px;font-size:13px;font-weight:600;';
+  // padding-top con el hueco del notch sumado: si no, tapaba la hora y los
+  // iconos del móvil en vez de empezar justo debajo.
+  barra.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:300;background:var(--danger);color:white;text-align:center;padding:calc(8px + env(safe-area-inset-top, 0px)) 16px 8px;font-size:13px;font-weight:600;';
   barra.innerHTML = '<i class="fa-solid fa-wifi"></i> Sin conexión — los cambios no se están guardando';
   document.body.appendChild(barra);
 }
