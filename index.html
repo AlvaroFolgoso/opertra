@@ -469,7 +469,6 @@
   .form-photo-upload { width: 100%; cursor: pointer; padding: 20px; border-radius: 6px; border: 1px dashed var(--border); background: var(--surface); text-align: center; color: var(--steel); font-size: 13px; cursor: pointer; }
   .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
   .modal-actions .btn { flex: 1; justify-content: center; padding: 11px; }
-  .btn-outline { background: none; border: 1px solid var(--border); color: var(--ink); }
 
   /* ============ AVISOS / INCIDENCIAS ============ */
   .avisos-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -527,6 +526,13 @@
   .btn:active:not(:disabled) { transform: scale(.96); filter: brightness(.94); }
   .btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .btn:disabled { cursor: default; opacity: .72; }
+  /* Estaba antes de ".btn" en el CSS: con la misma especificidad (una sola
+     clase cada una), gana la que va DESPUÉS en el archivo — y ".btn" pone
+     "border: none", así que el borde de .btn-outline nunca llegaba a verse
+     en ningún botón de la app (Cancelar, Volver...). Se veían como texto
+     suelto, sin pinta de botón. Puesta aquí, después de .btn, para que sea
+     ella la que gane. */
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--ink); }
 
   /* Lo mismo para el resto de cosas que se pulsan: sin respuesta visual,
      en el movil se piensa que no ha llegado el toque y se pulsa otra vez. */
