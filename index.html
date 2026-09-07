@@ -1083,6 +1083,14 @@
     #app { flex-direction: column; }
     #sidebar { display: none; }
 
+    /* El nombre completo (a veces largo, "Álvaro Folgoso Hervás") le
+       robaba al título/subtítulo casi todo el ancho en el móvil, y el
+       subtítulo ("Vista de hoy, lunes...") se quedaba cortado con "...".
+       En el móvil basta con el avatar: el nombre completo ya se puede ver
+       entrando en Ajustes. */
+    .user-block { padding: 0; border: none; background: none; }
+    .user-text { display: none; }
+
     /* UNA sola zona que se desplaza: la vista. Antes tambien se desplazaba
        #main, una dentro de otra, y se peleaban por el mismo dedo. */
     #app { overflow: hidden; }
@@ -1242,15 +1250,17 @@
       -webkit-user-select: none; user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
-    /* Red de seguridad contra el hueco blanco intermitente de debajo: 100dvh
-       en iOS no siempre mide el 100% exacto de lo que se ve de verdad (varía
-       con la barra de Safari, justo por eso "a veces sale, a veces no"). En
-       vez de perseguir el píxel perfecto, la barra sigue pintando su mismo
-       color 40px más abajo de donde debería terminar — de sobra para cubrir
-       ese hueco si aparece, e invisible del todo si no aparece. */
+    /* Red de seguridad contra el hueco blanco de debajo: en el iPhone real
+       (sobre todo instalada como app, no como pestaña de Safari) el aviso
+       de visualViewport no siempre llega a tiempo cuando se cierra el
+       teclado, y con un teclado real (250-350px) los 40px de antes se
+       quedaban cortos. En vez de perseguir el píxel exacto, la barra pinta
+       su mismo color toda una pantalla más abajo de donde debería terminar
+       — no puede quedar ningún hueco sin cubrir, lo pida quien lo pida, e
+       invisible del todo en el caso normal (no hay nada más ahí abajo). */
     #mobile-nav::after {
       content: ''; position: absolute; left: 0; right: 0; top: 100%;
-      height: 40px; background: var(--graphite);
+      height: 100vh; background: var(--graphite);
     }
     /* La fila de botones tiene alto propio y fijo, reservado desde el
        primer fotograma. Aunque los botones tarden en escribirse, el hueco
@@ -2025,6 +2035,15 @@
   }
   medir();
   window.visualViewport.addEventListener('resize', remedir);
+  // Redes de seguridad extra: en el iPhone real (más aún instalada como
+  // app, no como pestaña de Safari) visualViewport no siempre avisa a
+  // tiempo de que el teclado se ha cerrado. window/resize es otra señal
+  // que a veces sí llega cuando la otra no. Y al perder el foco un campo
+  // (blur/focusout) es justo el momento en que el teclado empieza a
+  // cerrarse — se mide otra vez un poco después (la animación de cerrar
+  // el teclado en iOS tarda), por si para entonces ya ha terminado.
+  window.addEventListener('resize', remedir);
+  document.addEventListener('focusout', function () { setTimeout(medir, 350); }, true);
 })();
 
 /* ======================================================================
