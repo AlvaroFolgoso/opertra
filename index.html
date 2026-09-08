@@ -21,12 +21,37 @@
      cambia de tamaño y el teclado se pone por encima. La barra de abajo se
      queda donde tiene que estar siempre, y el navegador ya se encarga de
      desplazar el campo que estás escribiendo para que se vea. -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- SE HA QUITADO viewport-fit=cover, y con él toda la aritmética de márgenes.
+
+     Con "cover", la app se dibuja por debajo de la barra de estado y del
+     indicador del iPhone, y entonces SOY YO quien tiene que calcular esos
+     márgenes con env(safe-area-inset-*). El problema es que ese cálculo
+     depende del modelo, de la orientación y de si el teclado ha salido
+     antes — y basta con que falle en un caso para que la barra de abajo
+     acabe donde no toca. Cinco intentos ajustando esas cuentas y ninguno
+     valía para todos los móviles.
+
+     Sin "cover", el sistema operativo recorta él la zona útil y le entrega a
+     la página un rectángulo limpio, ya sin barra de estado ni indicador.
+     env() pasa a valer 0 en todas partes y no hay nada que calcular: la
+     barra de abajo se pega al borde de ese rectángulo, y ese borde lo pone
+     iOS igual de bien en un iPhone con muesca, con isla dinámica, sin nada,
+     en Android o en una tablet.
+
+     Se pierde el efecto de "pantalla completa" bajo la hora. A cambio, la
+     colocación es idéntica y correcta en CUALQUIER aparato, que es lo que
+     importa en una app de trabajo. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Opertra · Gestión de flota y personal</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1C2126">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- "default" en vez de "black-translucent": la barra de estado deja de
+     superponerse a la app. Va acompañada de haber quitado viewport-fit=cover
+     (ver arriba): las dos juntas son las que obligaban a calcular márgenes a
+     mano. Con esto, iOS coloca la barra de estado por su cuenta y la app
+     empieza justo debajo. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Opertra">
 <meta name="description" content="Control de fichajes, maquinaria y obras para constructoras, empresas de transporte y de mantenimiento. Registro de jornada conforme a la ley española.">
 <link rel="canonical" href="https://opertra.com/">
@@ -354,10 +379,12 @@
      botones + relleno abajo. Se define aquí, en un solo sitio, porque lo
      usan dos cosas que TIENEN que cuadrar entre sí: la propia barra y el
      hueco que le reserva el contenido para no quedar tapado por ella. */
-  :root {
-    --alto-nav: calc(6px + clamp(46px, 13vw, 60px)
-                 + var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px)))));
-  }
+  /* Alto total de la barra de abajo. Ya no lleva ninguna cuenta de márgenes
+     del aparato: al no usar viewport-fit=cover, el sistema entrega a la
+     página un rectángulo que YA excluye el indicador del iPhone, así que la
+     barra solo necesita su propio alto. Un número menos que pueda salir mal
+     en un modelo concreto. */
+  :root { --alto-nav: calc(6px + clamp(46px, 13vw, 60px) + 8px); }
   .view { display: none; padding: 32px; overflow: auto; flex: 1; contain: layout paint; }
   .view.active { display: block; }
 
@@ -1365,18 +1392,12 @@
        no llegase justo al borde de #app, lo que asome dentro ya es de su
        mismo color. La primera red es html/body (ver body.fondo-barra) para
        lo que quede FUERA de #app. */
+    /* Sin padding-top: ya no hace falta reservar hueco para la barra de
+       estado, porque la app no se dibuja por debajo de ella (ver la etiqueta
+       viewport y apple-mobile-web-app-status-bar-style, arriba del archivo).
+       iOS entrega un rectángulo que empieza justo debajo de la hora. */
     #app { overflow: hidden; position: fixed; inset: 0; height: auto; width: auto;
-           background: var(--graphite);
-           /* El hueco de la barra de estado (hora, cobertura, batería) va
-              AQUÍ y no en #main, para que quede pintado del color oscuro.
-              Instalada en el iPhone, la app usa "black-translucent": iOS
-              dibuja esos indicadores en BLANCO sobre el contenido. Como el
-              hueco lo reservaba #main, que es claro, quedaban blancos sobre
-              claro y no se leía ni la hora. Ahora ese trozo es oscuro y se
-              leen perfectamente. En Safari normal y en Android este relleno
-              vale 0 y no cambia nada. */
-           padding-top: 0;
-           padding-top: env(safe-area-inset-top, 0px); }
+           background: var(--graphite); }
     /* #main es la fila que se estira. min-height:0 es obligatorio: sin el,
        una columna flexible se niega a encoger por debajo de su contenido y
        la barra de abajo se sale de la pantalla. */
@@ -1555,25 +1576,11 @@
          Y va con TOPE: pase lo que pase, nunca deja más de 22 px por debajo
          de los botones, que es lo que hacía que la barra pareciera enorme y
          los botones quedaran muy arriba. */
-      /* Tres capas, de la más tonta a la más lista, para que esto salga bien
-         en CUALQUIER aparato aunque falle todo lo demás:
-
-         1ª  10 px fijos. Un navegador antiguo que no entienda nada de lo de
-             abajo se queda aquí y la barra sigue siendo usable.
-         2ª  El margen que declare el aparato, ATADO entre 8 y 22 px. Esta
-             es la que manda normalmente y no necesita JavaScript: da igual
-             el modelo, el fabricante o lo que declare — nunca va a dejar
-             más de 22 px por debajo de los botones, que es lo que hacía que
-             la barra pareciera enorme.
-         3ª  Si el JavaScript ha llegado a medir el aparato, su resultado
-             manda sobre las anteriores (ver ajustarBarraInferior).
-
-         El tope es la clave: sin él, un modelo que declare un margen raro
-         empuja los botones hacia arriba y no hay forma de preverlo. */
-      padding: 6px 4px 10px;
-      padding: 6px calc(4px + env(safe-area-inset-left, 0px))
-               var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px))))
-               calc(4px + env(safe-area-inset-right, 0px));
+      /* Relleno fijo y sin cuentas: 6 arriba, 8 abajo, 4 a los lados. Ya no
+         se suma ningún margen del aparato porque el sistema no le entrega a
+         la página la zona del indicador. Lo mismo en un iPhone con muesca,
+         con isla dinámica, sin nada, en Android o en una tablet. */
+      padding: 6px 4px 8px;
 
       /* Alto CALCULADO, no "lo que salga". Con esto la barra no puede crecer
          por nada — ni por un icono que llegue tarde, ni por un texto de dos
@@ -13612,30 +13619,11 @@ async function subirFotoPerfil(event) {
    Esto lo enseña todo de un vistazo, para poder mandarlo en una captura.
    No hay ni un dato personal: solo medidas y versiones.
    ====================================================================== */
-/* ======================================================================
-   LA BARRA DE ABAJO, MEDIDA EN CADA APARATO
-
-   Llevaba tres intentos calculando esto con fórmulas de CSS sobre
-   env(safe-area-inset-bottom) y en pantalla no salía lo esperado. El
-   problema de fondo es que env() es una caja negra: cada modelo declara lo
-   que quiere, y algunos navegadores interpretan de forma distinta un max()
-   con un calc() dentro. Escribir fórmulas a ciegas y esperar es exactamente
-   como NO se hace esto.
-
-   Así que se mide. Al arrancar, al girar el móvil y al volver a la app:
-     1. Cuánto margen reserva de verdad este aparato abajo.
-     2. Cuánto espacio queda entre el final de la barra y el borde de lo que
-        se ve.
-
-   Con eso se fija el relleno, SIEMPRE con tope: por mucho que un modelo
-   declare un margen enorme, nunca quedan más de 22 px por debajo de los
-   botones. Y si aun así sobrara hueco, se baja la barra justo lo que falte.
-
-   Resultado: la barra queda pegada abajo en cualquier móvil o tablet, sin
-   depender de que las cuentas del CSS acierten a la primera.
-   ====================================================================== */
-const TOPE_RELLENO_BARRA = 22;
-
+/* Sonda para leer los márgenes que declara el aparato. Ya NO se usa para
+   colocar nada — solo para poder enseñarlos en Información técnica. La
+   colocación de la barra dejó de depender de estas medidas cuando se quitó
+   viewport-fit=cover: ahora el sistema recorta él la zona útil y la barra
+   solo tiene que pegarse al borde de lo que le den. */
 function medirMargenSeguro(nombre) {
   try {
     const sonda = document.createElement('div');
@@ -13647,51 +13635,15 @@ function medirMargenSeguro(nombre) {
   } catch (e) { return 0; }
 }
 
-let ajusteBarraPendiente = null;
-function ajustarBarraInferior() {
-  const nav = document.getElementById('mobile-nav');
-  if (!nav) return;
-  let cs;
-  try { cs = getComputedStyle(nav); } catch (e) { return; }
-  if (cs.display === 'none') return;          // en ordenador no hay barra
+/* SE HA QUITADO ajustarBarraInferior(), que medía el aparato al arrancar, al
+   girar el móvil y al volver a la app para ajustar el relleno de la barra y
+   corregir el hueco de abajo.
 
-  const raiz = document.documentElement;
-  const margen = medirMargenSeguro('safe-area-inset-bottom');
-
-  /* Poco más de la mitad del margen que pide iOS: suficiente para no pisar
-     la franja del indicador y sin dejar la barra flotando. Y con tope. */
-  const relleno = Math.min(TOPE_RELLENO_BARRA, Math.max(8, Math.round(margen * 0.55)));
-  raiz.style.setProperty('--relleno-barra', relleno + 'px');
-  raiz.style.setProperty('--relleno-barra-tumbado', Math.min(12, relleno) + 'px');
-
-  /* Segunda pasada: comprobar que de verdad llega abajo. Si el navegador
-     deja hueco por debajo (pasa en algunos iPhone instalados como app), se
-     baja la barra exactamente lo que falte en vez de suponer nada. */
-  requestAnimationFrame(() => {
-    try {
-      const r = nav.getBoundingClientRect();
-      const vv = window.visualViewport;
-      const fondo = vv ? Math.round(vv.height + vv.offsetTop) : window.innerHeight;
-      const hueco = Math.round(fondo - r.bottom);
-      // Solo se corrige un hueco real y razonable. Un valor enorme o
-      // negativo significa que estamos midiendo en mal momento (teclado
-      // abierto, giro a medias): mejor no tocar nada.
-      raiz.style.setProperty('--baja-barra', (hueco > 0 && hueco < 200 ? hueco : 0) + 'px');
-    } catch (e) {}
-  });
-}
-
-function programarAjusteBarra() {
-  clearTimeout(ajusteBarraPendiente);
-  ajusteBarraPendiente = setTimeout(ajustarBarraInferior, 60);
-}
-
-window.addEventListener('resize', programarAjusteBarra);
-window.addEventListener('orientationchange', programarAjusteBarra);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) programarAjusteBarra(); });
-if (window.visualViewport) window.visualViewport.addEventListener('resize', programarAjusteBarra);
-document.addEventListener('DOMContentLoaded', ajustarBarraInferior);
-setTimeout(ajustarBarraInferior, 300);
+   Ya no hace falta y sobraba: la barra va con position:fixed y bottom:0
+   contra un rectángulo que el sistema ya entrega recortado, así que no hay
+   nada que medir ni que corregir. Era, además, una pieza que se ejecutaba en
+   cada giro y cada vez que se volvía a la app, y que podía equivocarse.
+   Menos piezas moviéndose, menos sitios donde algo puede salir mal. */
 
 function mostrarInfoTecnica() {
   const cs = getComputedStyle(document.documentElement);
@@ -13722,8 +13674,7 @@ function mostrarInfoTecnica() {
     ['Barra: arriba / abajo', rNav ? `${Math.round(rNav.top)} / ${Math.round(rNav.bottom)}` : '—'],
     ['App: arriba / abajo', rApp ? `${Math.round(rApp.top)} / ${Math.round(rApp.bottom)}` : '—'],
     ['Hueco bajo la barra', rNav ? Math.round((vv ? vv.height + vv.offsetTop : window.innerHeight) - rNav.bottom) + ' px' : '—'],
-    ['Relleno calculado', cs.getPropertyValue('--relleno-barra').trim() || '(sin calcular)'],
-    ['Corrección aplicada', cs.getPropertyValue('--baja-barra').trim() || '0px'],
+    ['Alto previsto de la barra', cs.getPropertyValue('--alto-nav').trim() || '—'],
     ['Instalada como app', (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) ? 'SÍ' : 'no (navegador)'],
     ['Versión legal', typeof VERSION_LEGAL !== 'undefined' ? VERSION_LEGAL : '—'],
     ['Fallos guardados', String(leerFallos().length)],
