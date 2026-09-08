@@ -1276,13 +1276,23 @@
        mismo color. La primera red es html/body (ver body.fondo-barra) para
        lo que quede FUERA de #app. */
     #app { overflow: hidden; position: fixed; inset: 0; height: auto; width: auto;
-           background: var(--graphite); }
+           background: var(--graphite);
+           /* El hueco de la barra de estado (hora, cobertura, batería) va
+              AQUÍ y no en #main, para que quede pintado del color oscuro.
+              Instalada en el iPhone, la app usa "black-translucent": iOS
+              dibuja esos indicadores en BLANCO sobre el contenido. Como el
+              hueco lo reservaba #main, que es claro, quedaban blancos sobre
+              claro y no se leía ni la hora. Ahora ese trozo es oscuro y se
+              leen perfectamente. En Safari normal y en Android este relleno
+              vale 0 y no cambia nada. */
+           padding-top: 0;
+           padding-top: env(safe-area-inset-top, 0px); }
     /* #main es la fila que se estira. min-height:0 es obligatorio: sin el,
        una columna flexible se niega a encoger por debajo de su contenido y
        la barra de abajo se sale de la pantalla. */
-    #main { overflow: hidden; order: 1; flex: 1 1 auto; min-height: 0;
-            padding-top: 0;
-            padding-top: env(safe-area-inset-top, 0px); }
+    /* Sin padding-top: el hueco de la barra de estado lo reserva ahora #app,
+       que lo pinta oscuro para que se lean la hora y la batería. */
+    #main { overflow: hidden; order: 1; flex: 1 1 auto; min-height: 0; }
     .view {
       -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
     }
