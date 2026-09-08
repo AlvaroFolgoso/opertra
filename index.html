@@ -167,26 +167,57 @@
     overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 24px; }
-  /* ---- Aviso de versión nueva ---- */
-  #aviso-version {
+  /* ---- Avisos flotantes (versión nueva, fallo, cambios de otra persona) ----
+     Un mismo estilo para los tres. Antes cada uno se montaba a su manera con
+     estilos escritos a mano, y el del fallo metía icono, título, texto y dos
+     botones TODO en la misma fila: en un móvil eso queda apretujado y cuesta
+     leerlo justo cuando más falta hace entenderlo a la primera.
+
+     La estructura es siempre la misma: icono y texto arriba, y los botones
+     debajo a lo ancho, que en un móvil es donde el pulgar llega sin pensar.
+     En pantalla ancha los botones vuelven a su tamaño y se alinean a la
+     derecha, que es lo normal en un ordenador. */
+  .aviso-flotante {
     position: fixed; z-index: 200;
     left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
     max-width: 420px; margin: 0 auto;
     background: #262C33; color: #fff; border: 1px solid #3A424B; border-radius: 14px;
-    padding: 14px 15px; font-size: 13.5px; line-height: 1.45;
+    padding: 16px 17px; font-size: 13.5px; line-height: 1.5;
     box-shadow: 0 14px 40px rgba(0,0,0,.45); transform: translateZ(0);
   }
-  #aviso-version .av-linea { display: flex; align-items: flex-start; gap: 10px; }
-  #aviso-version .av-linea > i { color: var(--amber); margin-top: 2px; flex-shrink: 0; }
-  #aviso-version .av-linea > span { flex: 1; min-width: 0; }
-  #aviso-version .av-cerrar { color: #9AA5AF; padding: 0 2px; margin: -2px -4px 0 0; }
-  #aviso-version .av-boton {
-    width: 100%; justify-content: center; margin-top: 12px; padding: 11px;
+  .aviso-flotante .av-cab { display: flex; align-items: flex-start; gap: 12px; }
+  .aviso-flotante .av-cab > i { color: var(--amber); margin-top: 3px; flex-shrink: 0; font-size: 16px; }
+  .aviso-flotante .av-cab > div { flex: 1; min-width: 0; }
+  .aviso-flotante .av-titulo { font-weight: 700; font-size: 14.5px; line-height: 1.35; }
+  .aviso-flotante .av-texto { color: #C3CAD1; font-size: 13px; line-height: 1.55; margin-top: 5px; }
+  .aviso-flotante .av-cerrar {
+    color: #9AA5AF; padding: 4px 6px; margin: -6px -8px 0 0; flex-shrink: 0;
   }
-  /* En el ordenador cabe todo en una línea */
+  .aviso-flotante .av-acciones { display: flex; gap: 9px; margin-top: 14px; }
+  .aviso-flotante .av-acciones > button { flex: 1 1 0%; justify-content: center; padding: 11px 12px; }
+  /* En el ordenador los botones no necesitan ocupar todo el ancho */
   @media (min-width: 560px) {
-    #aviso-version { bottom: 20px; }
-    #aviso-version .av-boton { width: auto; margin-top: 10px; padding: 9px 16px; }
+    .aviso-flotante { bottom: 20px; }
+    .aviso-flotante .av-acciones { justify-content: flex-end; margin-top: 12px; }
+    .aviso-flotante .av-acciones > button { flex: 0 0 auto; padding: 9px 16px; }
+  }
+
+  /* ---- Avisos dentro de una pantalla (fichajes pendientes, sin enviar...) ----
+     Mismo criterio: título, texto con aire, y las acciones en su propia línea
+     en vez de apretadas contra el texto. */
+  .aviso-panel {
+    display: flex; gap: 13px; align-items: flex-start; text-align: left;
+    padding: 15px 16px; border-radius: 12px; margin-top: 16px;
+  }
+  .aviso-panel > i { flex-shrink: 0; margin-top: 3px; font-size: 16px; }
+  .aviso-panel .ap-cuerpo { flex: 1; min-width: 0; }
+  .aviso-panel .ap-titulo { font-size: 14px; font-weight: 700; line-height: 1.35; }
+  .aviso-panel .ap-texto { font-size: 13px; color: var(--steel); line-height: 1.6; margin-top: 6px; }
+  .aviso-panel .ap-texto ul { margin: 8px 0 0; padding-left: 20px; }
+  .aviso-panel .ap-texto li { margin-top: 4px; }
+  .aviso-panel .ap-acciones { margin-top: 13px; display: flex; gap: 9px; flex-wrap: wrap; }
+  @media (max-width: 420px) {
+    .aviso-panel .ap-acciones > button { flex: 1 1 100%; justify-content: center; }
   }
 
   /* ---- Avisos, confirmaciones y fichas de datos ---- */
@@ -702,6 +733,35 @@
   .mode-toggle { display: inline-flex; gap: 4px; padding: 4px; border-radius: 6px; background: var(--surface); margin-top: 20px; }
   .mode-btn { padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 500; border: none; background: none; cursor: pointer; color: var(--steel); display: flex; align-items: center; gap: 6px; }
   .mode-btn.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+  /* ---- Filtros redondeados (Personal, Cobros) ----
+     El elegido se marcaba en blanco sobre gris claro, con una sombra de un
+     píxel. En un móvil a pleno sol eso no se ve, y si además la lista de
+     debajo no cambia (los mismos trabajadores en el mismo orden), parece
+     directamente que el botón no funciona. Ahora el elegido va en ámbar,
+     como todo lo seleccionado en la app, y el cambio se acompaña. */
+  .chip-filtro {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 99px;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .chip-filtro .chip-cuenta {
+    font-weight: 700; font-size: 11px; opacity: .65; margin-left: 1px;
+  }
+  .chip-filtro.active {
+    background: var(--amber-bg); border-color: var(--amber);
+    color: var(--amber-deep); font-weight: 700; box-shadow: none;
+  }
+  .chip-filtro.active .chip-cuenta { opacity: .9; }
+
+  /* La lista entra con un desplazamiento corto al cambiar de filtro. Es la
+     señal de "te he hecho caso" cuando el resultado es idéntico al anterior.
+     Corta a propósito: 0,22 s se nota pero no se espera. */
+  @keyframes lista-entra {
+    from { opacity: 0; transform: translateY(7px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .lista-entra { animation: lista-entra .22s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .lista-entra { animation: none; } }
 
   .scan-ring { width: 160px; height: 160px; border-radius: 50%; border: 2px dashed var(--border); margin: 24px auto 0; display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
   .scan-ring.scanning { border-color: var(--amber); transform: scale(1.04); }
@@ -1438,15 +1498,26 @@
          bajan unos 18px y siguen sin pegarse al filo ni pisar el indicador
          del iPhone. En Android, donde la zona segura vale 0, quedan 10px de
          margen en vez de 6. */
+      /* El relleno de abajo NO sale de una fórmula con env(): sale de medir
+         el aparato de verdad al arrancar (ver ajustarBarraInferior). Así no
+         depende de que un iPhone concreto declare un margen mayor de lo
+         esperado ni de cómo interprete cada navegador un max() con calc().
+         Y va con TOPE: pase lo que pase, nunca deja más de 22 px por debajo
+         de los botones, que es lo que hacía que la barra pareciera enorme y
+         los botones quedaran muy arriba. */
       padding: 6px 4px 10px;
       padding: 6px calc(4px + env(safe-area-inset-left, 0px))
-               max(10px, calc(env(safe-area-inset-bottom, 0px) * 0.62))
+               var(--relleno-barra, 10px)
                calc(4px + env(safe-area-inset-right, 0px));
       /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
          provocar el zoom del doble toque. */
       touch-action: manipulation;
       -webkit-user-select: none; user-select: none;
       -webkit-tap-highlight-color: transparent;
+      /* Si tras medir resulta que el navegador deja hueco por debajo, la
+         barra se baja exactamente eso. En el caso normal vale 0 y no mueve
+         nada (ver ajustarBarraInferior). */
+      transform: translateY(var(--baja-barra, 0px));
     }
     /* Red de seguridad contra el hueco blanco de debajo: en el iPhone real
        (sobre todo instalada como app, no como pestaña de Safari) el aviso
@@ -1456,10 +1527,12 @@
        su mismo color toda una pantalla más abajo de donde debería terminar
        — no puede quedar ningún hueco sin cubrir, lo pida quien lo pida, e
        invisible del todo en el caso normal (no hay nada más ahí abajo). */
-    #mobile-nav::after {
-      content: ''; position: absolute; left: 0; right: 0; top: 100%;
-      height: 100vh; background: var(--graphite);
-    }
+    /* SE HA QUITADO el ::after que pintaba una pantalla entera de color
+       oscuro justo por debajo de la barra. Se puso como red contra la franja
+       blanca, cuando el fondo del documento era claro. Ahora ese fondo YA es
+       del color de la barra (body.fondo-barra), así que no tapa nada nuevo
+       — y en cambio, si el navegador no lo recortaba, se veía como si la
+       barra midiera el doble de alto. Menos piezas, menos sorpresas. */
     /* La fila de botones tiene alto propio, reservado desde el primer
        fotograma: aunque los botones tarden en escribirse, el hueco ya está
        hecho y nada se mueve cuando aparecen.
@@ -1563,7 +1636,7 @@
       }
       /* Y el relleno de abajo también se recorta: tumbado, cada píxel de
          alto cuenta. */
-      #mobile-nav { padding-bottom: max(6px, calc(env(safe-area-inset-bottom, 0px) * 0.5)); }
+      #mobile-nav { padding-bottom: var(--relleno-barra-tumbado, 8px); }
     }
   }
 
@@ -3321,21 +3394,26 @@ function avisarDeFalloInesperado() {
   if (document.getElementById('aviso-fallo')) return;
   const av = document.createElement('div');
   av.id = 'aviso-fallo';
+  av.className = 'aviso-flotante';
   av.setAttribute('role', 'status');
-  av.style.cssText = 'position:fixed;left:12px;right:12px;z-index:200;'
-    + 'bottom:calc(12px + env(safe-area-inset-bottom, 0px));max-width:420px;margin:0 auto;'
-    + 'background:var(--graphite);color:#fff;padding:13px 15px;border-radius:12px;'
-    + 'box-shadow:0 8px 28px rgba(0,0,0,.3);display:flex;gap:11px;align-items:flex-start;font-size:13px;';
   av.innerHTML = `
-    <i class="fa-solid fa-triangle-exclamation" style="color:var(--amber);margin-top:2px;"></i>
-    <div style="flex:1;min-width:0;line-height:1.45;">
-      <div style="font-weight:600;">Algo no ha respondido como debía</div>
-      <div style="opacity:.85;margin-top:2px;">Si notas algo raro en la pantalla, recarga. No se ha perdido nada de lo guardado.</div>
+    <div class="av-cab">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div>
+        <div class="av-titulo">Algo no ha respondido como debía</div>
+        <div class="av-texto">
+          Si notas algo raro en la pantalla, recarga.
+          No se ha perdido nada de lo que ya estaba guardado.
+        </div>
+      </div>
+      <button class="btn-ghost av-cerrar" aria-label="Cerrar"
+              onclick="this.closest('#aviso-fallo').remove()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <button class="btn-ghost" style="color:var(--amber);white-space:nowrap;"
-            onclick="location.reload()">Recargar</button>
-    <button class="btn-ghost" style="color:#fff;" aria-label="Cerrar"
-            onclick="this.closest('#aviso-fallo').remove()"><i class="fa-solid fa-xmark"></i></button>`;
+    <div class="av-acciones">
+      <button class="btn btn-amber" onclick="location.reload()">
+        <i class="fa-solid fa-arrows-rotate"></i> Recargar
+      </button>
+    </div>`;
   document.body.appendChild(av);
   setTimeout(() => { const e = document.getElementById('aviso-fallo'); if (e) e.remove(); }, 15000);
 }
@@ -7599,21 +7677,21 @@ function avisoFichajesPendientes() {
   const n = fichajesPendientes();
   if (!n) return '';
   return `
-    <div style="margin-top:16px;padding:13px 15px;border-radius:10px;
-                background:var(--amber-bg);border:1px solid var(--amber);
-                display:flex;gap:11px;align-items:flex-start;text-align:left;">
-      <i class="fa-solid fa-clock-rotate-left" style="color:var(--amber-deep);margin-top:2px;"></i>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:600;color:var(--amber-deep);">
+    <div class="aviso-panel" style="background:var(--amber-bg);border:1px solid var(--amber);">
+      <i class="fa-solid fa-clock-rotate-left" style="color:var(--amber-deep);"></i>
+      <div class="ap-cuerpo">
+        <div class="ap-titulo" style="color:var(--amber-deep);">
           ${n === 1 ? 'Tienes 1 fichaje guardado en el móvil' : `Tienes ${n} fichajes guardados en el móvil`}
         </div>
-        <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">
+        <div class="ap-texto">
           Se ${n === 1 ? 'enviará' : 'enviarán'} solo${n === 1 ? '' : 's'} en cuanto haya cobertura,
           con la hora a la que fichaste. No hace falta volver a fichar.
         </div>
-        <button class="btn-ghost" style="margin-top:7px;" onclick="enviarColaFichajes(true)">
-          Intentar enviar ahora
-        </button>
+        <div class="ap-acciones">
+          <button class="btn btn-outline" onclick="enviarColaFichajes(true)">
+            <i class="fa-solid fa-paper-plane"></i> Intentar enviar ahora
+          </button>
+        </div>
       </div>
     </div>`;
 }
@@ -7629,28 +7707,28 @@ function avisoFichajesFallidos() {
     const d = new Date(f.momento);
     const cuando = isNaN(d) ? 'fecha desconocida'
       : d.toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-    return `<li style="margin-top:3px;">${esc(cuando)}</li>`;
+    return `<li>${esc(cuando)}</li>`;
   }).join('');
   return `
-    <div style="margin-top:16px;padding:13px 15px;border-radius:10px;
-                background:var(--danger-bg);border:1px solid var(--danger);
-                display:flex;gap:11px;align-items:flex-start;text-align:left;">
-      <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);margin-top:2px;"></i>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:600;color:var(--danger);">
+    <div class="aviso-panel" style="background:var(--danger-bg);border:1px solid var(--danger);">
+      <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i>
+      <div class="ap-cuerpo">
+        <div class="ap-titulo" style="color:var(--danger);">
           ${fallidos.length === 1
             ? 'Un fichaje no se pudo guardar'
             : `${fallidos.length} fichajes no se pudieron guardar`}
         </div>
-        <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">
+        <div class="ap-texto">
           <b>Avisa a tu encargado</b> para que lo añada a mano: esa jornada no
           ha quedado registrada.
-          <ul style="margin:6px 0 0;padding-left:18px;">${lista}</ul>
-          ${fallidos.length > 5 ? `<div style="margin-top:4px;">…y ${fallidos.length - 5} más.</div>` : ''}
+          <ul>${lista}</ul>
+          ${fallidos.length > 5 ? `<div style="margin-top:6px;">…y ${fallidos.length - 5} más.</div>` : ''}
         </div>
-        <button class="btn-ghost" style="margin-top:7px;" onclick="olvidarFichajesFallidos()">
-          Ya está resuelto, quitar el aviso
-        </button>
+        <div class="ap-acciones">
+          <button class="btn btn-outline" onclick="olvidarFichajesFallidos()">
+            <i class="fa-solid fa-check"></i> Ya está resuelto
+          </button>
+        </div>
       </div>
     </div>`;
 }
@@ -9999,12 +10077,19 @@ function workerRowHTML(w) {
     </tr>`;
 }
 
-function workerMatchesFilter(w) {
-  if (workerFilter === 'working') return w.status === 'working';
-  if (workerFilter === 'off') return w.status === 'off';
-  if (workerFilter === 'docpending') return (w.documents||[]).some(d => d.status === 'proximo' || d.status === 'caducado');
-  if (workerFilter === 'onvacation') return (w.vacations||[]).some(v => vacationStatus(v) === 'en_curso');
+/* La regla de cada filtro, con el filtro como parámetro. Así se puede
+   preguntar "¿cuántos habría en 'sin fichar'?" sin tener que cambiar el
+   filtro activo, que es lo que necesitan los contadores de los botones. */
+function workerCumpleFiltro(w, filtro) {
+  if (filtro === 'working') return w.status === 'working';
+  if (filtro === 'off') return w.status === 'off';
+  if (filtro === 'docpending') return (w.documents||[]).some(d => d.status === 'proximo' || d.status === 'caducado');
+  if (filtro === 'onvacation') return (w.vacations||[]).some(v => vacationStatus(v) === 'en_curso');
   return true;
+}
+
+function workerMatchesFilter(w) {
+  return workerCumpleFiltro(w, workerFilter);
 }
 
 function applyWorkerFilters() {
@@ -10029,7 +10114,28 @@ function enVacacionesHoy() {
   return workers.filter(w => (w.vacations || []).some(v => v.start <= hoy && hoy <= v.end));
 }
 
-function setWorkerFilter(f) { workerFilter = f; trabajadoresVisibles = 50; renderTrabajadores(); }
+function setWorkerFilter(f) {
+  workerFilter = f;
+  trabajadoresVisibles = 50;
+  renderTrabajadores();
+  /* Sin esto, cambiar de "Todos" a "Sin fichar" con los mismos trabajadores
+     no producía NINGÚN cambio visible y parecía que el botón no funcionaba.
+     La lista entra con un desplazamiento corto: es la señal de "te he hecho
+     caso" aunque el resultado sea idéntico. */
+  animarLista('workers-cards');
+  animarLista('workers-tbody');
+}
+
+/* Reinicia la animación de entrada de una lista. Hay que quitar la clase y
+   forzar al navegador a recalcular antes de volver a ponerla; si no, al
+   pulsar dos filtros seguidos la segunda vez no se anima. */
+function animarLista(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('lista-entra');
+  void el.offsetWidth;
+  el.classList.add('lista-entra');
+}
 function searchWorkers(q) {
   workerQuery = q;
   applyWorkerFilters();
@@ -10096,10 +10202,27 @@ function renderTrabajadores() {
       <div class="f-mono" style="font-size:20px;font-weight:500;letter-spacing:2px;padding:8px 16px;border-radius:8px;background:var(--amber-bg);color:var(--amber-deep);">${currentUser.accessCode || '—'}</div>
     </div>` : ''}
 
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      ${filters.map(f => `
-        <button class="mode-btn ${workerFilter===f.key?'active':''}" style="background:${workerFilter===f.key?'var(--card)':'var(--surface)'};border:1px solid var(--border);border-radius:99px;" onclick="setWorkerFilter('${f.key}')">${f.label}</button>
-      `).join('')}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      ${filters.map(f => {
+        // Cada filtro dice cuántos va a enseñar. Así, antes incluso de mirar
+        // la lista, se ve que el botón ha hecho algo — y si un filtro no
+        // tiene a nadie, se sabe sin tener que pulsarlo.
+        const cuantos = workers.filter(w => workerCumpleFiltro(w, f.key)).length;
+        return `<button class="mode-btn chip-filtro ${workerFilter===f.key?'active':''}"
+                        onclick="setWorkerFilter('${f.key}')">
+                  ${f.label} <span class="chip-cuenta">${cuantos}</span>
+                </button>`;
+      }).join('')}
+    </div>
+    <div style="font-size:12.5px;color:var(--steel);margin-bottom:14px;">
+      ${(() => {
+        const n = workers.filter(workerMatchesFilter).length;
+        const etiqueta = (filters.find(f => f.key === workerFilter) || {}).label || 'Todos';
+        if (workers.length === 0) return '';
+        return workerFilter === 'all'
+          ? `${n} trabajador${n === 1 ? '' : 'es'}`
+          : `${n} de ${workers.length} · ${esc(etiqueta.toLowerCase())}`;
+      })()}
     </div>
 
     ${upcoming.length > 0 ? `
@@ -13416,6 +13539,87 @@ async function subirFotoPerfil(event) {
    Esto lo enseña todo de un vistazo, para poder mandarlo en una captura.
    No hay ni un dato personal: solo medidas y versiones.
    ====================================================================== */
+/* ======================================================================
+   LA BARRA DE ABAJO, MEDIDA EN CADA APARATO
+
+   Llevaba tres intentos calculando esto con fórmulas de CSS sobre
+   env(safe-area-inset-bottom) y en pantalla no salía lo esperado. El
+   problema de fondo es que env() es una caja negra: cada modelo declara lo
+   que quiere, y algunos navegadores interpretan de forma distinta un max()
+   con un calc() dentro. Escribir fórmulas a ciegas y esperar es exactamente
+   como NO se hace esto.
+
+   Así que se mide. Al arrancar, al girar el móvil y al volver a la app:
+     1. Cuánto margen reserva de verdad este aparato abajo.
+     2. Cuánto espacio queda entre el final de la barra y el borde de lo que
+        se ve.
+
+   Con eso se fija el relleno, SIEMPRE con tope: por mucho que un modelo
+   declare un margen enorme, nunca quedan más de 22 px por debajo de los
+   botones. Y si aun así sobrara hueco, se baja la barra justo lo que falte.
+
+   Resultado: la barra queda pegada abajo en cualquier móvil o tablet, sin
+   depender de que las cuentas del CSS acierten a la primera.
+   ====================================================================== */
+const TOPE_RELLENO_BARRA = 22;
+
+function medirMargenSeguro(nombre) {
+  try {
+    const sonda = document.createElement('div');
+    sonda.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;height:env(${nombre},0px);`;
+    document.body.appendChild(sonda);
+    const v = parseFloat(getComputedStyle(sonda).height) || 0;
+    sonda.remove();
+    return Math.round(v);
+  } catch (e) { return 0; }
+}
+
+let ajusteBarraPendiente = null;
+function ajustarBarraInferior() {
+  const nav = document.getElementById('mobile-nav');
+  if (!nav) return;
+  let cs;
+  try { cs = getComputedStyle(nav); } catch (e) { return; }
+  if (cs.display === 'none') return;          // en ordenador no hay barra
+
+  const raiz = document.documentElement;
+  const margen = medirMargenSeguro('safe-area-inset-bottom');
+
+  /* Poco más de la mitad del margen que pide iOS: suficiente para no pisar
+     la franja del indicador y sin dejar la barra flotando. Y con tope. */
+  const relleno = Math.min(TOPE_RELLENO_BARRA, Math.max(8, Math.round(margen * 0.55)));
+  raiz.style.setProperty('--relleno-barra', relleno + 'px');
+  raiz.style.setProperty('--relleno-barra-tumbado', Math.min(12, relleno) + 'px');
+
+  /* Segunda pasada: comprobar que de verdad llega abajo. Si el navegador
+     deja hueco por debajo (pasa en algunos iPhone instalados como app), se
+     baja la barra exactamente lo que falte en vez de suponer nada. */
+  requestAnimationFrame(() => {
+    try {
+      const r = nav.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const fondo = vv ? Math.round(vv.height + vv.offsetTop) : window.innerHeight;
+      const hueco = Math.round(fondo - r.bottom);
+      // Solo se corrige un hueco real y razonable. Un valor enorme o
+      // negativo significa que estamos midiendo en mal momento (teclado
+      // abierto, giro a medias): mejor no tocar nada.
+      raiz.style.setProperty('--baja-barra', (hueco > 0 && hueco < 200 ? hueco : 0) + 'px');
+    } catch (e) {}
+  });
+}
+
+function programarAjusteBarra() {
+  clearTimeout(ajusteBarraPendiente);
+  ajusteBarraPendiente = setTimeout(ajustarBarraInferior, 60);
+}
+
+window.addEventListener('resize', programarAjusteBarra);
+window.addEventListener('orientationchange', programarAjusteBarra);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) programarAjusteBarra(); });
+if (window.visualViewport) window.visualViewport.addEventListener('resize', programarAjusteBarra);
+document.addEventListener('DOMContentLoaded', ajustarBarraInferior);
+setTimeout(ajustarBarraInferior, 300);
+
 function mostrarInfoTecnica() {
   const cs = getComputedStyle(document.documentElement);
   const medir = (nombre) => {
@@ -13444,7 +13648,9 @@ function mostrarInfoTecnica() {
     ['Relleno de la barra', csNav ? `arriba ${csNav.paddingTop}, abajo ${csNav.paddingBottom}` : '—'],
     ['Barra: arriba / abajo', rNav ? `${Math.round(rNav.top)} / ${Math.round(rNav.bottom)}` : '—'],
     ['App: arriba / abajo', rApp ? `${Math.round(rApp.top)} / ${Math.round(rApp.bottom)}` : '—'],
-    ['Hueco bajo la barra', rNav ? Math.round(window.innerHeight - rNav.bottom) + ' px' : '—'],
+    ['Hueco bajo la barra', rNav ? Math.round((vv ? vv.height + vv.offsetTop : window.innerHeight) - rNav.bottom) + ' px' : '—'],
+    ['Relleno calculado', cs.getPropertyValue('--relleno-barra').trim() || '(sin calcular)'],
+    ['Corrección aplicada', cs.getPropertyValue('--baja-barra').trim() || '0px'],
     ['Instalada como app', (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) ? 'SÍ' : 'no (navegador)'],
     ['Versión legal', typeof VERSION_LEGAL !== 'undefined' ? VERSION_LEGAL : '—'],
     ['Fallos guardados', String(leerFallos().length)],
@@ -13979,19 +14185,25 @@ function avisarVersionNueva() {
   if (document.getElementById('aviso-version')) return;
   const av = document.createElement('div');
   av.id = 'aviso-version';
+  av.className = 'aviso-flotante';
   av.setAttribute('role', 'status');
   av.innerHTML = `
-    <div class="av-linea">
+    <div class="av-cab">
       <i class="fa-solid fa-arrows-rotate"></i>
-      <span>Hay una versión nueva de Opertra.</span>
+      <div>
+        <div class="av-titulo">Hay una versión nueva de Opertra</div>
+        <div class="av-texto">Se aplica al actualizar. No pierdes nada de lo que tengas guardado.</div>
+      </div>
       <button class="btn-ghost av-cerrar" aria-label="Cerrar"
               onclick="this.closest('#aviso-version').remove()">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
-    <button class="btn btn-amber av-boton" onclick="location.reload()">
-      <i class="fa-solid fa-arrows-rotate"></i> Actualizar ahora
-    </button>`;
+    <div class="av-acciones">
+      <button class="btn btn-amber" onclick="location.reload()">
+        <i class="fa-solid fa-arrows-rotate"></i> Actualizar ahora
+      </button>
+    </div>`;
   document.body.appendChild(av);
 }
 
