@@ -3169,6 +3169,84 @@ function envolverEscrituras(cliente) {
   };
 }
 
+/* ======================================================================
+   REINTENTOS AUTOMÁTICOS DE LAS CONSULTAS DE LECTURA
+
+   Con una empresa y un móvil, un fallo pasajero es una casualidad. Con cien
+   empresas y sus cuadrillas fichando a la misma hora, deja de serlo: un
+   parpadeo de red en la obra, el servidor arrancando en frío tras un rato
+   sin uso, un pico de carga a las siete de la mañana. Si a la primera que
+   falla la app se rinde y enseña un error, la gente lo vive como "esto va
+   mal" aunque en el 99% de los casos habría funcionado un segundo después.
+
+   Aquí se reintenta solo lo que tiene pinta de arreglarse solo: red, tiempos
+   agotados, saturación y errores del servidor. Lo que NO se reintenta nunca
+   es lo que va a fallar igual las tres veces — falta de permisos, un dato
+   con formato inválido, una clave duplicada — porque insistir ahí solo
+   retrasa el mensaje de error y gasta peticiones.
+
+   IMPORTANTE: esto es solo para LEER. Reintentar una escritura a ciegas es
+   como se duplican los registros: si la primera llegó y lo que se perdió fue
+   la respuesta, el segundo intento crea otra fila. Los fichajes tienen su
+   propia cola con protección contra duplicados en el servidor.
+   ====================================================================== */
+function fallaPorAlgoPasajero(e) {
+  if (!e) return false;
+  const codigo = String(e.code || '');
+  const estado = Number(e.status || 0);
+  const texto = String(e.message || '').toLowerCase();
+
+  // Definitivos: reintentar no los va a arreglar.
+  if (['42501', 'PGRST202', 'PGRST301', '22P02', '23505', '23503', '23502'].includes(codigo)) return false;
+  if (texto.includes('permission denied') || texto.includes('row-level security')) return false;
+  if (texto.includes('duplicate key') || texto.includes('invalid input syntax')) return false;
+  if (texto.includes('jwt') || texto.includes('invalid token')) return false;
+
+  // Pasajeros: merece la pena volver a probar.
+  if (texto.includes('failed to fetch') || texto.includes('load failed')
+      || texto.includes('networkerror') || texto.includes('network request failed')) return true;
+  if (texto.includes('timeout') || texto.includes('canceling statement')) return true;
+  if (estado === 429 || (estado >= 500 && estado <= 599)) return true;
+  if (['57014', '08006', '08003', '53300', '40001', '40P01'].includes(codigo)) return true;
+
+  return false;
+}
+
+function esperarMs(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* Envuelve una consulta de LECTURA de Supabase. Recibe una función que
+   devuelve la promesa de { data, error } y devuelve lo mismo. */
+async function conReintentos(consulta, etiqueta, intentos) {
+  const total = intentos || 3;
+  let ultimoError = null;
+
+  for (let i = 0; i < total; i++) {
+    let resultado;
+    try {
+      resultado = await consulta();
+    } catch (e) {
+      resultado = { data: null, error: e };
+    }
+
+    if (!resultado || !resultado.error) return resultado;
+    ultimoError = resultado.error;
+
+    const quedanIntentos = i < total - 1;
+    if (!quedanIntentos || !fallaPorAlgoPasajero(ultimoError)) return resultado;
+    if (navigator.onLine === false) return resultado;   // sin red no hay nada que reintentar
+
+    /* Espera creciente con un poco de azar. El azar importa: si cincuenta
+       móviles fallan a la vez por un pico del servidor y todos reintentan
+       exactamente al mismo tiempo, vuelven a tumbarlo. */
+    const espera = 400 * Math.pow(2, i) + Math.floor(Math.random() * 200);
+    console.warn(`Reintentando ${etiqueta || 'consulta'} (${i + 1}/${total - 1}) en ${espera}ms:`,
+                 ultimoError.message || ultimoError);
+    await esperarMs(espera);
+  }
+
+  return { data: null, error: ultimoError };
+}
+
 let supabaseClient = null;
 function getSupabase() {
   if (!supabaseClient) {
@@ -3456,21 +3534,23 @@ async function loadCompanyData() {
       _fichajesDelTrabajador = r.logs;
       return volcarDatosEmpresa(r.projRes, r.machRes, r.docRes, r.workRes, r.vacRes, r.cliRes);
     }
+    /* Cada una con reintentos: si una sola de las seis falla por un parpadeo
+       de red, antes se caía la carga entera y la app se quedaba en blanco. */
     const [projRes, machRes, docRes, workRes, vacRes, cliRes] = await Promise.all([
-      sb.from('projects').select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').order('created_at'),
-      sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,medidor,updated_at').order('created_at'),
-      sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'),
-      sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id,updated_at' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'),
+      conReintentos(() => sb.from('projects').select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').order('created_at'), 'obras'),
+      conReintentos(() => sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,medidor,updated_at').order('created_at'), 'maquinaria'),
+      conReintentos(() => sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'), 'documentos'),
+      conReintentos(() => sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id,updated_at' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'), 'trabajadores'),
       // Las vacaciones no se borran nunca. Sin filtro, a los años se arrastrarían
       // miles de filas en cada carga. Un año atrás cubre lo operativo (en curso,
       // próximas y las recientes); el histórico completo sale en la exportación.
-      sb.from('vacations').select('id,worker_id,start_date,end_date')
+      conReintentos(() => sb.from('vacations').select('id,worker_id,start_date,end_date')
         .gte('end_date', new Date(Date.now() - 365 * 86400000).toISOString().slice(0,10))
-        .order('start_date'),
+        .order('start_date'), 'vacaciones'),
       // El trabajador no ve clientes (está en RESTRICTED_KEYS): no se le piden.
       currentUser.isWorker
         ? Promise.resolve({ data: [], error: null })
-        : sb.from('clients').select('id,name,tax_id,email,phone,address,contact_name,notes,updated_at').order('name'),
+        : conReintentos(() => sb.from('clients').select('id,name,tax_id,email,phone,address,contact_name,notes,updated_at').order('name'), 'clientes'),
     ]);
     return volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cliRes);
   } catch (err) {
@@ -4738,7 +4818,9 @@ async function cargarResumenObra(projectDbId) {
     if (el) el.innerHTML = html;
   };
   try {
-    const { data, error } = await getSupabase().rpc('resumen_horas_obra', { p_project_id: projectDbId });
+    const { data, error } = await conReintentos(
+      () => getSupabase().rpc('resumen_horas_obra', { p_project_id: projectDbId }),
+      'resumen_horas_obra');
     if (error) throw error;
     if (!data || data.length === 0) {
       pinta('Todavía no se ha fichado ninguna jornada aquí.'); return;
@@ -6996,11 +7078,11 @@ async function cargarFichajes() {
   }
   try {
     const desde = new Date(Date.now() - DIAS_FICHAJES_EN_MEMORIA * 86400000).toISOString();
-    const { data, error } = await getSupabase()
+    const { data, error } = await conReintentos(() => getSupabase()
       .from('time_logs').select('id,worker_id,project_id,machine_id,check_in,check_out,edited_by,edited_at,edit_reason,auto_closed,verified,horometro_inicio,horometro_fin,gasoil_inicio,gasoil_fin,gasoil_repostado')
       .gte('check_in', desde)
       .order('check_in', { ascending: false })
-      .limit(TOPE_FICHAJES_EN_MEMORIA);
+      .limit(TOPE_FICHAJES_EN_MEMORIA), 'fichajes');
     if (error) throw error;
     timeLogs = (data || []).map(mapearFichaje);
     await cargarJornadasAbiertas();
@@ -7013,10 +7095,10 @@ async function cargarFichajes() {
 // Las jornadas abiertas son siempre pocas (nunca más que nº de trabajadores).
 async function cargarJornadasAbiertas() {
   try {
-    const { data, error } = await getSupabase()
+    const { data, error } = await conReintentos(() => getSupabase()
       .from('time_logs').select('worker_id,check_in')
       .is('check_out', null)
-      .limit(5000);
+      .limit(5000), 'jornadas abiertas');
     if (error) throw error;
     const abiertos = new Map();
     (data || []).forEach(l => { if (!abiertos.has(l.worker_id)) abiertos.set(l.worker_id, l.check_in); });
@@ -9918,7 +10000,9 @@ async function cargarResumenTrabajador(workerDbId) {
     if (el) el.innerHTML = html;
   };
   try {
-    const { data, error } = await getSupabase().rpc('resumen_horas_trabajador', { p_worker_id: workerDbId });
+    const { data, error } = await conReintentos(
+      () => getSupabase().rpc('resumen_horas_trabajador', { p_worker_id: workerDbId }),
+      'resumen_horas_trabajador');
     if (error) throw error;
     if (!data || data.length === 0) {
       pinta('Todavía no ha fichado ninguna jornada.'); return;
@@ -11576,7 +11660,9 @@ async function cargarHorasDelMes() {
   cargandoInforme = true;
   renderInformes();
   try {
-    const { data, error } = await getSupabase().rpc('resumen_horas_mes', { p_mes: mesInforme });
+    const { data, error } = await conReintentos(
+      () => getSupabase().rpc('resumen_horas_mes', { p_mes: mesInforme }),
+      'resumen_horas_mes');
     if (error) throw error;
     horasDelMes = (data || []).map(r => ({ name: r.nombre, hours: Number(r.horas) || 0, dias: Number(r.dias) || 0 }));
   } catch (e) {
