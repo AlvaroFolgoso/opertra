@@ -3352,9 +3352,16 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     clients = (cliRes.data || []).map(mapearCliente);
     _resumenClientes = null;
 
-    const codeByProjectDbId = {};
+    /* Dos índices por id de obra en vez de uno. El del nombre existe para no
+       tener que hacer projects.find() dentro del map de máquinas más abajo:
+       eso recorría la lista de obras entera UNA VEZ POR MÁQUINA. Con 200
+       máquinas y 100 obras son 20.000 vueltas en cada carga de datos, y los
+       datos se recargan al reconectar, al volver a la app y con cada cambio
+       en tiempo real. Buscar en un objeto es instantáneo. */
+    const codeByProjectDbId = {}, nameByProjectDbId = {};
     projects = (projRes.data || []).map(p => {
       codeByProjectDbId[p.id] = p.code;
+      nameByProjectDbId[p.id] = p.name;
       return mapearObra(p);
     });
 
@@ -3372,7 +3379,7 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
       project: m.project_id ? (codeByProjectDbId[m.project_id] || null) : null, projectDbId: m.project_id,
       type: m.type, model: m.model, plate: m.plate || '—', status: m.status,
       operator: '—', operatorDbId: m.operator_id, // se rellena más abajo, en cuanto se cargan los trabajadores
-      location: m.project_id && codeByProjectDbId[m.project_id] ? (projects.find(p => p.dbId === m.project_id)?.name || 'Sin ubicación') : 'Almacén / sin asignar',
+      location: m.project_id && codeByProjectDbId[m.project_id] ? (nameByProjectDbId[m.project_id] || 'Sin ubicación') : 'Almacén / sin asignar',
       fuel: m.fuel || 0, since: '—',
       gpsAge: m.gps_updated_at ? timeAgo(new Date(m.gps_updated_at).getTime()) : 'sin datos',
       updatedAt: m.updated_at,
@@ -3384,6 +3391,18 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     const codeByMachineDbId = {};
     machines.forEach(m => { codeByMachineDbId[m.dbId] = m.id; });
 
+    /* Las vacaciones se agrupan por trabajador de una pasada. Antes se hacía
+       un filter() de la lista completa DENTRO del map de trabajadores: con
+       150 trabajadores y un año de vacaciones (~1.500 filas) eran 225.000
+       comparaciones cada vez que se cargaban los datos. */
+    const vacacionesPorTrabajador = {};
+    (vacRes.data || []).forEach(v => {
+      (vacacionesPorTrabajador[v.worker_id] ||= []).push({
+        dbId: v.id, id: v.id, start: v.start_date, end: v.end_date,
+        days: Math.round((new Date(v.end_date) - new Date(v.start_date)) / 86400000) + 1,
+      });
+    });
+
     workers = (workRes.data || []).map(w => ({
       dbId: w.id, id: w.code, name: w.name, role: w.role, pin: w.pin,
       machine: w.machine_id ? (codeByMachineDbId[w.machine_id] || '—') : '—',
@@ -3393,17 +3412,19 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
       status: 'off', since: '—', // se calculará con los fichajes reales
       photoPath: w.photo_path, profileId: w.profile_id, updatedAt: w.updated_at,
       documents: docsByWorker[w.id] || [],
-      vacations: (vacRes.data || []).filter(v => v.worker_id === w.id).map(v => ({
-        dbId: v.id, id: v.id, start: v.start_date, end: v.end_date,
-        days: Math.round((new Date(v.end_date) - new Date(v.start_date)) / 86400000) + 1,
-      })),
+      vacations: vacacionesPorTrabajador[w.id] || [],
     }));
 
-    // Ahora que hay trabajadores, cada máquina sabe quién la lleva
-    machines.forEach(m => {
-      const op = workers.find(w => w.machineDbId === m.dbId);
-      m.operator = op ? op.name : '—';
+    /* Ahora que hay trabajadores, cada máquina sabe quién la lleva. Igual que
+       arriba: antes era un workers.find() por cada máquina (200 × 150 =
+       30.000 vueltas). Se construye el índice una vez y se consulta directo. */
+    const operadorPorMaquinaDbId = {};
+    workers.forEach(w => {
+      if (w.machineDbId && !operadorPorMaquinaDbId[w.machineDbId]) {
+        operadorPorMaquinaDbId[w.machineDbId] = w.name;
+      }
     });
+    machines.forEach(m => { m.operator = operadorPorMaquinaDbId[m.dbId] || '—'; });
 
     resultadosFiltro = null;
     // Las 4 iban una detrás de otra (4 viajes de ida y vuelta al servidor en
@@ -7564,11 +7585,41 @@ function limpiarFiltrosFichaje() {
   renderFichaje();
 }
 
+/* Índices por id para no recorrer tres listas enteras POR CADA FICHAJE.
+
+   mapearFichaje() se llama con .map() sobre lotes grandes: 300 fichajes en
+   cada carga normal, y hasta 2.000 cuando un administrador filtra por fechas
+   en el registro de horas. Con tres find() dentro (trabajadores, obras y
+   máquinas), un filtro de 2.000 líneas en una empresa de 150 trabajadores,
+   100 obras y 200 máquinas hacía 2.000 x 450 = 900.000 comparaciones de
+   golpe, en el hilo que pinta la pantalla. Eso es un tirón que se ve.
+
+   El índice se reconstruye solo cuando cambian las listas. Se mira la
+   identidad del array (volcarDatosEmpresa las reasigna enteras) Y su
+   longitud, porque dar de alta un trabajador o una máquina hace push sobre
+   el mismo array sin reasignarlo — sin comprobar la longitud, el recién
+   creado no aparecería hasta la siguiente recarga completa. */
+let _idxFichajes = null, _idxFichajesSello = null;
+function indicesParaFichajes() {
+  const sello = [workers, projects, machines, workers.length, projects.length, machines.length];
+  if (_idxFichajes && _idxFichajesSello && sello.every((v, i) => v === _idxFichajesSello[i])) {
+    return _idxFichajes;
+  }
+  const w = Object.create(null), p = Object.create(null), m = Object.create(null);
+  workers.forEach(x => { w[x.dbId] = x; });
+  projects.forEach(x => { p[x.dbId] = x; });
+  machines.forEach(x => { m[x.dbId] = x; });
+  _idxFichajes = { w, p, m };
+  _idxFichajesSello = sello;
+  return _idxFichajes;
+}
+
 /* Convierte una fila de la base de datos al formato que usa la app */
 function mapearFichaje(l) {
-  const w = workers.find(x => x.dbId === l.worker_id);
-  const p = projects.find(x => x.dbId === l.project_id);
-  const m = machines.find(x => x.dbId === l.machine_id);
+  const idx = indicesParaFichajes();
+  const w = l.worker_id ? idx.w[l.worker_id] : null;
+  const p = l.project_id ? idx.p[l.project_id] : null;
+  const m = l.machine_id ? idx.m[l.machine_id] : null;
   return {
     dbId: l.id, workerId: l.worker_id, worker: w ? w.name : 'Trabajador dado de baja',
     // La exportacion escribe una columna "Codigo" con l.workerCode, y aqui
