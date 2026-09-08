@@ -960,6 +960,18 @@
   /* ============ LANDING ============ */
   #landing { background: var(--card); }
   #landing.hidden { display: none; }
+  /* La portada se comporta como una web pulida: al arrastrar el ratón o
+     mantener pulsado en el móvil NO se resaltan los títulos, botones ni las
+     pantallas de ejemplo, y no sale el menú de "copiar" (quedaba tosco).
+     Los campos del formulario de demo sí se pueden escribir y seleccionar. */
+  #landing {
+    -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #landing input, #landing textarea, #landing [contenteditable="true"] {
+    -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text;
+    -webkit-touch-callout: default;
+  }
   /* padding-top con el hueco del notch/barra de estado sumado: sin esto,
      el logo y "Iniciar sesión" se pintaban debajo de la hora y los iconos
      del móvil en vez de empezar después. */
@@ -3154,6 +3166,15 @@ async function subirArchivo(file, carpeta) {
     throw new Error('El archivo pesa ' + (archivo.size/1024/1024).toFixed(1) + ' MB y el máximo son 50 MB.');
   }
 
+  // El trabajador entra con PIN: para Storage es anónimo y las reglas del
+  // bucket solo dejan SUBIR a usuarios con sesión. Por eso su foto va a través
+  // de una función del servidor (subir-archivo-trabajador) que valida su PIN y
+  // guarda con permisos de servicio. El administrador sí tiene sesión y sube
+  // directamente como siempre.
+  if (currentUser.isWorker) {
+    return await subirArchivoComoTrabajador(archivo, tipo);
+  }
+
   const ruta = `${currentUser.companyId}/${carpeta}/${Date.now()}-${limpiarNombre(archivo.name)}`;
   try {
     const { error } = await getSupabase().storage.from(BUCKET).upload(ruta, archivo, { upsert: false });
@@ -3170,6 +3191,50 @@ async function subirArchivo(file, carpeta) {
     }
     throw new Error(mensajeError(err));
   }
+}
+
+/* Subida de la foto de un trabajador (PIN, sin sesión). Va a la función del
+   servidor supabase/functions/subir-archivo-trabajador, que valida el PIN y
+   guarda con permisos de servicio en la carpeta de su empresa. Devuelve la
+   ruta, igual que subirArchivo() para el administrador. */
+async function subirArchivoComoTrabajador(archivo, carpeta) {
+  const ficha = miFichaTrabajador();
+  const workerId = (ficha && ficha.dbId) || currentUser.id;
+  const pin = (ficha && ficha.pin) || currentUser.pin;
+  if (!workerId || !pin) throw new Error('No se pudo identificar tu ficha para subir la foto.');
+
+  const fd = new FormData();
+  fd.append('worker_id', workerId);
+  fd.append('pin', pin);
+  fd.append('carpeta', carpeta);
+  fd.append('archivo', archivo, limpiarNombre(archivo.name || 'foto.jpg'));
+
+  const base = String(SUPABASE_CONFIG.url).replace(/\/+$/, '');
+  let resp;
+  try {
+    // OJO: 'swift-worker' es el slug con el que quedó desplegada la función en
+    // Supabase (la dirección /functions/v1/... no se puede cambiar después).
+    // Es la misma función de supabase/functions/swift-worker/index.ts.
+    resp = await fetch(base + '/functions/v1/swift-worker', {
+      method: 'POST',
+      headers: { apikey: SUPABASE_CONFIG.anonKey, Authorization: 'Bearer ' + SUPABASE_CONFIG.anonKey },
+      body: fd,
+    });
+  } catch (e) {
+    // Sin red: se traduce igual que en subirArchivo para que el llamante
+    // (p. ej. la incidencia) sepa distinguir un corte de conexión.
+    throw new Error('Se cortó la conexión al subir la foto. Comprueba tu conexión e inténtalo otra vez.');
+  }
+
+  if (!resp.ok) {
+    let msg = 'No se pudo subir la foto.';
+    try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
+  let j = null;
+  try { j = await resp.json(); } catch (e) {}
+  if (!j || !j.ruta) throw new Error('No se pudo subir la foto.');
+  return j.ruta;
 }
 
 /* ======================================================================
@@ -10839,6 +10904,10 @@ async function addVacation(workerId) {
     return;
   }
   const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+  // Freno de doble pulsación: sin esto, dos toques seguidos creaban dos
+  // periodos de vacaciones iguales (la comprobación de solape mira la memoria,
+  // que aún no se ha actualizado en el segundo toque).
+  if (!empezarOperacion('crear-vacaciones')) return;
   try {
     const { data, error } = await getSupabase().from('vacations').insert({
       company_id: currentUser.companyId, worker_id: w.dbId,
@@ -10852,6 +10921,8 @@ async function addVacation(workerId) {
     renderTrabajadores();
   } catch (err) {
     aviso('No se pudieron guardar las vacaciones: ' + mensajeError(err));
+  } finally {
+    terminarOperacion('crear-vacaciones');
   }
 }
 
