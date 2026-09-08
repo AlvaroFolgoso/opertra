@@ -4774,13 +4774,28 @@ async function cargarResumenObra(projectDbId) {
    (codigo 42501): se arregla con supabase/arreglar-permisos-funciones.sql,
    y hasta que no se ejecuta no hay forma de que salgan las horas. */
 function mensajeResumenFallido(e) {
-  const codigo = e && (e.code || e.status);
-  if (codigo === '42501' || codigo === 42501) {
+  const codigo = String((e && (e.code || e.status)) || '');
+  const texto = String((e && e.message) || '').toLowerCase();
+
+  if (codigo === '42501') {
     return 'No se han podido calcular las horas: falta un permiso en la base de datos. '
          + 'Avísanos y lo dejamos arreglado en un momento.';
   }
+  /* PGRST202 es "esa función no existe con esos parámetros". Pasa cuando el
+     nombre de un parámetro no coincide con el que declara la función, y es
+     un fallo silencioso muy fácil de confundir con cualquier otra cosa: la
+     llamada se hace, el servidor contesta, y lo único que ves es el mensaje
+     genérico. Merece la pena decirlo por su nombre. */
+  if (codigo === 'PGRST202' || texto.includes('could not find the function')
+      || texto.includes('schema cache')) {
+    return 'No se han podido calcular las horas: la app y la base de datos no se '
+         + 'entienden en esta consulta. Avísanos con una captura y lo arreglamos.';
+  }
   if (navigator.onLine === false) {
     return 'Sin conexión: las horas se calculan en el servidor. Inténtalo cuando vuelva la cobertura.';
+  }
+  if (codigo === '57014' || texto.includes('timeout') || texto.includes('canceling statement')) {
+    return 'El cálculo de horas ha tardado demasiado. Si se repite, avísanos: hay que revisarlo.';
   }
   return 'No se pudieron calcular las horas. Vuelve a entrar en la ficha dentro de un momento.';
 }

@@ -1,6 +1,16 @@
 -- ============================================================================
--- OPERTRA · Permisos de ejecución de las funciones (arregla "no se pudieron
--- calcular las horas")
+-- OPERTRA · Permisos de ejecución de las funciones
+-- ============================================================================
+--
+-- >>> NO HACE FALTA EJECUTARLO. Comprobado el 2026-09-08 con el PASO 1: las
+-- >>> 23 funciones ya tenían puede_authenticated = SI, así que los permisos
+-- >>> NO eran la causa de "no se pudieron calcular las horas". La causa se
+-- >>> busca en supabase/diagnostico-resumenes-horas.sql.
+-- >>>
+-- >>> Se deja el archivo porque el PASO 1 es una comprobación útil para
+-- >>> repetir en el futuro, y porque el PASO 2 es idempotente y sirve de
+-- >>> red si algún día se crea una función nueva sin sus permisos.
+--
 -- ============================================================================
 -- EL SÍNTOMA
 --   Entras en una obra o en un trabajador, sale "Calculando horas..." dando
