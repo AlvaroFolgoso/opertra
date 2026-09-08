@@ -2293,7 +2293,13 @@
       <div class="login-title">Inicia sesión</div>
       <div class="login-sub">Accede con la cuenta de tu empresa</div>
 
-      <button class="login-btn-social" onclick="entrarConGoogle()">
+      <!-- Botón de Google "nuevo" (Google Identity Services): entra sin rebotar
+           por el dominio de Supabase, así Google muestra opertra.com. Lo pinta
+           Google dentro de este contenedor cuando su librería carga. -->
+      <div id="google-gis-btn" style="display:flex;justify-content:center;min-height:0;"></div>
+      <!-- Botón de respaldo: si la librería de Google no carga (red/CSP/navegador
+           viejo), se queda este, que usa el método de siempre. Nunca sin salida. -->
+      <button class="login-btn-social" id="google-btn-fallback" onclick="entrarConGoogle()">
         <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.4 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 6.4 29.6 4 24 4c-8 0-14.8 4.5-18.3 11.1z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-2.1 14-5.6l-6.5-5.3C29.4 34.9 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.6 5.1C9.2 39.5 16 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.5 5.3C39.7 37 44 31.5 44 24c0-1.4-.1-2.4-.4-3.5z"/></svg> Continuar con Google
       </button>
       <div class="login-divider">o con tu correo</div>
@@ -13128,6 +13134,84 @@ async function entrarConGoogle() {
   }
 }
 
+/* ======================================================================
+   ENTRAR CON GOOGLE — MÉTODO NUEVO (Google Identity Services)
+   Con esto el login NO rebota por el dominio técnico de Supabase: Google da
+   el "token de identidad" en la propia página y se lo pasamos a Supabase con
+   signInWithIdToken. Resultado: Google muestra "opertra.com", no la dirección
+   fea. Todo lo demás (crear la empresa la primera vez, cargar los datos) es
+   EXACTAMENTE el mismo camino que el correo — reutiliza loadCurrentUserProfile,
+   enterAppOrShowTrialExpired y pedirDatosDeEmpresa.
+   Si la librería de Google no carga (red, CSP, navegador viejo) o el método
+   falla, queda el botón de respaldo que usa entrarConGoogle() de siempre: el
+   acceso nunca se queda sin salida.
+   ====================================================================== */
+const GOOGLE_CLIENT_ID = '957242332240-fm2pt1adp2ua6tn80o38peo5m4gtdlfo.apps.googleusercontent.com';
+
+function cargarGoogleGIS() {
+  if (document.getElementById('gis-script')) return;   // ya cargada
+  const s = document.createElement('script');
+  s.id = 'gis-script';
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.async = true;
+  s.onload = iniciarBotonGoogle;
+  s.onerror = () => {};   // sin librería: se queda el botón de respaldo visible
+  document.head.appendChild(s);
+}
+
+function iniciarBotonGoogle() {
+  try {
+    if (!window.google || !google.accounts || !google.accounts.id) return;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: onCredencialGoogle,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+    const cont = document.getElementById('google-gis-btn');
+    if (!cont) return;
+    google.accounts.id.renderButton(cont, {
+      type: 'standard', theme: 'outline', size: 'large',
+      text: 'continue_with', shape: 'pill', logo_alignment: 'center',
+      locale: 'es', width: 300,
+    });
+    // La librería cargó y pintó el botón: se oculta el de respaldo.
+    const fb = document.getElementById('google-btn-fallback');
+    if (fb) fb.style.display = 'none';
+  } catch (e) { /* si algo falla, se queda el botón de respaldo */ }
+}
+
+async function onCredencialGoogle(respuesta) {
+  if (!respuesta || !respuesta.credential) return;
+  // La casilla "recordar" se fija ANTES de entrar, igual que en el correo.
+  const recordarEl = document.getElementById('login-recordar');
+  ponerPreferenciaSesion(!recordarEl || recordarEl.checked);
+  const caja = document.getElementById('login-error');
+  const txt = document.getElementById('login-error-text');
+  if (caja) caja.style.display = 'none';
+  try {
+    const { data, error } = await getSupabase().auth.signInWithIdToken({
+      provider: 'google',
+      token: respuesta.credential,
+    });
+    if (error) throw error;
+    // Mismo post-login que el correo. Si es la primera vez y aún no tiene
+    // empresa, loadCurrentUserProfile lanza sinEmpresa y se le piden los datos.
+    await loadCurrentUserProfile(data.user);
+    enterAppOrShowTrialExpired();
+  } catch (err) {
+    if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
+    // Si el método nuevo falló, se recupera el botón de respaldo (método viejo).
+    const fb = document.getElementById('google-btn-fallback');
+    if (fb) fb.style.display = '';
+    if (txt && caja) {
+      txt.textContent = 'No se ha podido entrar con Google: ' + authErrorMessage(err)
+        + ' Puedes entrar con tu correo y contraseña.';
+      caja.style.display = 'flex';
+    }
+  }
+}
+
 /* Segundo paso para quien entra con Google la primera vez: sin esto se
    quedaba dentro de Opertra sin empresa, viendo un error genérico. */
 function pedirDatosDeEmpresa(nombrePersona) {
@@ -14928,6 +15012,7 @@ renderInformes();
 comprobarCookies();
 comprobarInstalacion();
 vigilarSesion();
+cargarGoogleGIS();   // prepara el botón de Google "nuevo" (sin rebote por supabase.co)
 avisarSinConexion(navigator.onLine !== false);
 handleAuthRedirect().then(async (motivo) => {
   // Si la vuelta de Google/correo falló, handleAuthRedirect ya ha mostrado el
