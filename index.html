@@ -123,6 +123,19 @@
      Para actualizar una libreria: descarga el archivo nuevo a /vendor y
      sube VERSION en sw.js. Nada mas.
      ========================================================================== -->
+<!-- Lo mínimo para que la pantalla de arranque se pueda pintar SIN haber
+     leído todavía el resto del archivo. El navegador pinta en cuanto tiene
+     con qué, y hasta ahora no tenía nada hasta el final de los 756 KB: por
+     eso el móvil se quedaba en blanco el segundo que tarda en leerse todo.
+     El resto de estilos de esa pantalla siguen abajo y la completan. -->
+<style>
+  html, body { margin: 0; background: #1C2126; }
+  #arranque { position: fixed; inset: 0; z-index: 500; background: #1C2126;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 16px;
+    transition: opacity .32s ease, visibility .32s ease; }
+  #arranque.fuera { opacity: 0; visibility: hidden; }
+</style>
 <link rel="stylesheet" href="/vendor/fonts.css">
 <link rel="preload" as="font" type="font/woff2" crossorigin
       href="/vendor/webfonts/fa-solid-900.woff2">
@@ -134,6 +147,12 @@
      Antes se descargaban y se ejecutaban siempre, tambien en la portada,
      donde no se usa ninguno de los tres.
      supabase.js si va aqui: sin el la app no arranca. -->
+<!-- Se abre la conexión con el servidor de datos MIENTRAS se lee el resto del
+     archivo, en vez de esperar a que la app la pida. El saludo inicial con un
+     servidor por https tarda unos 300 ms en un móvil con cobertura de obra, y
+     ese tiempo se estaba pagando entero justo antes de la primera consulta. -->
+<link rel="preconnect" href="https://uqfnijlmnybqznnnlkqj.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://uqfnijlmnybqznnnlkqj.supabase.co">
 <script src="/vendor/supabase.js"></script>
 <style>
   /* ============ DESIGN TOKENS ============ */
@@ -1589,6 +1608,15 @@
          La misma medida la usa el contenido para reservar su hueco. */
       height: var(--alto-nav);
       overflow: hidden;
+      /* La barra es una isla: nada de lo que pase dentro puede afectar al
+         resto de la página, y nada de lo que pase fuera obliga a repintarla.
+         Con esto, desplazar el contenido deja de arrastrar el repintado de la
+         barra y de su sombra. Es la diferencia entre un desplazamiento suave
+         y uno con tirones en un móvil de gama baja.
+         NO se pone will-change ni translateZ: eso crea una capa aparte que se
+         compone un fotograma después del fondo, y es lo que hacía saltar los
+         iconos. contain da el mismo aislamiento sin ese efecto. */
+      contain: layout paint style;
       /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
          provocar el zoom del doble toque. */
       touch-action: manipulation;
@@ -1832,6 +1860,16 @@
 </style>
 </head>
 <body>
+
+<!-- La pantalla de arranque va LA PRIMERA del documento a propósito: el
+     navegador la puede pintar en cuanto ha leído estas líneas, sin esperar a
+     los 756 KB que vienen detrás. Antes estaba casi al final y el móvil se
+     quedaba en blanco todo ese rato. -->
+<div id="arranque">
+  <div class="brand-icon" role="img" aria-label="Opertra"></div>
+  <div class="arranque-nombre">OPERTRA</div>
+  <div class="arranque-barra"><span></span></div>
+</div>
 
 <div id="landing">
   <header class="land-nav">
@@ -2449,12 +2487,6 @@
 
 <div id="modal-overlay">
   <div id="add-machine-modal"></div>
-</div>
-
-<div id="arranque">
-  <div class="brand-icon" role="img" aria-label="Opertra"></div>
-  <div class="arranque-nombre">OPERTRA</div>
-  <div class="arranque-barra"><span></span></div>
 </div>
 
 <div id="avisos" aria-live="polite" aria-atomic="false"></div>
@@ -3140,16 +3172,76 @@ async function subirArchivo(file, carpeta) {
   }
 }
 
-/* Enlace temporal (1 hora) para ver o descargar un archivo privado */
+/* ======================================================================
+   ENLACES DE ARCHIVOS: EN LOTE Y GUARDADOS UN RATO
+
+   Cada foto privada necesita un enlace temporal que hay que pedirle al
+   servidor. Antes se pedía UNO POR FOTO: abrir Maquinaria con 24 tarjetas
+   eran 24 peticiones, y al volver a la pestaña otras 24. Con cien empresas
+   navegando son miles de peticiones por minuto para conseguir siempre lo
+   mismo.
+
+   Ahora se piden de golpe (una sola petición para todas las que aparecen a
+   la vez) y se guardan 50 minutos en memoria: el enlace vale una hora, así
+   que sobra margen. Volver a una pestaña ya no cuesta ni una petición.
+   ====================================================================== */
+const enlacesArchivo = new Map();          // ruta -> { url, caduca }
+const VIDA_ENLACE = 50 * 60 * 1000;
+let lotePendiente = [];
+let loteTimer = null;
+
 async function urlArchivo(ruta) {
   if (!ruta) return null;
-  const { data, error } = await getSupabase().storage.from(BUCKET).createSignedUrl(ruta, 3600);
-  if (error) return null;
-  return data.signedUrl;
+  const guardado = enlacesArchivo.get(ruta);
+  if (guardado && guardado.caduca > Date.now()) return guardado.url;
+  if (guardado) enlacesArchivo.delete(ruta);
+
+  return new Promise((resolver) => {
+    lotePendiente.push({ ruta, resolver });
+    clearTimeout(loteTimer);
+    // 40 ms de espera: lo justo para que todas las tarjetas que aparecen a la
+    // vez entren en la misma petición, sin que se note ningún retraso.
+    loteTimer = setTimeout(enviarLoteDeEnlaces, 40);
+    if (lotePendiente.length >= 60) enviarLoteDeEnlaces();
+  });
+}
+
+async function enviarLoteDeEnlaces() {
+  clearTimeout(loteTimer);
+  const lote = lotePendiente;
+  lotePendiente = [];
+  if (!lote.length) return;
+
+  const rutas = [...new Set(lote.map(p => p.ruta))];   // sin repetir
+  const porRuta = {};
+  try {
+    const { data, error } = await getSupabase().storage.from(BUCKET)
+      .createSignedUrls(rutas, 3600);
+    if (error) throw error;
+    (data || []).forEach((d, i) => {
+      // Algunas versiones no devuelven 'path': se cae al orden pedido.
+      const r = (d && d.path) || rutas[i];
+      if (d && d.signedUrl && r) {
+        porRuta[r] = d.signedUrl;
+        enlacesArchivo.set(r, { url: d.signedUrl, caduca: Date.now() + VIDA_ENLACE });
+      }
+    });
+  } catch (e) { /* sin enlaces: cada foto enseña su icono de "no se pudo" */ }
+
+  lote.forEach(p => p.resolver(porRuta[p.ruta] || null));
+
+  // Tope de memoria: recorrer una flota enorme no puede dejar miles de
+  // enlaces guardados para siempre. Se tiran los más viejos.
+  if (enlacesArchivo.size > 400) {
+    let sobran = enlacesArchivo.size - 300;
+    for (const k of enlacesArchivo.keys()) { if (sobran-- <= 0) break; enlacesArchivo.delete(k); }
+  }
 }
 
 async function borrarArchivo(ruta) {
   if (!ruta) return;
+  // Sin esto se seguiría sirviendo el enlace guardado de una foto que ya no existe
+  enlacesArchivo.delete(ruta);
   try { await getSupabase().storage.from(BUCKET).remove([ruta]); } catch (e) {}
 }
 
@@ -3196,6 +3288,14 @@ function pintarImagenDiferida(elId, ruta, alt) {
   el.dataset.ruta = ruta;
   el.dataset.alt = alt || '';
   observadorFotos.observe(el);
+}
+
+/* Si no se suelta, cada repintado deja las tarjetas viejas colgando del
+   vigilante de imágenes: elementos que ya no están en pantalla pero que el
+   navegador no puede tirar a la basura porque alguien los sigue mirando. En
+   una jornada entera con la app abierta se acumulan cientos. */
+function soltarFotosDiferidas() {
+  if (observadorFotos) { observadorFotos.disconnect(); observadorFotos = null; }
 }
 
 /* Trabajadores, obras y máquinas se cargan de verdad desde Supabase tras iniciar
@@ -3450,10 +3550,19 @@ function registrarFalloInesperado(origen, error, extra) {
        el navegador.
      - Nunca lanza ni espera: si el envío falla, se ignora. La app no puede
        quedarse colgada por no haber podido apuntar un error. */
+const fallosYaEnviados = new Set();
 function mandarFalloAlServidor(apunte) {
   try {
     if (!supabaseClient) return;                 // aún no hay cliente: nada que hacer
     if (navigator.onLine === false) return;
+    /* Un mismo fallo repetido no se manda cien veces. Si algo entra en bucle
+       en el móvil de un cliente, antes se escribían decenas de filas idénticas;
+       con 10.000 móviles eso llena la tabla en una tarde y entierra el problema
+       de verdad debajo de miles de copias. */
+    const huella = apunte.origen + '|' + apunte.mensaje;
+    if (fallosYaEnviados.has(huella) || fallosYaEnviados.size >= 5) return;
+    fallosYaEnviados.add(huella);
+
     supabaseClient.from('app_errors').insert({
       company_id: (currentUser && currentUser.companyId) || null,
       origen: apunte.origen,
@@ -3594,7 +3703,6 @@ function getSupabase() {
    ====================================================================== */
 const gpsDataProvider = (() => {
   const listeners = new Set();
-  let pollHandle = null;
 
   function getLocations() {
     return machines.filter(m => m.device.linked).map(m => ({ id: m.id, lat: m.lat, lng: m.lng }));
@@ -3602,30 +3710,12 @@ const gpsDataProvider = (() => {
 
   function subscribe(callback) {
     listeners.add(callback);
-    if (SUPABASE_CONFIG.enabled) {
-      subscribeRealtime();
-    } else if (!pollHandle) {
-      startMockPolling();
-    }
+    subscribeRealtime();
     return () => {
       listeners.delete(callback);
-      if (listeners.size === 0) { stopMockPolling(); unsubscribeRealtime(); }
+      if (listeners.size === 0) unsubscribeRealtime();
     };
   }
-
-  function startMockPolling() {
-    pollHandle = setInterval(() => {
-      machines.forEach(m => {
-        if (m.status === 'active' && m.device.linked) {
-          m.lat += (Math.random() - 0.5) * 0.0006;
-          m.lng += (Math.random() - 0.5) * 0.0006;
-          m.gpsAge = 'justo ahora';
-        }
-      });
-      listeners.forEach(cb => cb(getLocations()));
-    }, 4000);
-  }
-  function stopMockPolling() { clearInterval(pollHandle); pollHandle = null; }
 
   // Escucha de verdad los cambios de lat/lng que vayan llegando a la tabla
   // machines — los escriba quien los escriba (el webhook de
@@ -3636,9 +3726,19 @@ const gpsDataProvider = (() => {
   let canalRealtime = null;
   function subscribeRealtime() {
     if (canalRealtime) return; // ya suscrito: no se abre un canal por cada listener
+    /* FALTABA EL FILTRO POR EMPRESA. Sin él, este canal le pedía a Supabase
+       TODOS los cambios de la tabla de máquinas, de las cien empresas. Las
+       reglas de la base tapan los datos ajenos, pero el mensaje viaja igual:
+       se paga y se procesa para tirarlo. Con GPS instalado de verdad (una
+       posición por máquina cada minuto) son miles de mensajes por minuto que
+       este móvil no necesita para nada. */
+    if (!currentUser.companyId) return;
     canalRealtime = getSupabase()
-      .channel('machine_locations')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'machines' }, (payload) => {
+      .channel('gps-' + currentUser.companyId)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'machines',
+        filter: 'company_id=eq.' + currentUser.companyId,
+      }, (payload) => {
         const m = machines.find(x => x.dbId === payload.new.id); // dbId = uuid real, id = código (ej. EX-114)
         if (!m) return;
         // Solo cuenta como "ha llegado GPS" si de verdad ha cambiado la
@@ -3762,8 +3862,14 @@ function prepintarPantallas() {
   if (prepintadoHecho) return;
   prepintadoHecho = true;
 
-  const cola = ['dashboard', 'fichaje', 'obras', 'trabajadores', 'maquinaria',
-                'avisos', 'clientes', 'facturacion', 'informes']
+  /* En el móvil solo se dejan listas las pantallas de la barra de abajo. Las
+     demás se pintan al abrirlas. Prepintarlas todas dejaba nueve pantallas
+     completas en memoria a la vez, y en un móvil de gama baja eso se paga en
+     cada desplazamiento. */
+  const enMovil = window.matchMedia('(max-width: 768px), (max-height: 500px)').matches;
+  const todas = ['dashboard', 'fichaje', 'obras', 'trabajadores', 'maquinaria',
+                 'avisos', 'clientes', 'facturacion', 'informes'];
+  const cola = (enMovil ? mobilePrimary().map(m => m.key) : todas)
     .filter(t => t !== currentTab && canAccess(t));
 
   const cuandoHayaHueco = window.requestIdleCallback
@@ -3866,7 +3972,11 @@ async function loadCompanyData() {
     const [projRes, machRes, docRes, workRes, vacRes, cliRes] = await Promise.all([
       conReintentos(() => sb.from('projects').select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').order('created_at'), 'obras'),
       conReintentos(() => sb.from('machines').select('id,code,qr_code,type,model,plate,status,project_id,operator_id,fuel,has_photo,photo_url,lat,lng,gps_updated_at,device_id,device_model,device_linked,medidor,updated_at').order('created_at'), 'maquinaria'),
-      conReintentos(() => sb.from('documents').select('id,owner_type,owner_id,worker_id,name,expiry_date,status,file_path'), 'documentos'),
+      /* ANTES: una consulta sin límite. El servidor corta en 1.000 filas SIN
+         dar ningún error, así que una empresa con 250 trabajadores y cuatro
+         papeles cada uno perdía documentos en silencio: carnets caducados que
+         dejaban de avisar. todasLasFilas() los trae por páginas hasta el final. */
+      conReintentos(() => todasLasFilas('documents'), 'documentos'),
       conReintentos(() => sb.from('workers').select('id,code,name,role,machine_id,project_id,photo_path,profile_id,updated_at' + (currentUser.isWorker ? '' : ',pin')).eq('active', true).order('created_at'), 'trabajadores'),
       // Las vacaciones no se borran nunca. Sin filtro, a los años se arrastrarían
       // miles de filas en cada carga. Un año atrás cubre lo operativo (en curso,
@@ -4033,7 +4143,16 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     // Las 4 iban una detrás de otra (4 viajes de ida y vuelta al servidor en
     // fila), y eso es justo lo que se notaba como el segundo de espera tras
     // iniciar sesión. Son independientes entre sí, así que van a la vez.
-    await Promise.all([cargarFichajes(), cargarEstadoFichaje(), cargarIncidencias(), cargarCobros()]);
+    /* El trabajador no ve cobros (está en RESTRICTED_KEYS) y las reglas de la
+       base tampoco le dejarían leerlos: pedirlos era un viaje al servidor que
+       siempre vuelve vacío. Con 10.000 trabajadores entrando a las siete de la
+       mañana, son 10.000 consultas tiradas en la peor media hora del día. */
+    await Promise.all([
+      cargarFichajes(),
+      cargarEstadoFichaje(),
+      cargarIncidencias(),
+      currentUser.isWorker ? Promise.resolve() : cargarCobros(),
+    ]);
 
     // Solo se pinta lo que se está viendo: el resto se pinta al abrir su pestaña.
     // Con 9 módulos, repintarlos todos en cada recarga era trabajo tirado.
@@ -4043,6 +4162,7 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     arrancarContador();
     suscribirCambios();
     window.__ultimaCarga = Date.now();
+    ultimoRefrescoObras = Date.now();
 
     // Limpieza del histórico: como mucho una vez al día por navegador
     try {
@@ -4509,33 +4629,83 @@ function nombreSeccion(n) {
   return n.key;
 }
 
+/* ======================================================================
+   LA BARRA SE CONSTRUYE UNA VEZ Y NO SE VUELVE A TOCAR
+
+   Antes, cada vez que llegaban datos nuevos (y llegan a menudo) se rehacía el
+   HTML entero de la barra: cinco botones con su dibujo dentro. El navegador
+   tiene que leer y montar todo eso otra vez, y mientras lo hace no atiende al
+   dedo. Es exactamente el instante en que "la barra no responde".
+
+   Ahora los botones se crean una sola vez, y después lo único que cambia es
+   una clase y el numerito de avisos. Cambiar una clase es lo más barato que
+   sabe hacer un navegador: no le obliga a montar nada.
+   ====================================================================== */
+let firmaBarraMovil = '';
+const botonesBarra = new Map();
+
 function renderMobileNav() {
-  const unresolvedCount = incidents.filter(i => !i.resolved).length;
   const primary = mobilePrimary();
-  const secondaryHasBadge = mobileSecondaryItems().some(n => n.key === 'avisos') && unresolvedCount > 0;
+  const contenedor = document.getElementById('mobile-nav-items');
+  if (!contenedor) return;
 
-  document.getElementById('mobile-nav-items').innerHTML = primary.map(n => `
-    <button type="button" class="nav-item" data-tab="${n.key}">
-      ${iconoNav(n.key)}<span class="nav-txt">${esc(nombreSeccion(n))}</span>
-    </button>`).join('') + `
-    <button type="button" class="nav-item ${mobileSecondaryItems().some(n => n.key === currentTab) ? 'active' : ''}"
-            onclick="toggleMoreSheet()" aria-label="Ver el resto de secciones">
-      ${iconoNav('menu')}<span class="nav-txt">Menú</span>
-      ${secondaryHasBadge ? `<span class="nav-badge">${unresolvedCount}</span>` : ''}
-    </button>`;
-  document.querySelectorAll('#mobile-nav .nav-item[data-tab]').forEach(b => {
-    if (b.dataset.tab === currentTab) b.classList.add('active');
-  });
+  /* La firma dice si de verdad ha cambiado algo de la barra: qué secciones
+     salen y cómo se llaman (el nombre depende del sector de la empresa). Si
+     no ha cambiado, no se toca ni un pixel del HTML. */
+  const firma = primary.map(n => n.key + ':' + nombreSeccion(n)).join('|')
+              + '#' + mobileSecondaryItems().map(n => n.key + ':' + nombreSeccion(n)).join('|');
 
-  ultimoRecuentoAvisos = -1;   // la barra se ha rehecho: hay que recontar
-  document.getElementById('more-sheet-items').innerHTML = mobileSecondaryItems().map(n => {
-    const badge = n.key === 'avisos' && unresolvedCount > 0 ? `<span class="nav-badge">${unresolvedCount}</span>` : '';
-    return `
-    <button type="button" class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
-      ${iconoNav(n.key, 24)}<span class="nav-txt">${esc(nombreSeccion(n))}</span>${badge}
-    </button>`;
-  }).join('');
+  if (firma !== firmaBarraMovil) {
+    firmaBarraMovil = firma;
+    botonesBarra.clear();
+    contenedor.innerHTML = primary.map(n => `
+      <button type="button" class="nav-item" data-tab="${n.key}">
+        ${iconoNav(n.key)}<span class="nav-txt">${esc(nombreSeccion(n))}</span>
+      </button>`).join('') + `
+      <button type="button" class="nav-item" data-menu="1" aria-label="Ver el resto de secciones">
+        ${iconoNav('menu')}<span class="nav-txt">Menú</span>
+      </button>`;
+    contenedor.querySelectorAll('.nav-item').forEach(b => {
+      botonesBarra.set(b.dataset.tab || '__menu__', b);
+    });
+
+    document.getElementById('more-sheet-items').innerHTML = mobileSecondaryItems().map(n => `
+      <button type="button" class="more-item nav-item" data-tab="${n.key}" onclick="closeMoreSheet()">
+        ${iconoNav(n.key, 24)}<span class="nav-txt">${esc(nombreSeccion(n))}</span>
+      </button>`).join('');
+
+    ultimoRecuentoAvisos = -1;   // la barra es nueva: hay que recontar avisos
+  }
+
+  marcarBotonActivo(currentTab);
+  refrescarAvisosDeNav(true);
 }
+
+/* Lo ÚNICO que se toca al cambiar de pestaña: quitar una clase y poner otra. */
+function marcarBotonActivo(tab) {
+  const enMenu = mobileSecondaryItems().some(n => n.key === tab);
+  botonesBarra.forEach((b, clave) => {
+    b.classList.toggle('active', clave === '__menu__' ? enMenu : clave === tab);
+  });
+  document.querySelectorAll('#nav-items .nav-item[data-tab], #more-sheet-items .nav-item[data-tab]')
+    .forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+}
+
+/* ======================================================================
+   RESPUESTA INSTANTÁNEA AL DEDO
+
+   El click de un navegador móvil llega DESPUÉS de soltar el dedo. Entre que
+   tocas y que la app se entera hay un hueco que se nota, y es justo el hueco
+   que hace que la gente vuelva a tocar creyendo que no ha ido. Aquí el botón
+   se marca en el mismo instante del contacto (pointerdown llega al tocar, no
+   al soltar) y el cambio de pantalla se hace después. Es lo que hacen las
+   apps nativas: primero se le contesta al dedo, luego se hace el trabajo.
+   ====================================================================== */
+document.addEventListener('pointerdown', (e) => {
+  const btn = e.target.closest && e.target.closest('#mobile-nav .nav-item[data-tab]');
+  if (!btn || !botonesBarra.size) return;
+  marcarBotonActivo(btn.dataset.tab);
+}, { passive: true, capture: true });
 
 function toggleMoreSheet() {
   const capa = document.getElementById('more-sheet-overlay');
@@ -4551,6 +4721,20 @@ function toggleMoreSheet() {
 function closeMoreSheet() {
   document.getElementById('more-sheet-overlay').classList.remove('active');
   document.body.classList.remove('hoja-abierta');
+}
+
+/* El texto "Vista de hoy, lunes 8 de septiembre" se calculaba con la
+   maquinaria de idiomas del navegador CADA VEZ que se toca una pestaña. Es de
+   lo más caro que hay, y el resultado solo cambia una vez al día: se guarda. */
+let subtituloHoy = null, subtituloHoyDia = '';
+function textoDeHoy() {
+  const hoy = fechaLocalHoy();
+  if (subtituloHoyDia !== hoy) {
+    subtituloHoyDia = hoy;
+    subtituloHoy = 'Vista de hoy, ' + new Date().toLocaleDateString('es-ES',
+      { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  return subtituloHoy;
 }
 
 let currentTab = 'dashboard';
@@ -4587,7 +4771,7 @@ function switchTab(tab) {
   if (!yaTeniaContenido) pintarPestanaActual(true);
   vistaNueva.classList.add('active');
   vistaNueva.scrollTop = 0;
-  document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  marcarBotonActivo(tab);   // solo cambia una clase: es lo más barato que hay
   // Se usa la misma función que el menú: así el título, el botón de abajo
   // y la hoja de secciones dicen siempre lo mismo.
   document.getElementById('view-title').textContent =
@@ -4604,7 +4788,7 @@ function switchTab(tab) {
     });
   }
   document.getElementById('view-subtitle').textContent =
-    tab === 'dashboard' ? 'Vista de hoy, ' + new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) :
+    tab === 'dashboard' ? textoDeHoy() :
     tab === 'obras' ? projects.length + ' ' + (projects.length===1?t('s'):t('p')) + ' registrada' + (projects.length===1?'':'s') :
     tab === 'maquinaria' ? machines.length + ' ' + tm('p') + ' registrad' + tm('g') + 's' :
     tab === 'fichaje' ? 'Escanea el código de tu ' + tm('s') + ' para fichar' :
@@ -6940,9 +7124,33 @@ function obraPropuesta() {
   return projects[0] ? projects[0].dbId : null;
 }
 
+/* La jornada abierta del trabajador es, simplemente, su fichaje sin hora de
+   salida — y ese ya viene dentro de worker_datos. Antes se volvía a preguntar
+   al servidor con worker_estado: un segundo viaje para un dato que ya estaba
+   en el bolsillo. Con 10.000 personas entrando por la mañana, son 10.000
+   consultas que desaparecen. */
+function estadoFichajeDeLosDatos() {
+  const abierto = (_fichajesDelTrabajador || []).find(l => !l.check_out);
+  if (!abierto) return null;
+  return {
+    logId: abierto.id, entrada: abierto.check_in,
+    projectId: abierto.project_id, machineId: abierto.machine_id,
+    previstaFin: abierto.expected_end || null,
+    horometroInicio: abierto.horometro_inicio,
+  };
+}
+
 async function cargarEstadoFichaje() {
   const ficha = miFichaTrabajador();
   if (!ficha || !ficha.dbId || !ficha.pin) { fichajeAbierto = null; return; }
+
+  if (currentUser.isWorker) {
+    fichajeAbierto = estadoFichajeDeLosDatos();
+    renderFichaje();
+    return;
+  }
+  // El administrador que se ficha a sí mismo sí tiene sesión de navegador y
+  // lee la tabla directamente, así que para él se pregunta como siempre.
   try {
     const { data, error } = await getSupabase().rpc('worker_estado', {
       p_worker_id: ficha.dbId, p_pin: ficha.pin,
@@ -7197,7 +7405,17 @@ let recargaPendiente = null;
    fichar. El trabajador nunca ve datos viejos en el momento que importa,
    y no consume una conexión permanente por persona.
    ====================================================================== */
+let ultimoRefrescoObras = 0;
 async function refrescarAntesDeFichar() {
+  /* Si los datos se trajeron hace menos de dos minutos, no se vuelve a pedir:
+     las obras no aparecen y desaparecen cada treinta segundos. Antes esto
+     pedía el paquete ENTERO del trabajador (obras, máquinas, documentos,
+     compañeros y vacaciones) cada vez que alguien tocaba el botón de fichar.
+     En hora punta eran miles de consultas pesadas seguidas para recibir,
+     casi siempre, exactamente lo mismo que ya había. */
+  if (Date.now() - ultimoRefrescoObras < 120000) return;
+  ultimoRefrescoObras = Date.now();
+
   const antes = projects.length;
   try {
     // El trabajador no puede leer projects directamente (es anonimo).
@@ -7237,13 +7455,13 @@ function suscribirCambios() {
   // aportar nada. Con 40 empresas y 80 trabajadores, la diferencia es entre
   // 800 conexiones y unas 120.
   if (currentUser.isWorker) return;
+  arrancarLatidoJornadas();
   const filtro = `company_id=eq.${currentUser.companyId}`;
   canalTiempoReal = getSupabase()
     .channel('cambios-empresa')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'machines', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'workers', filter: filtro }, recargarEnBreve)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, refrescoLigeroFichajes)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'clients', filter: filtro }, recargarEnBreve)
@@ -7274,23 +7492,43 @@ function avisarCambioExterno() {
   setTimeout(() => { const e = document.getElementById('aviso-cambios'); if (e) e.remove(); }, 3500);
 }
 
-/* Los fichajes llegan constantemente (500 al día por empresa = uno cada minuto
-   en horario de obra, y decenas juntos a primera hora). Recargar TODOS los datos
-   de la empresa cada vez colapsaría la cuenta y haría parpadear la pantalla del
-   jefe sin parar. Aquí solo se actualiza lo que de verdad cambia: quién está
-   trabajando ahora, que es una consulta pequeña y de coste fijo. */
-let refrescoFichajesPendiente = null;
-function refrescoLigeroFichajes() {
-  clearTimeout(refrescoFichajesPendiente);
-  refrescoFichajesPendiente = setTimeout(async () => {
-    if (document.hidden) return;              // en segundo plano no gastamos nada
-    await cargarJornadasAbiertas();
-    // Solo repintamos donde se nota el cambio de "quién está trabajando"
-    if (currentTab === 'dashboard' || currentTab === 'fichaje' || currentTab === 'trabajadores') {
-      pintarPestanaActual();
-    }
-  }, 3000);
+/* ======================================================================
+   POR QUÉ LOS FICHAJES YA NO VAN POR TIEMPO REAL
+
+   Cada fichaje mandaba un aviso en vivo a TODOS los responsables conectados
+   de esa empresa. Con la plantilla fichando entre las 7:00 y las 7:30 son
+   cientos de avisos en media hora, por cada responsable con la app abierta,
+   y con cien empresas a la vez eso es lo que tumba la conexión justo en la
+   peor franja del día.
+
+   Y todos esos avisos servían para lo mismo: volver a preguntar quién está
+   trabajando ahora. Así que se pregunta directamente, cada minuto, y SOLO si
+   se dan las tres condiciones que hacen que valga la pena:
+     - la app está en primer plano (nadie mira una pestaña oculta),
+     - se está en una pantalla donde ese dato se ve,
+     - y quien mira es un responsable (el trabajador ya sabe si ha fichado).
+
+   Una consulta pequeña cada minuto cuesta una fracción de lo que costaban
+   esos avisos, y en pantalla se ve exactamente igual.
+   ====================================================================== */
+let latidoJornadas = null;
+
+function arrancarLatidoJornadas() {
+  clearInterval(latidoJornadas);
+  if (currentUser.isWorker || !currentUser.companyId) return;
+  latidoJornadas = setInterval(async () => {
+    if (document.hidden) return;
+    if (!['dashboard', 'fichaje', 'trabajadores'].includes(currentTab)) return;
+
+    // Solo se repinta si de verdad ha cambiado quién está trabajando. Repintar
+    // "por si acaso" cada minuto es lo que hace que una pantalla parpadee sola.
+    const antes = workers.map(w => w.status).join('');
+    await cargarJornadasAbiertas(true);
+    if (workers.map(w => w.status).join('') !== antes) pintarPestanaActual();
+  }, 60000);
 }
+
+function pararLatidoJornadas() { clearInterval(latidoJornadas); latidoJornadas = null; }
 
 /* Recarga completa: solo para cambios de verdad estructurales (alta de obra,
    máquina, trabajador...). Con tope de una recarga cada 15 segundos como
@@ -7376,11 +7614,13 @@ function soltarConexionSiOculta() {
   if (!document.hidden || !canalTiempoReal) return;
   try { getSupabase().removeChannel(canalTiempoReal); } catch (e) {}
   canalTiempoReal = null;
+  pararLatidoJornadas();
 }
 
 function cortarSuscripcion() {
   if (canalTiempoReal) { getSupabase().removeChannel(canalTiempoReal); canalTiempoReal = null; }
   clearTimeout(recargaPendiente);
+  pararLatidoJornadas();
 }
 
 /* Solo se traen los fichajes de los últimos 60 días, y como mucho 300.
@@ -7420,12 +7660,18 @@ async function cargarFichajes() {
 // se lee limitado (300 filas) y con mucho volumen esas 300 no cubren ni medio día,
 // así que calcular el estado desde ahí daría trabajadores "sin fichar" que sí están.
 // Las jornadas abiertas son siempre pocas (nunca más que nº de trabajadores).
-async function cargarJornadasAbiertas() {
+let ultimaCargaJornadas = 0;
+async function cargarJornadasAbiertas(forzar) {
+  /* Como mucho una consulta cada 20 segundos. Sin este freno, en la media hora
+     en que ficha toda la plantilla se lanzaba una consulta cada pocos segundos
+     por cada responsable conectado, todas para leer casi lo mismo. */
+  if (!forzar && Date.now() - ultimaCargaJornadas < 20000) return;
+  ultimaCargaJornadas = Date.now();
   try {
     const { data, error } = await conReintentos(() => getSupabase()
       .from('time_logs').select('worker_id,check_in')
       .is('check_out', null)
-      .limit(5000), 'jornadas abiertas');
+      .limit(2000), 'jornadas abiertas');
     if (error) throw error;
     const abiertos = new Map();
     (data || []).forEach(l => { if (!abiertos.has(l.worker_id)) abiertos.set(l.worker_id, l.check_in); });
@@ -8864,6 +9110,7 @@ function filterMachines(q) {
 }
 
 function renderMaquinaria() {
+  soltarFotosDiferidas();   // ver el comentario de soltarFotosDiferidas()
   if (fleetMapUnsub) { fleetMapUnsub(); fleetMapUnsub = null; }
   if (fleetMap) { fleetMap.remove(); fleetMap = null; }
 
@@ -10632,6 +10879,7 @@ function showAvisosTab(tab) {
   incidenciasVisibles = 20; avisosSubTab = tab; avisosJustSubmitted = false; renderAvisos(); }
 
 function renderAvisos() {
+  soltarFotosDiferidas();   // ver el comentario de soltarFotosDiferidas()
   const abiertas = incidents.filter(i => !i.resolved);
   const resueltas = incidents.filter(i => i.resolved);
 
@@ -14192,7 +14440,7 @@ function sePuedeRecargarSinMolestar() {
    comprueba en el momento justo en que de verdad importa: cuando alguien
    vuelve a la app después de tenerla apartada. Así se entera antes que con
    el sondeo de cada minuto, y gastando una fracción. */
-const MINUTOS_ENTRE_COMPROBACIONES = 15;
+const MINUTOS_ENTRE_COMPROBACIONES = 30;
 
 function arrancarVigilanciaDeVersion() {
   comprobarVersionNueva(false);                       // se guarda la huella actual
@@ -14222,13 +14470,19 @@ function arrancarVigilanciaDeVersion() {
     navigator.serviceWorker.ready.then(r => r.update()).catch(() => {});
   }
 
-  setInterval(() => rondaDeComprobacion(0), MINUTOS_ENTRE_COMPROBACIONES * 60 * 1000);
+  /* SE HA QUITADO el reloj que preguntaba cada quince minutos si había versión
+     nueva. Con 10.000 móviles eso era casi un millón de peticiones al día para
+     que la respuesta fuese, en el 99,9% de los casos, "no hay nada nuevo".
 
-  // Al volver a la app se mira en el acto, pero como mucho una vez por
-  // minuto: si no, cambiar de pestaña a lo tonto dispararía una ronda cada vez.
+     Ahora se pregunta solo cuando de verdad puede haber cambiado algo Y hay
+     alguien mirando: al volver a la app tras un rato, y al recuperar la
+     conexión. Un móvil que se usa a diario se entera igual de rápido; uno que
+     está en el bolsillo no gasta absolutamente nada. */
+
+  // Al volver a la app se mira, pero como mucho una vez cada media hora.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    rondaDeComprobacion(60 * 1000);
+    rondaDeComprobacion(MINUTOS_ENTRE_COMPROBACIONES * 60 * 1000);
     // Volver a la app cuenta como uso: reinicia el plazo de inactividad.
     if (currentUser && currentUser.id && !currentUser.isWorker) marcarActividadAdmin();
   });
@@ -14255,7 +14509,7 @@ function arrancarVigilanciaDeVersion() {
      el de arriba, que ya hace lo mismo y además pide al service worker que
      mire. Al recuperar la conexión sí se comprueba aparte: ahí puede haber
      pasado mucho tiempo desconectado. */
-  window.addEventListener('online', () => rondaDeComprobacion(60 * 1000));
+  window.addEventListener('online', () => rondaDeComprobacion(5 * 60 * 1000));
 }
 
 function avisarVersionNueva() {
@@ -14550,7 +14804,11 @@ handleAuthRedirect().then(async (motivo) => {
 
 document.addEventListener('click', (e) => {
   const navBtn = e.target.closest('.nav-item[data-tab]');
-  if (navBtn) switchTab(navBtn.dataset.tab);
+  if (navBtn) { switchTab(navBtn.dataset.tab); return; }
+  // El botón "Menú" ya no lleva su onclick escrito dentro: se atiende aquí,
+  // igual que el resto, para que la barra se pueda construir una sola vez.
+  const menuBtn = e.target.closest('#mobile-nav .nav-item[data-menu]');
+  if (menuBtn) toggleMoreSheet();
 });
 document.getElementById('overlay').addEventListener('click', (e) => {
   if (e.target.id === 'overlay') closeDrawer();

@@ -25,7 +25,7 @@
    Al cambiar, el 'activate' de abajo borra las cachés de la versión
    anterior, que es lo que limpia de un plumazo cualquier archivo viejo que
    se hubiera quedado guardado. */
-const VERSION = 'opertra-v5';
+const VERSION = 'opertra-v6';
 const CACHE_APP = VERSION + '-app';
 /* El almacén de librerías NO se borra en cada despliegue a propósito: las
    librerías no cambian y así no se vuelven a descargar. Pero lleva número
@@ -103,7 +103,23 @@ self.addEventListener('fetch', (e) => {
   if (esPagina) {
     e.respondWith((async () => {
       try {
-        const red = await fetch(req);
+        /* TOPE DE 3 SEGUNDOS. Antes se esperaba a la red sin límite: en una
+           obra con una raya de cobertura, esa espera puede irse a treinta
+           segundos o no terminar nunca, y mientras tanto el trabajador mira
+           una pantalla en blanco AUNQUE tenga la app guardada en el móvil y
+           lista para abrir al instante.
+
+           Ahora, si en tres segundos no ha llegado, se abre con la guardada y
+           se sigue esperando por detrás para dejarla actualizada de cara a la
+           próxima vez. Nunca se pierde una versión nueva: solo se retrasa un
+           arranque. */
+        const guardadaYa = await caches.match('/index.html');
+        const red = guardadaYa
+          ? await Promise.race([
+              fetch(req),
+              new Promise((_, no) => setTimeout(() => no(new Error('tarda demasiado')), 3000)),
+            ])
+          : await fetch(req);
         // OJO: fetch() solo falla si NO HAY RED. Un 500, un 502 o un 404 del
         // servidor llegan aquí como respuesta buena. Sin este if, un error
         // pasajero de Vercel (un despliegue a medias, por ejemplo) se
@@ -116,7 +132,13 @@ self.addEventListener('fetch', (e) => {
         }
         return red;
       } catch (err) {
-        // Sin cobertura: se sirve la última que se guardó
+        /* Se ha agotado el tope o no hay cobertura. Se abre con la guardada, y
+           si SÍ había red (solo iba lenta) se sigue pidiendo por detrás para
+           que la próxima apertura ya tenga la versión nueva. */
+        fetch(req).then(r => {
+          if (r && r.ok) caches.open(CACHE_APP).then(c => c.put('/index.html', r.clone())).catch(() => {});
+        }).catch(() => {});
+
         const guardada = await caches.match('/index.html');
         return guardada || new Response(
           '<h1>Sin conexión</h1><p>Opertra necesita conexión la primera vez.</p>',
