@@ -3366,6 +3366,60 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     if (vacRes.error) throw vacRes.error;
     if (cliRes.error) throw cliRes.error;
 
+    /* ==================================================================
+       FRENO DE EMERGENCIA: "se me han borrado todos los datos"
+
+       Cuando la sesión se pierde por detrás (el testigo no se renueva, la
+       contraseña se cambió en otro sitio, el reloj del móvil va torcido),
+       Supabase NO devuelve ningún error: devuelve 200 con la lista VACÍA,
+       porque las reglas de seguridad de la base simplemente no dejan ver
+       nada. Comprobado.
+
+       Sin esta comprobación, la app se creía esa respuesta y vaciaba todo:
+       el cliente veía "0 obras, 0 trabajadores, 0 máquinas" y su empresa
+       entera aparentemente borrada. Con datos de verdad y una empresa que
+       paga, eso es una llamada de pánico y una baja.
+
+       Que TODO llegue vacío de golpe cuando hace un momento había datos no
+       pasa nunca por las buenas: nadie borra a la vez sus obras, su gente,
+       su maquinaria y sus clientes. Así que ante esa señal no se toca nada
+       y se comprueba la sesión: si de verdad se ha perdido, se le pide que
+       vuelva a entrar; si sigue siendo válida, entonces el vacío es real y
+       se sigue como siempre. */
+    const teniaDatos = projects.length || workers.length || machines.length || clients.length;
+    const llegaTodoVacio = !(projRes.data || []).length && !(machRes.data || []).length
+                        && !(workRes.data || []).length && !(cliRes.data || []).length
+                        && !(docRes.data || []).length;
+
+    if (teniaDatos && llegaTodoVacio) {
+      if (currentUser.isWorker) {
+        // El trabajador con PIN no tiene sesión de Supabase que consultar.
+        // De comprobar que sigue de alta ya se encarga revalidarTrabajador();
+        // aquí basta con no borrarle lo que tiene en pantalla.
+        console.warn('Datos vacíos con sesión de trabajador: no se vacía la pantalla.');
+        return;
+      }
+      let haySesion = false;
+      try {
+        const { data: s } = await getSupabase().auth.getSession();
+        haySesion = !!(s && s.session);
+      } catch (e) { haySesion = false; }
+
+      if (!haySesion) {
+        console.warn('Sesión perdida: no se vacía la pantalla, se pide entrar de nuevo.');
+        cortarSuscripcion();
+        showScreen('login');
+        showAuthPanel('login');
+        const err = document.getElementById('login-error-text');
+        if (err) {
+          err.textContent = 'Tu sesión ha caducado. Vuelve a entrar: tus datos están intactos.';
+          const caja = document.getElementById('login-error');
+          if (caja) caja.style.display = 'flex';
+        }
+        return;
+      }
+    }
+
     clients = (cliRes.data || []).map(mapearCliente);
     _resumenClientes = null;
 
