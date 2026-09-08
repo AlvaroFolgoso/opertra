@@ -11,11 +11,21 @@
    Este pide siempre la última y usa la guardada solo si no hay red.
    ====================================================================== */
 
-/* Subir este número en cada despliegue que cambie sw.js. Al cambiar, el
-   'activate' de abajo borra las cachés de la versión anterior — que es lo
-   que limpia de un plumazo cualquier index.html malo que se hubiera
-   guardado con la versión antigua del service worker. */
-const VERSION = 'opertra-v4';
+/* ATENCIÓN: ESTE NÚMERO HAY QUE SUBIRLO EN CADA DESPLIEGUE.
+
+   No es una manía: el navegador solo se molesta en instalar un service
+   worker nuevo si el ARCHIVO sw.js ha cambiado. Si no cambia, se queda con
+   el que tiene, no se dispara el aviso de "hay una versión nueva" y el
+   móvil puede seguir días con la app vieja aunque el servidor tenga otra.
+
+   Pasó de verdad: estuvo clavado en v4 durante muchos despliegues y las
+   correcciones no llegaban a los móviles. Con cien empresas eso significa
+   arreglar algo y que el cliente siga con el fallo sin enterarse.
+
+   Al cambiar, el 'activate' de abajo borra las cachés de la versión
+   anterior, que es lo que limpia de un plumazo cualquier archivo viejo que
+   se hubiera quedado guardado. */
+const VERSION = 'opertra-v5';
 const CACHE_APP = VERSION + '-app';
 /* El almacén de librerías NO se borra en cada despliegue a propósito: las
    librerías no cambian y así no se vuelven a descargar. Pero lleva número

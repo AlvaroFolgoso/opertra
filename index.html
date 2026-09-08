@@ -13456,6 +13456,10 @@ function openUserSettings() {
         <button class="btn btn-outline" style="font-size:12.5px;" onclick="mostrarInfoTecnica()">
           <i class="fa-solid fa-circle-info"></i> Información técnica
         </button>
+        <button class="btn btn-outline" style="font-size:12.5px;" id="btn-forzar-actualizacion"
+                onclick="forzarActualizacion()">
+          <i class="fa-solid fa-arrows-rotate"></i> Buscar actualización
+        </button>
       </div>
       <div class="aj-nota">
         <i class="fa-solid fa-shield-halved" style="margin-top:2px;"></i>
@@ -14061,6 +14065,51 @@ if ('serviceWorker' in navigator) {
 let selloVersion = null;      // la "huella" de la versión que se está usando
 let comprobandoVersion = false;
 
+/* ======================================================================
+   FORZAR LA ACTUALIZACIÓN A MANO
+
+   La actualización automática ya existe, pero cuando falla —y va a fallar
+   alguna vez: un móvil que guarda la página en memoria días, un service
+   worker que se queda atascado, una caché intermedia— la persona se queda
+   sin salida y llamando por teléfono. Con cien empresas eso no puede ser.
+
+   Esto tira de todo a la vez: borra lo que la app tenga guardado en este
+   móvil, obliga al service worker a mirar si hay uno nuevo, y recarga sin
+   usar nada de la caché. Lo único que NO toca son los datos: la sesión, el
+   código de empresa y los fichajes pendientes de enviar se respetan.
+   ====================================================================== */
+async function forzarActualizacion() {
+  setButtonLoading('btn-forzar-actualizacion', true, 'Buscando...',
+                   '<i class="fa-solid fa-arrows-rotate"></i> Buscar actualización');
+  try {
+    // 1. Tirar los archivos guardados (NO los datos: eso vive en otro sitio)
+    if (window.caches && caches.keys) {
+      const nombres = await caches.keys();
+      await Promise.all(nombres.map(n => caches.delete(n)));
+    }
+    // 2. Pedir al service worker que mire si hay una versión nueva
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        try { await reg.update(); } catch (e) {}
+        // Si ya había uno esperando su turno, que entre ya
+        if (reg.waiting) reg.waiting.postMessage({ tipo: 'saltar-espera' });
+      }
+    }
+    // 3. Recargar sin tocar nada de lo guardado
+    aviso('Actualizando Opertra…', 'bien');
+    setTimeout(() => {
+      // El parámetro obliga a pedir el archivo de verdad, saltándose
+      // cualquier caché intermedia que hubiera por el camino.
+      location.replace(location.pathname + '?actualizado=' + Date.now());
+    }, 600);
+  } catch (e) {
+    setButtonLoading('btn-forzar-actualizacion', false, '',
+                     '<i class="fa-solid fa-arrows-rotate"></i> Buscar actualización');
+    aviso('No se ha podido comprobar. Cierra la app del todo y vuelve a abrirla.');
+  }
+}
+
 async function huellaDeLaVersion() {
   const r = await fetch('/index.html?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
   if (!r || !r.ok) return null;
@@ -14143,6 +14192,14 @@ function arrancarVigilanciaDeVersion() {
     if (navigator.serviceWorker && navigator.serviceWorker.ready) {
       navigator.serviceWorker.ready.then(r => r.update()).catch(() => {});
     }
+  }
+
+  /* Al abrir la app se le pide al service worker que mire YA si hay algo
+     nuevo, sin esperar los quince minutos. Es justo el momento en que más
+     probable es que lo haya: en un móvil, la app puede llevar días abierta
+     en segundo plano y el usuario la "abre" sin que se recargue nada. */
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then(r => r.update()).catch(() => {});
   }
 
   setInterval(() => rondaDeComprobacion(0), MINUTOS_ENTRE_COMPROBACIONES * 60 * 1000);
