@@ -4765,7 +4765,9 @@ async function cargarResumenObra(projectDbId) {
     // calcular las horas" era imposible saber si faltaba un permiso en la
     // base, si no habia conexion o si el calculo habia fallado.
     console.error('resumen_horas_obra:', e);
-    pinta(mensajeResumenFallido(e));
+    pinta(mensajeResumenFallido(e)
+      + `<button class="btn-ghost" style="margin-top:8px;"
+                 onclick="cargarResumenObra('${esc(projectDbId)}')">Reintentar</button>`);
   }
 }
 
@@ -4773,7 +4775,19 @@ async function cargarResumenObra(projectDbId) {
    lejos es que a la funcion de la base le falte el permiso de ejecucion
    (codigo 42501): se arregla con supabase/arreglar-permisos-funciones.sql,
    y hasta que no se ejecuta no hay forma de que salgan las horas. */
+/* Mensaje + el código técnico en pequeño. Un código a la vista no es
+   suciedad: es la diferencia entre "no va" y saber en un vistazo si falta un
+   permiso, si la consulta se ha quedado sin tiempo o si no hay cobertura.
+   Con una sola captura de pantalla se identifica el problema. */
 function mensajeResumenFallido(e) {
+  const codigo = String((e && (e.code || e.status)) || '');
+  const detalle = codigo
+    ? `<div style="font-size:11px;color:var(--steel);margin-top:4px;">Código: ${esc(codigo)}</div>`
+    : '';
+  return `<div>${esc(textoResumenFallido(e))}</div>${detalle}`;
+}
+
+function textoResumenFallido(e) {
   const codigo = String((e && (e.code || e.status)) || '');
   const texto = String((e && e.message) || '').toLowerCase();
 
@@ -9945,7 +9959,9 @@ async function cargarResumenTrabajador(workerDbId) {
     `);
   } catch (e) {
     console.error('resumen_horas_trabajador:', e);
-    pinta(mensajeResumenFallido(e));
+    pinta(mensajeResumenFallido(e)
+      + `<button class="btn-ghost" style="margin-top:8px;"
+                 onclick="cargarResumenTrabajador('${esc(workerDbId)}')">Reintentar</button>`);
   }
 }
 
