@@ -83,10 +83,13 @@
 <link rel="preload" as="font" type="font/woff2" crossorigin
       href="/vendor/webfonts/fa-solid-900.woff2">
 <link rel="stylesheet" href="/vendor/fontawesome/all.min.css">
-<link rel="stylesheet" href="/vendor/leaflet.css">
-<script src="/vendor/jsQR.min.js" defer></script>
-<script src="/vendor/qrcode.min.js" defer></script>
-<script src="/vendor/leaflet.js" defer></script>
+<!-- jsQR (lector de codigos), qrcode (generador) y Leaflet (mapa) suman mas
+     de 300 KB y NO se cargan aqui a proposito: se piden solos la primera vez
+     que hacen falta (al abrir la camara, al pintar un mapa, al imprimir
+     etiquetas). Ver cargarRecurso() y asegurarLectorQR/GeneradorQR/Mapa.
+     Antes se descargaban y se ejecutaban siempre, tambien en la portada,
+     donde no se usa ninguno de los tres.
+     supabase.js si va aqui: sin el la app no arranca. -->
 <script src="/vendor/supabase.js"></script>
 <style>
   /* ============ DESIGN TOKENS ============ */
@@ -3055,6 +3058,65 @@ const almacenSesionSupabase = {
   removeItem: (k) => { try { localStorage.removeItem(k); } catch (e) {} try { sessionStorage.removeItem(k); } catch (e) {} },
 };
 
+/* ======================================================================
+   LIBRERÍAS QUE SE CARGAN SOLO CUANDO HACEN FALTA
+
+   El lector de códigos (jsQR), el mapa (Leaflet) y el generador de QR
+   suman más de 300 KB, y antes se descargaban y se ejecutaban SIEMPRE:
+   también en la portada, donde no se usa ninguno de los tres, y también
+   para el jefe que nunca abre el mapa. En un móvil de obra de gama baja
+   eso son unos cuantos segundos regalados en cada arranque.
+
+   Ahora cada uno se pide la primera vez que de verdad se necesita: al
+   abrir la cámara, al pintar un mapa o al imprimir etiquetas. La promesa
+   se guarda, así que aunque se llame diez veces solo se descarga una.
+   Supabase NO entra aquí: sin él la app no arranca.
+   ====================================================================== */
+const librerias = {};
+function cargarRecurso(url, tipo) {
+  if (librerias[url]) return librerias[url];
+  librerias[url] = new Promise((resolver, rechazar) => {
+    let el;
+    if (tipo === 'css') {
+      el = document.createElement('link');
+      el.rel = 'stylesheet';
+      el.href = url;
+    } else {
+      el = document.createElement('script');
+      el.src = url;
+    }
+    el.onload = () => resolver(true);
+    el.onerror = () => {
+      // Se olvida el fallo para que un segundo intento pueda funcionar:
+      // en obra la conexión va y viene.
+      delete librerias[url];
+      rechazar(new Error('No se pudo cargar ' + url));
+    };
+    document.head.appendChild(el);
+  });
+  return librerias[url];
+}
+
+async function asegurarLectorQR() {
+  if (window.jsQR) return true;
+  try { await cargarRecurso('/vendor/jsQR.min.js'); } catch (e) { return false; }
+  return !!window.jsQR;
+}
+async function asegurarGeneradorQR() {
+  if (window.QRCode) return true;
+  try { await cargarRecurso('/vendor/qrcode.min.js'); } catch (e) { return false; }
+  return !!window.QRCode;
+}
+async function asegurarMapa() {
+  if (window.L && window.L.map) return true;
+  try {
+    // El estilo primero: si llega después, el mapa se pinta descuadrado.
+    await cargarRecurso('/vendor/leaflet.css', 'css');
+    await cargarRecurso('/vendor/leaflet.js');
+  } catch (e) { return false; }
+  return !!(window.L && window.L.map);
+}
+
 let supabaseClient = null;
 function getSupabase() {
   if (!supabaseClient) {
@@ -5258,7 +5320,9 @@ function imprimirQR(machineCode) {
    una a una sería insufrible. */
 function imprimirTodasLasEtiquetas() {
   if (machines.length === 0) { aviso('Todavía no hay ' + tm('p') + '.'); return; }
-  if (!window.QRCode) { aviso('El generador de códigos aún se está cargando. Espera un momento.'); return; }
+  /* Ya no se mira window.QRCode: la ventana de impresión carga su propia
+     copia de la librería (ver el <script> de abajo), así que no depende de
+     que esta pestaña la tenga cargada. */
 
   const v = window.open('', '_blank', 'width=900,height=1000');
   if (!v) { aviso('El navegador ha bloqueado la ventana. Permite las ventanas emergentes para este sitio.'); return; }
@@ -5293,13 +5357,20 @@ function imprimirTodasLasEtiquetas() {
       </div>
       <script>
         const codigos = ${JSON.stringify(machines.map(m => ({ id: m.id, qr: m.qrCode })))};
-        codigos.forEach(c => {
-          new QRCode(document.getElementById('q-' + c.id), {
-            text: c.qr, width: 130, height: 130,
-            colorDark: '#1C2126', colorLight: '#ffffff',
+        if (typeof QRCode === 'undefined') {
+          // Sin la libreria saldrian etiquetas sin codigo, que no valen para
+          // nada y encima se pegarian a las maquinas creyendo que si.
+          document.body.innerHTML = '<p style="padding:40px;font:16px system-ui;text-align:center;">'
+            + 'No se ha podido cargar el generador de codigos.<br>Comprueba la conexion y vuelve a intentarlo.</p>';
+        } else {
+          codigos.forEach(c => {
+            new QRCode(document.getElementById('q-' + c.id), {
+              text: c.qr, width: 130, height: 130,
+              colorDark: '#1C2126', colorLight: '#ffffff',
+            });
           });
-        });
-        setTimeout(() => window.print(), 900);
+          setTimeout(() => window.print(), 900);
+        }
       <\/script>
     </body></html>`);
   v.document.close();
@@ -7523,7 +7594,8 @@ async function iniciarQR() {
     video.setAttribute('playsinline', 'true');
     await video.play();
 
-    if (!window.jsQR) {
+    // El lector se descarga aquí, la primera vez que alguien abre la cámara.
+    if (!await asegurarLectorQR()) {
       escanearError = 'No se ha podido cargar el lector de códigos. '
         + 'Comprueba la conexión, o escribe el código a mano.';
       pintarEscaneo();
@@ -8217,9 +8289,9 @@ function renderMaquinaria() {
   else machines.forEach(m => { if (m.photoUrl) pintarImagenDiferida('card-photo-' + m.id, m.photoUrl, m.type); });
 }
 
-function initFleetMap() {
+async function initFleetMap() {
   const el = document.getElementById('fleet-map');
-  if (!el || !window.L) return;
+  if (!el) return;
   const linked = machines.filter(m => m.device.linked && typeof m.lat === 'number' && typeof m.lng === 'number');
 
   // Sin señal no hay mapa que pintar: se explica por qué en vez de dejar
@@ -8246,6 +8318,21 @@ function initFleetMap() {
     return;
   }
   el.style.background = '';
+
+  /* El mapa se descarga aquí, la primera vez que alguien lo mira de verdad
+     (y no si no hay ninguna máquina que enseñar, que es la rama de arriba). */
+  if (!await asegurarMapa()) {
+    el.innerHTML = `<div class="empty-state" style="height:100%;display:flex;flex-direction:column;
+                        align-items:center;justify-content:center;padding:30px 20px;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div style="font-size:14px;font-weight:600;margin-top:8px;">No se ha podido cargar el mapa</div>
+        <div style="font-size:13px;margin-top:4px;">Comprueba la conexión y vuelve a entrar en esta pestaña.</div>
+      </div>`;
+    return;
+  }
+  // Mientras se descargaba puede haber cambiado de pestaña: si el hueco del
+  // mapa ya no está en pantalla, no se pinta nada sobre un elemento suelto.
+  if (!document.getElementById('fleet-map')) return;
 
   fleetMap = L.map(el, { attributionControl: false }).setView([linked[0].lat, linked[0].lng], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(fleetMap);
@@ -8405,25 +8492,24 @@ function openDrawer(id) {
   // o falla, la ficha debe abrirse igual: antes reventaba entera.
   const qrHolder = document.getElementById('qr-render-' + m.id);
   if (qrHolder) {
-    try {
-      if (window.QRCode && QRCode.CorrectLevel) {
-        new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M });
-      } else if (window.QRCode) {
-        new QRCode(qrHolder, { text: m.qrCode, width: 84, height: 84 });
-      } else {
-        qrHolder.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">Cargando código...</div>`;
-        // Reintento cuando termine de cargar la librería
-        setTimeout(() => {
-          const h = document.getElementById('qr-render-' + m.id);
-          if (h && window.QRCode) {
-            h.innerHTML = '';
-            try { new QRCode(h, { text: m.qrCode, width: 84, height: 84 }); } catch (e) {}
-          }
-        }, 1500);
+    qrHolder.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">Cargando código...</div>`;
+    asegurarGeneradorQR().then(listo => {
+      // La ficha puede haberse cerrado mientras se descargaba la librería.
+      const h = document.getElementById('qr-render-' + m.id);
+      if (!h) return;
+      if (!listo) {
+        h.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">No se pudo generar</div>`;
+        return;
       }
-    } catch (e) {
-      qrHolder.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">No se pudo generar</div>`;
-    }
+      h.innerHTML = '';
+      try {
+        new QRCode(h, QRCode.CorrectLevel
+          ? { text: m.qrCode, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M }
+          : { text: m.qrCode, width: 84, height: 84 });
+      } catch (e) {
+        h.innerHTML = `<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;color:var(--steel);font-size:11px;text-align:center;">No se pudo generar</div>`;
+      }
+    });
   }
   if (m.device.linked) { try { initDrawerMap(m); } catch (e) {} }
 }
@@ -8432,9 +8518,12 @@ let drawerMap = null;
 let drawerMapMarker = null;
 let drawerMapUnsub = null;
 
-function initDrawerMap(m) {
+async function initDrawerMap(m) {
   const el = document.getElementById('drawer-map');
-  if (!el || !window.L) return;
+  if (!el) return;
+  if (!await asegurarMapa()) return;
+  // Mientras se descargaba puede haberse cerrado la ficha o abierto otra.
+  if (document.getElementById('drawer-map') !== el) return;
   drawerMap = L.map(el, { attributionControl: false, zoomControl: true }).setView([m.lat, m.lng], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(drawerMap);
   const icon = L.divIcon({
