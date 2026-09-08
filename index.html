@@ -134,6 +134,12 @@
      así el rebote del scroll en iOS enseña este color oscuro por detrás
      en vez del claro de siempre, que no pegaba con esas pantallas. */
   body.fondo-oscuro { background: var(--graphite); }
+  /* Puesto por showScreen() mientras la app está en pantalla. Ver el
+     comentario de showScreen(): con esto, cualquier hueco que quede entre el
+     final de la app y el borde físico de la pantalla sale del color de la
+     barra de abajo en vez de blanco. Se pone también en <html> porque en iOS
+     el rebote del scroll enseña el fondo del documento, no el del body. */
+  html.fondo-barra, body.fondo-barra { background: var(--graphite); }
   .f-display { font-family: 'Oswald', sans-serif; letter-spacing: 0.015em; }
   .f-mono { font-family: 'IBM Plex Mono', monospace; }
 
@@ -267,7 +273,11 @@
   @media (hover: hover) { .nav-item:hover:not(.active) { color: white; } }
   .nav-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--graphite-line); display: flex; flex-direction: column; gap: 4px; }
 
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  /* Fondo propio, no heredado del body. Antes .view era transparente y el
+     claro que se veía era el del documento; ahora el documento va oscuro
+     mientras se usa la app (ver body.fondo-barra), así que la zona de
+     contenido tiene que pintar el suyo o saldría todo oscuro. */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--surface); }
 
   #topbar {
     display: flex; align-items: center; justify-content: space-between;
@@ -1261,7 +1271,12 @@
        que pasaba cada vez. Con position:fixed no hay altura que recalcular:
        el navegador la pega él solo a los cuatro bordes de lo que se ve, y
        la barra de abajo no se puede quedar a medias. */
-    #app { overflow: hidden; position: fixed; inset: 0; height: auto; width: auto; }
+    /* El fondo oscuro es la segunda red: si por lo que sea la barra de abajo
+       no llegase justo al borde de #app, lo que asome dentro ya es de su
+       mismo color. La primera red es html/body (ver body.fondo-barra) para
+       lo que quede FUERA de #app. */
+    #app { overflow: hidden; position: fixed; inset: 0; height: auto; width: auto;
+           background: var(--graphite); }
     /* #main es la fila que se estira. min-height:0 es obligatorio: sin el,
        una columna flexible se niega a encoger por debajo de su contenido y
        la barra de abajo se sale de la pantalla. */
@@ -1940,6 +1955,7 @@
       <button onclick="openLegal('privacidad')">Privacidad</button>
       <button onclick="openLegal('cookies')">Cookies</button>
       <button onclick="openLegal('terminos')">Términos de uso</button>
+      <button onclick="openLegal('encargado')">Encargado del tratamiento</button>
       <button onclick="showLogin()">Iniciar sesión</button>
     </div>
     <span class="land-footer-copy">© 2026 Opertra. Todos los derechos reservados.</span>
@@ -2173,6 +2189,7 @@
         <button onclick="openLegal('privacidad')">Política de privacidad</button>
         <button onclick="openLegal('cookies')">Política de cookies</button>
         <button onclick="openLegal('terminos')">Términos de uso</button>
+        <button onclick="openLegal('encargado')">Contrato de Encargado del Tratamiento</button>
       </div>
     </div>
   </nav>
@@ -3617,12 +3634,42 @@ function obraSchedule(p) {
    Ahora se recorre todo UNA vez y se guarda el resultado.
    ====================================================================== */
 let _totalesObra = null;
-let _totalesSello = '';
 
+/* Tira las cuentas guardadas. Se llama desde cualquier sitio que cambie una
+   asignacion o un estado (quien trabaja en que obra, que maquina esta donde,
+   si un cobro esta pagado...).
+
+   La caducidad automatica de abajo ya cubre el caso normal, porque los
+   cambios llegan en un evento posterior al pintado. Esto es el cinturon
+   ademas de los tirantes: si algun dia alguien cambia un dato y repinta en
+   la MISMA tanda de trabajo, sin esta llamada se volveria a ver la pantalla
+   vieja, que es justo el fallo que habia. */
+function datosCambiaron() {
+  _totalesObra = null;
+  _resumenClientes = null;
+}
+
+/* BUG QUE ARREGLA ESTO (importante, se veia a diario):
+
+   Antes la cache se daba por buena mientras no cambiaran las LONGITUDES de
+   las listas:
+       sello = projects.length|workers.length|machines.length|...
+
+   Pero asignar un trabajador o una maquina a una obra NO cambia ninguna
+   longitud: cambia w.project dentro de un objeto que ya estaba en la lista.
+   El sello salia identico, se devolvia la cache vieja, y la obra seguia
+   apareciendo VACIA aunque el trabajador ya estuviera asignado. El selector
+   sí se enteraba (dejaba de ofrecerlo), asi que parecia que se habia
+   guardado a medias. Solo se arreglaba al recargar la app entera.
+
+   La cache existe para no recorrer las listas UNA VEZ POR TARJETA de obra
+   mientras se pinta la pantalla. Para eso basta con que dure lo que dura el
+   repintado. Se tira al terminar la tanda actual de trabajo: dentro de un
+   mismo pintado se reutiliza, y como cualquier cambio de datos ocurre
+   despues (en otro evento), es IMPOSIBLE que sirva datos viejos. No hay que
+   acordarse de invalidarla en ningun sitio. */
 function totalesPorObra() {
-  // Se recalcula solo si han cambiado los datos
-  const sello = `${projects.length}|${workers.length}|${machines.length}|${timeLogs.length}|${incidents.length}|${invoices.length}`;
-  if (_totalesObra && _totalesSello === sello) return _totalesObra;
+  if (_totalesObra) return _totalesObra;
 
   const mes = mesLocalActual();
   const t = {};
@@ -3643,7 +3690,8 @@ function totalesPorObra() {
     const o = porDbId[l.projectDbId]; if (o) o.hours += l.hours;
   });
 
-  _totalesObra = t; _totalesSello = sello;
+  _totalesObra = t;
+  Promise.resolve().then(() => { _totalesObra = null; });
   return t;
 }
 
@@ -5735,7 +5783,7 @@ async function borrarObra(code) {
     // Quitar la referencia en máquinas y trabajadores que la tenían asignada
     machines.forEach(m => { if (m.projectDbId === p.dbId) { m.projectDbId = null; m.project = null; m.location = 'Almacén / sin asignar'; } });
     workers.forEach(w => { if (w.projectDbId === p.dbId) { w.projectDbId = null; w.project = null; } });
-    _totalesObra = null;
+    datosCambiaron();
     projects = projects.filter(x => x.dbId !== p.dbId);
     closeAddMachineModal();
     closeDrawer();
@@ -5864,6 +5912,7 @@ async function assignWorkerToObra(projId) {
     if (error) throw error;
     w.project = projId;
     w.projectDbId = proj.dbId;
+    datosCambiaron();
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
@@ -5881,7 +5930,13 @@ async function assignMachineToObra(projId) {
     const { error } = await getSupabase().from('machines').update({ project_id: proj.dbId }).eq('id', m.dbId);
     if (error) throw error;
     m.project = projId;
+    // Faltaba projectDbId. La maquina si salia en la obra (eso se agrupa por
+    // codigo), pero el resto de la app la seguia viendo sin obra: al borrar
+    // la obra no se le quitaba la asignacion, y no entraba en el aviso de
+    // "maquinas en obras terminadas". Se arreglaba solo al recargar.
+    m.projectDbId = proj.dbId;
     m.location = proj.name;
+    datosCambiaron();
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
@@ -9458,6 +9513,7 @@ async function reasignarMaquina(workerCode) {
     const nueva = machines.find(m => m.dbId === machineDbId);
     w.machine = nueva ? nueva.id : '—';
     if (nueva) nueva.operator = w.name;
+    datosCambiaron();
     openWorkerDrawer(workerCode);
     pintarPestanaActual();
   } catch (err) {
@@ -9985,10 +10041,16 @@ function mapearCobro(i) {
 
 /* Cuántas obras y cuánto dinero mueve cada cliente. Se recorre todo una
    vez, no una vez por tarjeta. */
-let _resumenClientes = null, _selloClientes = '';
+/* Mismo caso que totalesPorObra(): el sello miraba solo longitudes
+   (clients.length|projects.length|invoices.length) y se quedaba obsoleto en
+   cuanto cambiaba algo DENTRO de una fila sin añadir ni quitar ninguna.
+   Pasaba al asignar una obra a un cliente y, sobre todo, al marcar un cobro
+   como pagado: inv.status cambiaba, la longitud no, y la ficha del cliente
+   seguia enseñando la factura como pendiente o vencida.
+   Ahora la cache dura solo el repintado actual y no puede mentir. */
+let _resumenClientes = null;
 function resumenClientes() {
-  const sello = `${clients.length}|${projects.length}|${invoices.length}`;
-  if (_resumenClientes && _selloClientes === sello) return _resumenClientes;
+  if (_resumenClientes) return _resumenClientes;
 
   const r = {};
   clients.forEach(c => { r[c.dbId] = { cliente: c, projects: [], invoices: [], total: 0, pending: 0, overdue: 0 }; });
@@ -10007,7 +10069,8 @@ function resumenClientes() {
     if (est !== 'paid') e.pending += i.amount;
     if (est === 'overdue') e.overdue++;
   });
-  _resumenClientes = r; _selloClientes = sello;
+  _resumenClientes = r;
+  Promise.resolve().then(() => { _resumenClientes = null; });
   return r;
 }
 
@@ -10722,6 +10785,7 @@ async function markInvoicePaid(dbId) {
     if (error) throw error;
     const inv = invoices.find(i => i.dbId === dbId);
     if (inv) { inv.status = 'paid'; inv.paidAt = new Date().toISOString(); }
+    datosCambiaron();   // la ficha del cliente lo seguia dando por vencido
     pintarPestanaActual();
   } catch (err) {
     aviso('No se pudo marcar como cobrado: ' + mensajeError(err));
@@ -10738,6 +10802,7 @@ async function markInvoicePending(dbId) {
     if (error) throw error;
     const inv = invoices.find(i => i.dbId === dbId);
     if (inv) { inv.status = 'pending'; inv.paidAt = null; }
+    datosCambiaron();
     pintarPestanaActual();
   } catch (err) {
     aviso('No se pudo deshacer: ' + mensajeError(err));
@@ -11074,6 +11139,15 @@ function showScreen(which) {
   // detrás. Con esto, el fondo de verdad (el que se ve en el rebote) es del
   // mismo color que la pantalla que toca en cada momento.
   document.body.classList.toggle('fondo-oscuro', which === 'login' || which === 'trial-expired');
+  /* Mientras se usa la app, el fondo del documento pasa a ser el color de la
+     barra de abajo. Es lo que mata de raíz la franja blanca del iPhone: por
+     mucho que el navegador deje un hueco entre el final de la app y el borde
+     real de la pantalla (la franja del indicador, el rebote del scroll, el
+     teclado al cerrarse), lo que asoma ahí ya es del mismo color que la
+     barra y no se ve. El contenido no se oscurece porque #main pinta ahora
+     su propio fondo claro encima. */
+  document.body.classList.toggle('fondo-barra', which === 'app');
+  document.documentElement.classList.toggle('fondo-barra', which === 'app');
   window.scrollTo(0,0);
   quitarArranque();
 }
@@ -11410,6 +11484,12 @@ async function registrarAceptacionLegal() {
 }
 
 function enterAppOrShowTrialExpired() {
+  /* Reloj de inactividad a cero. Aquí pasa todo el mundo que entra: login
+     por correo, vuelta de Google y sesión restaurada al abrir la app. Los
+     trabajadores tienen su propio plazo (DIAS_SESION_TRABAJADOR) y no usan
+     este. */
+  if (!currentUser.isWorker) marcarActividadAdmin();
+
   if (isTrialExpired()) {
     showScreen('trial-expired');
     document.getElementById('trial-expired-admin-msg').style.display = esAdministrador() ? 'block' : 'none';
@@ -11935,6 +12015,45 @@ async function revalidarTrabajador() {
   } catch (e) { /* sin conexion: se sigue trabajando */ }
 }
 
+/* Caducidad de la sesión de administrador.
+
+   La del trabajador ya caducaba a los 30 días (DIAS_SESION_TRABAJADOR), pero
+   la del administrador no caducaba NUNCA: Supabase renueva el testigo solo
+   mientras se siga usando, así que un portátil robado o un móvil perdido
+   seguía dentro indefinidamente. Y el administrador ve MUCHO más que un
+   trabajador: toda la plantilla, los documentos laborales, los cobros y los
+   PINs de su gente.
+
+   Va por INACTIVIDAD, no por fecha fija de entrada: a quien entra a diario
+   no le molesta jamás, y un dispositivo que lleva un mes sin abrirse deja de
+   servir. El reloj se pone a cero cada vez que se abre la app o se vuelve a
+   ella.
+
+   Diseñado para no echar a nadie por error: si no hay marca, si no se puede
+   leer o si viene del futuro (reloj del móvil mal puesto), se reescribe y se
+   deja pasar. Solo se cierra la sesión con una marca válida y claramente
+   antigua. */
+const DIAS_INACTIVIDAD_ADMIN = 30;
+const CLAVE_ACTIVIDAD_ADMIN = 'opertra_ultima_actividad';
+
+function marcarActividadAdmin() {
+  try { localStorage.setItem(CLAVE_ACTIVIDAD_ADMIN, String(Date.now())); } catch (e) {}
+}
+
+function sesionAdminCaducada() {
+  try {
+    const bruto = localStorage.getItem(CLAVE_ACTIVIDAD_ADMIN);
+    if (!bruto) { marcarActividadAdmin(); return false; }
+    const t = Number(bruto);
+    // Un día de margen hacia adelante por si el reloj del aparato va adelantado.
+    if (!Number.isFinite(t) || t <= 0 || t > Date.now() + 86400000) {
+      marcarActividadAdmin();
+      return false;
+    }
+    return (Date.now() - t) > DIAS_INACTIVIDAD_ADMIN * 86400000;
+  } catch (e) { return false; }
+}
+
 async function checkExistingSession() {
   // Sesión de trabajador (entró con PIN, no tiene cuenta de Supabase Auth)
   try {
@@ -11970,6 +12089,21 @@ async function checkExistingSession() {
   try {
     const { data } = await getSupabase().auth.getSession();
     if (data.session) {
+      if (sesionAdminCaducada()) {
+        try { await getSupabase().auth.signOut({ scope: 'local' }); } catch (e) {}
+        try { localStorage.removeItem(CLAVE_ACTIVIDAD_ADMIN); } catch (e) {}
+        showScreen('login');
+        showAuthPanel('login');
+        const err = document.getElementById('login-error-text');
+        if (err) {
+          err.textContent = 'Por seguridad, la sesión se ha cerrado tras '
+            + DIAS_INACTIVIDAD_ADMIN + ' días sin usarse. Vuelve a entrar.';
+          const caja = document.getElementById('login-error');
+          if (caja) caja.style.display = 'flex';
+        }
+        return;
+      }
+      marcarActividadAdmin();
       await loadCurrentUserProfile(data.session.user);
       enterAppOrShowTrialExpired();
     } else {
@@ -12409,7 +12543,23 @@ async function guardarAjustesCuenta() {
 /* Version de los textos legales. Si cambias terminos o privacidad, sube este
    numero: asi queda constancia de QUE version acepto cada cliente y cuando.
    El RGPD (art. 5.2) exige poder demostrarlo, no basta con cumplirlo. */
-const VERSION_LEGAL = '2026-01';
+/* Se sube al cambiar los textos de forma sustancial, para que quede
+   constancia de QUE version acepto cada cliente. 2026-09 anade el Contrato
+   de Encargado del Tratamiento (RGPD art. 28), que pasa a formar parte de
+   los Terminos de uso. */
+const VERSION_LEGAL = '2026-09';
+
+/* La fecha que se enseña arriba de cada documento sale de VERSION_LEGAL, no
+   escrita a mano. Antes ponia "5 de agosto de 2026" fijo en el codigo: en
+   cuanto se tocaba un texto y no te acordabas de cambiar esa linea, los
+   documentos legales mentian sobre su propia fecha. Asi solo hay una cosa
+   que actualizar y no puede descuadrarse. */
+function fechaVersionLegal() {
+  const [a, m] = String(VERSION_LEGAL).split('-');
+  const d = new Date(Number(a), Number(m) - 1, 1);
+  if (isNaN(d)) return VERSION_LEGAL;
+  return d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+}
 
 const DATOS_TITULAR = {
   nombre: '[NOMBRE DEL TITULAR]',
@@ -12470,6 +12620,7 @@ const LEGAL_CONTENT = {
       <p>Es importante distinguir dos situaciones:</p>
       <p><b>Como responsable</b>, se tratan los datos de la persona que registra la empresa (nombre, correo) para prestar el servicio y facturarlo.</p>
       <p><b>Como encargado del tratamiento</b>, se alojan y procesan los datos que cada empresa introduce sobre su propio personal (nombre, puesto, PIN, documentación laboral, registro de jornada). En este caso, <b>la empresa contratante es la responsable</b> de esos datos: decide qué introduce, para qué, y debe informar a sus trabajadores. El titular de Opertra actúa únicamente siguiendo sus instrucciones.</p>
+      <p>Esa segunda relación está regulada por el <a onclick="openLegal('encargado')" style="color:var(--blue);text-decoration:underline;cursor:pointer;">Contrato de Encargado del Tratamiento</a>, que el artículo 28 del RGPD exige por escrito y que se acepta al registrar la empresa. Ahí figuran los subencargados utilizados, las medidas de seguridad y qué ocurre con los datos al darse de baja.</p>
 
       <h3>3. Datos que se tratan</h3>
       <p><b>De la cuenta:</b> nombre, correo electrónico, empresa, contraseña cifrada.</p>
@@ -12513,8 +12664,9 @@ const LEGAL_CONTENT = {
       <h3>2. Cookies que utilizamos</h3>
       <p><b>Técnicas o necesarias (no requieren consentimiento):</b></p>
       <p>
-        · <b>Sesión de acceso:</b> mantiene tu sesión iniciada para que no tengas que escribir la contraseña cada vez. Duración: hasta que cierras sesión.<br>
-        · <b>Sesión de trabajador:</b> recuerda al trabajador que ha entrado con PIN. Duración: hasta que cierra sesión.<br>
+        · <b>Sesión de acceso (administradores y encargados):</b> mantiene la sesión iniciada para no escribir la contraseña cada vez. Si <b>no</b> se marca "Mantener la sesión abierta", se borra al cerrar el navegador. Si se marca, se conserva en ese dispositivo y <b>caduca automáticamente a los 30 días sin usarse</b>, para que un equipo perdido o robado deje de dar acceso.<br>
+        · <b>Sesión de trabajador (acceso con PIN):</b> permite fichar sin teclear el PIN cada día. Se guarda en el propio móvil del trabajador e incluye su PIN, porque es lo que acredita ante el sistema que el fichaje lo hace él. <b>Caduca a los 30 días</b> y deja de valer en cuanto la empresa le da de baja. Si no se marca "Mantener la sesión abierta" (móvil compartido), dura solo mientras la pestaña siga abierta.<br>
+        · <b>Último código de empresa:</b> se recuerda el código para no teclearlo cada mañana. Va aparte de la sesión y no incluye el PIN.<br>
         · <b>Preferencia de cookies:</b> guarda tu elección en este aviso. Duración: 12 meses.
       </p>
       <p><b>Analíticas (opcionales):</b></p>
@@ -12559,13 +12711,91 @@ const LEGAL_CONTENT = {
       <p>Se realizarán esfuerzos razonables para mantener el servicio disponible de forma continuada, pudiendo interrumpirse por mantenimiento programado, incidencias técnicas o causas ajenas. El soporte se presta por correo electrónico en horario laboral.</p>
 
       <h3>8. Tus datos son tuyos</h3>
-      <p>Los datos introducidos son propiedad de la empresa cliente. Puede exportarlos en cualquier momento desde la aplicación. En caso de baja, dispondrá de 30 días para descargarlos, transcurridos los cuales podrán ser eliminados definitivamente.</p>
+      <p>Los datos introducidos son propiedad de la empresa cliente. Puede exportarlos en cualquier momento desde la aplicación, sin pedir permiso ni esperar a nadie.</p>
+      <p>En caso de baja, los datos siguen disponibles durante un <b>periodo de gracia de 30 días</b> para poder descargarlos. Pasado ese plazo se marcan para eliminación y se <b>borran definitivamente 60 días después</b>, salvo lo que deba conservarse por obligación legal (registros de jornada durante cuatro años, información de facturación durante los plazos mercantiles). El borrado es automático y no depende de que nadie lo solicite.</p>
 
       <h3>9. Limitación de responsabilidad</h3>
       <p>Salvo dolo o negligencia grave, la responsabilidad del titular queda limitada al importe abonado por la empresa cliente en los tres meses anteriores al hecho causante.</p>
 
       <h3>10. Modificaciones</h3>
       <p>Estos términos podrán actualizarse. Los cambios sustanciales se comunicarán con al menos 30 días de antelación, pudiendo la empresa cliente cancelar la suscripción si no los acepta.</p>
+
+      <h3>11. Protección de datos</h3>
+      <p>Dado que Opertra trata datos personales del personal de la empresa cliente por cuenta de esta, resulta de aplicación el <a onclick="openLegal('encargado')" style="color:var(--blue);text-decoration:underline;cursor:pointer;">Contrato de Encargado del Tratamiento</a>, que forma parte integrante de estos términos y se acepta junto con ellos.</p>
+    `,
+  },
+
+  /* Contrato de encargado del tratamiento (RGPD art. 28.3).
+     Falta un dato pero sobra un contrato: cuando una empresa mete en Opertra
+     los datos de su personal, ella es la RESPONSABLE y Opertra el ENCARGADO,
+     y el art. 28.3 del RGPD exige que esa relación esté por escrito con un
+     contenido mínimo tasado. Sin este documento, la empresa cliente incumple
+     desde el minuto uno — y el titular de Opertra también. Es lo primero que
+     pide cualquier asesoría antes de firmar. */
+  encargado: {
+    title: "Contrato de Encargado del Tratamiento",
+    body: `
+      <p>Este contrato regula el tratamiento de datos personales que Opertra realiza <b>por cuenta de la empresa cliente</b>, en cumplimiento del artículo 28 del Reglamento (UE) 2016/679 (RGPD). Se acepta junto con los Términos de uso y forma parte de ellos.</p>
+
+      <h3>1. Las dos partes y su papel</h3>
+      <p><b>Responsable del tratamiento:</b> la empresa cliente que contrata Opertra. Es quien decide qué datos introduce, con qué finalidad y durante cuánto tiempo. Es también quien debe informar a sus trabajadores.</p>
+      <p><b>Encargado del tratamiento:</b> el titular de Opertra, identificado en el Aviso legal, que trata esos datos únicamente para prestar el servicio contratado.</p>
+
+      <h3>2. Objeto, naturaleza y finalidad</h3>
+      <p>El alojamiento y procesamiento de los datos que la empresa cliente introduce en la aplicación, con la única finalidad de prestarle el servicio de gestión de personal, maquinaria, trabajos, registro de jornada, incidencias y control de cobros.</p>
+
+      <h3>3. Duración</h3>
+      <p>Mientras esté vigente la suscripción, más el periodo de conservación posterior descrito en el punto 9.</p>
+
+      <h3>4. Tipo de datos y personas afectadas</h3>
+      <p><b>Categorías de interesados:</b> personal de la empresa cliente (trabajadores, encargados y administradores) y personas de contacto de sus clientes.</p>
+      <p><b>Categorías de datos:</b> identificativos (nombre, código de trabajador, fotografía opcional), profesionales (puesto, obra y maquinaria asignadas), credenciales de acceso (PIN, contraseña cifrada), registro de jornada (entradas, salidas y correcciones), vacaciones, incidencias reportadas y documentación laboral que la empresa decida subir (carnets, certificados, formación en PRL).</p>
+      <p>Parte de esa documentación laboral puede contener <b>datos de categorías especiales</b> (por ejemplo, un certificado de aptitud médica). La empresa cliente es quien decide subirlos y debe contar con base legal para ello; Opertra no los solicita ni los trata de forma diferenciada.</p>
+
+      <h3>5. Obligaciones del encargado</h3>
+      <p>El titular de Opertra se obliga a:</p>
+      <p>
+        · Tratar los datos <b>únicamente siguiendo instrucciones documentadas</b> del responsable, incluidas las relativas a transferencias internacionales. El uso normal de la aplicación constituye dicha instrucción.<br>
+        · No utilizar los datos para fines propios, ni cederlos, ni venderlos, ni emplearlos para entrenar sistemas de terceros.<br>
+        · Garantizar que quien acceda a los datos esté sujeto a <b>deber de confidencialidad</b>.<br>
+        · Aplicar las medidas de seguridad del artículo 32 del RGPD, detalladas en el punto 7.<br>
+        · <b>Asistir al responsable</b> cuando un trabajador ejerza sus derechos de acceso, rectificación, supresión, oposición, limitación o portabilidad, poniendo a su disposición las funciones de consulta y exportación de la aplicación.<br>
+        · Ayudarle también a cumplir los artículos 32 a 36 (seguridad, notificación de brechas y evaluaciones de impacto), en la medida de la información disponible.<br>
+        · <b>Notificar sin dilación indebida</b> cualquier violación de seguridad de la que tenga conocimiento, con la información necesaria para que el responsable pueda cumplir su propio deber de notificación en 72 horas.<br>
+        · Poner a su disposición la información necesaria para demostrar el cumplimiento de este contrato y permitir auditorías, en los términos del punto 8.
+      </p>
+
+      <h3>6. Subencargados</h3>
+      <p>El responsable autoriza de forma general el uso de los siguientes subencargados, necesarios para prestar el servicio:</p>
+      <p>
+        · <b>Supabase Inc.</b> — base de datos y almacenamiento de archivos. Servidores en la Unión Europea.<br>
+        · <b>Vercel Inc.</b> — alojamiento y distribución de la aplicación. Servidores en la Unión Europea.
+      </p>
+      <p>Ambas entidades tienen matriz en Estados Unidos. En la medida en que ello pueda suponer un acceso desde fuera del Espacio Económico Europeo, la transferencia se ampara en las <b>Cláusulas Contractuales Tipo</b> aprobadas por la Comisión Europea y/o en el Marco de Privacidad de Datos UE-EE. UU., según corresponda a cada proveedor.</p>
+      <p>Cualquier incorporación o sustitución de subencargados se comunicará con al menos <b>30 días de antelación</b>. Si el responsable se opone motivadamente, podrá resolver la suscripción sin penalización.</p>
+      <p>Los subencargados quedan sujetos a las mismas obligaciones de protección de datos que este contrato impone, respondiendo el encargado de su actuación.</p>
+
+      <h3>7. Medidas de seguridad</h3>
+      <p>
+        · <b>Aislamiento entre empresas a nivel de base de datos</b>: cada consulta se filtra en el servidor por la empresa de quien pregunta, no en el navegador. Una empresa no puede leer los datos de otra aunque manipule la aplicación.<br>
+        · Cifrado en tránsito (HTTPS obligatorio) y en reposo.<br>
+        · Contraseñas almacenadas de forma irreversible; nunca en texto claro.<br>
+        · Documentos accesibles solo mediante enlaces temporales que caducan.<br>
+        · Registro de actividad con quién cambió qué y cuándo, conservando los valores originales de cada corrección.<br>
+        · Copias de seguridad gestionadas por el proveedor de base de datos.<br>
+        · Limitación de intentos de acceso por PIN para frenar ataques por fuerza bruta.
+      </p>
+
+      <h3>8. Auditoría</h3>
+      <p>El responsable podrá solicitar, una vez al año y con preaviso de 30 días, la información necesaria para verificar el cumplimiento de este contrato. Si desea realizar una auditoría presencial o encargarla a un tercero, se acordarán previamente su alcance y coste, sin que pueda comprometer la seguridad ni la confidencialidad de otras empresas clientes.</p>
+
+      <h3>9. Devolución y supresión al finalizar</h3>
+      <p>La empresa cliente puede <b>exportar todos sus datos en cualquier momento</b> desde la propia aplicación, sin necesidad de solicitarlo.</p>
+      <p>Tras la baja o el fin del periodo de prueba, los datos permanecen disponibles durante un periodo de gracia de <b>30 días</b> para que puedan descargarse. Transcurrido ese plazo, se marcan para eliminación y se <b>borran definitivamente 60 días después</b> —incluidos los documentos y fotografías almacenados—, salvo aquello que deba conservarse por obligación legal, como los registros de jornada durante los cuatro años del artículo 34.9 del Estatuto de los Trabajadores o la información de facturación durante los plazos mercantiles.</p>
+      <p>Este borrado está <b>automatizado</b>: se ejecuta solo, cada noche, sin depender de que nadie se acuerde de hacerlo.</p>
+
+      <h3>10. Responsabilidad</h3>
+      <p>Cada parte responde de los incumplimientos que le sean imputables. El responsable garantiza que dispone de base legal para los tratamientos que ordena y que ha informado debidamente a sus trabajadores, conforme al RGPD y al Estatuto de los Trabajadores.</p>
     `,
   },
 };
@@ -12724,7 +12954,10 @@ function arrancarVigilanciaDeVersion() {
   // Al volver a la app se mira en el acto, pero como mucho una vez por
   // minuto: si no, cambiar de pestaña a lo tonto dispararía una ronda cada vez.
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) rondaDeComprobacion(60 * 1000);
+    if (document.hidden) return;
+    rondaDeComprobacion(60 * 1000);
+    // Volver a la app cuenta como uso: reinicia el plazo de inactividad.
+    if (currentUser && currentUser.id && !currentUser.isWorker) marcarActividadAdmin();
   });
 
   // Cuando el service worker nuevo toma el mando, la página se recarga sola
@@ -13005,7 +13238,7 @@ function openLegal(type) {
       <h2>${esc(c.title)}</h2>
       <button class="drawer-close" onclick="closeLegal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="legal-updated">Última actualización: 5 de agosto de 2026</div>
+    <div class="legal-updated">Última actualización: ${esc(fechaVersionLegal())} · versión ${esc(VERSION_LEGAL)}</div>
     ${c.body}
   `;
   document.getElementById('legal-overlay').classList.add('active');
