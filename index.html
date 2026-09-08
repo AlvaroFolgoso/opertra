@@ -2219,7 +2219,7 @@
     </div>
   </div>
 
-  <div id="main">
+  <div id="main" role="main">
     <div id="trial-banner" style="display:none;"></div>
     <div id="topbar">
       <div>
@@ -11626,6 +11626,47 @@ function terminarOperacion(clave) { operacionesEnCurso.delete(clave); }
 
    Es una red general: donde ademas hace falta bloquear el boton mientras
    dura la peticion, se usa empezarOperacion() + setButtonLoading(). */
+/* ======================================================================
+   ETIQUETAS DE FORMULARIO: TOCABLES Y LEGIBLES PARA UN LECTOR DE PANTALLA
+
+   Los 95 <label class="form-label"> de la app van al lado de su campo pero
+   sin el atributo "for" que los une. Dos consecuencias:
+
+   - Tocar el texto de la etiqueta no hacía nada. En un móvil, y con
+     guantes de obra, el rótulo es una superficie mucho más fácil de acertar
+     que el propio recuadro: ahora lleva el cursor al campo.
+   - Un lector de pantalla no sabía qué nombre tiene cada campo. Al entrar
+     en uno se le pone el nombre que dice su rótulo, si no tenía otro.
+
+   Va con delegación de eventos en vez de tocar las 95 etiquetas (muchas
+   llevan identificadores que se generan al vuelo) y en vez de vigilar el
+   documento en segundo plano, que sería justo lo contrario de lo que se
+   busca: esto solo hace algo cuando alguien toca o entra en un campo.
+   ====================================================================== */
+function campoDeLaEtiqueta(lab) {
+  const grupo = lab.closest('.form-group') || lab.parentElement;
+  if (!grupo) return null;
+  return grupo.querySelector('input:not([type=hidden]), select, textarea');
+}
+
+document.addEventListener('click', (e) => {
+  const lab = e.target && e.target.closest && e.target.closest('label.form-label');
+  if (!lab || lab.htmlFor) return;
+  const campo = campoDeLaEtiqueta(lab);
+  if (campo && !campo.disabled) campo.focus();
+});
+
+document.addEventListener('focusin', (e) => {
+  const campo = e.target;
+  if (!campo || !campo.matches || !campo.matches('input, select, textarea')) return;
+  if (campo.getAttribute('aria-label') || campo.getAttribute('aria-labelledby')) return;
+  if (campo.id && document.querySelector('label[for="' + campo.id + '"]')) return;
+  const grupo = campo.closest('.form-group');
+  const lab = grupo && grupo.querySelector('label.form-label');
+  const texto = lab && lab.textContent.trim();
+  if (texto) campo.setAttribute('aria-label', texto);
+});
+
 const ultimoToquePorBoton = new WeakMap();
 document.addEventListener('click', (e) => {
   const btn = e.target && e.target.closest && e.target.closest('button');
