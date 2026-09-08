@@ -6276,14 +6276,64 @@ function guardarCola(cola) {
   try { localStorage.setItem(COLA_FICHAJES, JSON.stringify(cola)); } catch (e) {}
 }
 
+/* ----------------------------------------------------------------------
+   FICHAJES QUE NO SE HAN PODIDO ENVIAR
+
+   Antes, un fichaje que agotaba los 8 intentos (PIN cambiado, trabajador
+   dado de baja, un rechazo del servidor) o que se quedaba más de 3 días en
+   la cola, SE BORRABA SIN DECIR NADA. Nadie se enteraba: ni el trabajador,
+   que creía haber fichado, ni la empresa, que se quedaba sin el registro.
+
+   Y esto no es un dato cualquiera: el registro de jornada es obligatorio
+   por el artículo 34.9 del Estatuto de los Trabajadores. Una jornada que
+   desaparece en silencio es un agujero legal y, muy probablemente, una
+   discusión de nómina a fin de mes.
+
+   Ahora se aparta en una lista separada que NO se borra sola, se avisa al
+   trabajador en su pantalla de fichaje con la fecha y la hora exactas para
+   que pueda decírselo a su encargado, y se le deja reintentar el envío.
+   ---------------------------------------------------------------------- */
+const FICHAJES_FALLIDOS = 'opertra_fichajes_no_enviados';
+const TOPE_FALLIDOS = 50;
+
+function leerFallidos() {
+  try {
+    const t = localStorage.getItem(FICHAJES_FALLIDOS);
+    const c = t ? JSON.parse(t) : [];
+    return Array.isArray(c) ? c : [];
+  } catch (e) { return []; }
+}
+function guardarFallidos(lista) {
+  try { localStorage.setItem(FICHAJES_FALLIDOS, JSON.stringify(lista.slice(-TOPE_FALLIDOS))); } catch (e) {}
+}
+function apartarFichajeFallido(f, motivo) {
+  // El PIN no se conserva aquí: esto es un aviso para la persona, no algo
+  // que se vaya a reenviar tal cual sin que ella lo pida.
+  const { pin, ...sinPin } = f || {};
+  const lista = leerFallidos();
+  lista.push({ ...sinPin, motivo: motivo || 'desconocido', apartadoEl: Date.now() });
+  guardarFallidos(lista);
+}
+function fichajesFallidos() { return leerFallidos().length; }
+function olvidarFichajesFallidos() {
+  try { localStorage.removeItem(FICHAJES_FALLIDOS); } catch (e) {}
+  renderFichaje();
+}
+
 /* Guarda un fichaje que no se ha podido enviar. El PIN NO se guarda en
    claro más de lo imprescindible: se necesita para reenviarlo, y se borra
    en cuanto se manda. */
 function encolarFichaje(datos) {
   const cola = leerCola();
-  // Más de 3 días no sirve: el servidor no los acepta y solo estorban
+  // Más de 3 días no sirve: el servidor no los acepta y solo estorban.
+  // Pero no se tiran a la basura: se apartan para poder avisar de que ese
+  // día quedó sin registrar (ver apartarFichajeFallido).
   const limite = Date.now() - 3 * 24 * 3600 * 1000;
-  const viva = cola.filter(f => f.momento > limite);
+  const viva = [];
+  cola.forEach(f => {
+    if (f.momento > limite) viva.push(f);
+    else apartarFichajeFallido(f, 'llevaba más de 3 días sin poder enviarse');
+  });
   viva.push({ ...datos, momento: Date.now(), intentos: 0 });
   guardarCola(viva);
   return viva.length;
@@ -6325,7 +6375,14 @@ async function enviarColaFichajes(avisarAlTerminar) {
       // rechaza (PIN cambiado, trabajador dado de baja), se descarta tras
       // varios intentos para no reintentar eternamente.
       const intentos = (f.intentos || 0) + 1;
-      if (intentos < 8) quedan.push({ ...f, intentos });
+      if (intentos < 8) {
+        quedan.push({ ...f, intentos });
+      } else {
+        // Agotados los intentos ya no es cosa de la red: el servidor lo
+        // rechaza. Antes se borraba aquí sin decir nada y la jornada
+        // desaparecía. Ahora se aparta y se avisa.
+        apartarFichajeFallido(f, mensajeError(e) || 'el servidor lo rechazó');
+      }
     }
   }
 
@@ -6743,6 +6800,7 @@ function renderFicharCard() {
               </div>`;
             })() : ''}
             ${avisoFichajesPendientes()}
+            ${avisoFichajesFallidos()}
             ${bloqueLecturas(true)}
             ${(() => {
               const dela = machines.find(m => m.dbId === abierto.machineId) || null;
@@ -6797,6 +6855,7 @@ function renderFicharCard() {
                 </div>
               </div>
               ${avisoFichajesPendientes()}
+              ${avisoFichajesFallidos()}
               ${bloqueLecturas(false)}
               ${(() => {
                 // La que ha elegido HOY, que puede no ser la suya de siempre
@@ -6954,6 +7013,43 @@ function avisoFichajesPendientes() {
         </div>
         <button class="btn-ghost" style="margin-top:7px;" onclick="enviarColaFichajes(true)">
           Intentar enviar ahora
+        </button>
+      </div>
+    </div>`;
+}
+
+/* Fichajes que NO han llegado a guardarse. Esto no se puede pasar por alto:
+   es una jornada trabajada que no está registrada, y el registro es
+   obligatorio por ley. Se enseñan con fecha y hora para que el trabajador
+   pueda decírselo a su encargado y se corrija a mano. */
+function avisoFichajesFallidos() {
+  const fallidos = leerFallidos();
+  if (!fallidos.length) return '';
+  const lista = fallidos.slice(-5).reverse().map(f => {
+    const d = new Date(f.momento);
+    const cuando = isNaN(d) ? 'fecha desconocida'
+      : d.toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `<li style="margin-top:3px;">${esc(cuando)}</li>`;
+  }).join('');
+  return `
+    <div style="margin-top:16px;padding:13px 15px;border-radius:10px;
+                background:var(--danger-bg);border:1px solid var(--danger);
+                display:flex;gap:11px;align-items:flex-start;text-align:left;">
+      <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);margin-top:2px;"></i>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13.5px;font-weight:600;color:var(--danger);">
+          ${fallidos.length === 1
+            ? 'Un fichaje no se pudo guardar'
+            : `${fallidos.length} fichajes no se pudieron guardar`}
+        </div>
+        <div style="font-size:12.5px;color:var(--steel);margin-top:3px;line-height:1.5;">
+          <b>Avisa a tu encargado</b> para que lo añada a mano: esa jornada no
+          ha quedado registrada.
+          <ul style="margin:6px 0 0;padding-left:18px;">${lista}</ul>
+          ${fallidos.length > 5 ? `<div style="margin-top:4px;">…y ${fallidos.length - 5} más.</div>` : ''}
+        </div>
+        <button class="btn-ghost" style="margin-top:7px;" onclick="olvidarFichajesFallidos()">
+          Ya está resuelto, quitar el aviso
         </button>
       </div>
     </div>`;
