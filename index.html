@@ -350,6 +350,14 @@
   .user-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
   .user-company { font-size: 10px; color: var(--steel); font-weight: 500; letter-spacing: 0.01em; }
 
+  /* Alto total de la barra de abajo del móvil: relleno arriba + fila de
+     botones + relleno abajo. Se define aquí, en un solo sitio, porque lo
+     usan dos cosas que TIENEN que cuadrar entre sí: la propia barra y el
+     hueco que le reserva el contenido para no quedar tapado por ella. */
+  :root {
+    --alto-nav: calc(6px + clamp(46px, 13vw, 60px)
+                 + var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px)))));
+  }
   .view { display: none; padding: 32px; overflow: auto; flex: 1; contain: layout paint; }
   .view.active { display: block; }
 
@@ -1389,7 +1397,10 @@
     /* Se escribe el padding completo: antes habia otra regla mas arriba con
        padding-bottom y esta la borraba, asi que el ultimo boton de cada
        pantalla se quedaba debajo de la barra y no habia forma de tocarlo. */
-    .view { padding: 16px 16px 24px; }
+    /* El hueco de abajo incluye el alto de la barra: como la barra ya no
+       ocupa sitio en la columna (va fija al borde de la pantalla), sin esto
+       la última tarjeta de cada pantalla quedaría tapada por ella. */
+    .view { padding: 16px 16px calc(24px + var(--alto-nav)); }
     .stat-row { gap: 10px; }
     .stat-card { min-width: 100%; padding: 14px; }
     .toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -1498,9 +1509,29 @@
      ====================================================================== */
   #mobile-nav { display: none; }
   @media (max-width: 768px), (max-height: 500px) {
+    /* ==================================================================
+       LA BARRA VA CLAVADA AL BORDE DE LA PANTALLA, NO AL FINAL DE #app
+
+       Antes era el último elemento de la columna que forma #app. Eso
+       funciona solo si #app mide EXACTAMENTE la pantalla, y en un iPhone
+       instalado como app eso no siempre se cumple: si el área de la página
+       se queda más corta (el teclado, un giro, una restauración de la app),
+       la barra baja hasta donde llegue #app y por debajo queda un hueco.
+       Es el fallo que llevaba días sin resolverse: yo ajustaba el relleno de
+       la barra cuando lo que fallaba era el alto del contenedor.
+
+       Con position:fixed y bottom:0 la barra se pega al borde de lo que el
+       navegador considera la pantalla. No hay contenedor de por medio, así
+       que no hay nada que pueda quedarse corto: por debajo de la barra no
+       existe sitio donde meter un hueco.
+
+       Como sale del flujo, el contenido reserva su espacio con
+       padding-bottom (ver .view más abajo), o el último elemento de cada
+       pantalla quedaría tapado.
+       ================================================================== */
     #mobile-nav {
-      display: block; order: 2; flex: 0 0 auto;
-      position: relative; z-index: 90;
+      display: block;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
       background: var(--graphite);
       /* Sin línea de separación: una sombra hace que la barra se lea como
          algo que flota por encima del contenido, no como un trozo pegado. */
@@ -1544,23 +1575,18 @@
                var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px))))
                calc(4px + env(safe-area-inset-right, 0px));
 
-      /* Alto CALCULADO, no "lo que salga": relleno de arriba + fila de
-         botones + relleno de abajo. Con esto la barra no puede crecer por
-         nada — ni por un icono que llegue tarde, ni por un texto que ocupe
-         dos líneas, ni por algo que se cuele dentro. Y overflow:hidden
-         garantiza que si algo se pasa, se recorta en vez de estirarla. */
-      height: calc(6px + clamp(46px, 13vw, 60px)
-                   + var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px)))));
+      /* Alto CALCULADO, no "lo que salga". Con esto la barra no puede crecer
+         por nada — ni por un icono que llegue tarde, ni por un texto de dos
+         líneas, ni por algo que se cuele dentro. Y overflow:hidden garantiza
+         que si algo se pasa, se recorta en vez de estirarla.
+         La misma medida la usa el contenido para reservar su hueco. */
+      height: var(--alto-nav);
       overflow: hidden;
       /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
          provocar el zoom del doble toque. */
       touch-action: manipulation;
       -webkit-user-select: none; user-select: none;
       -webkit-tap-highlight-color: transparent;
-      /* Si tras medir resulta que el navegador deja hueco por debajo, la
-         barra se baja exactamente eso. En el caso normal vale 0 y no mueve
-         nada (ver ajustarBarraInferior). */
-      transform: translateY(var(--baja-barra, 0px));
     }
     /* Red de seguridad contra el hueco blanco de debajo: en el iPhone real
        (sobre todo instalada como app, no como pestaña de Safari) el aviso
