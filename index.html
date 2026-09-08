@@ -5852,7 +5852,7 @@ function openObraDrawer(id) {
         <option value="">Asignar trabajador…</option>
         ${freeWorkers.map(w => `<option value="${esc(w.id)}">${esc(w.name)}${w.project ? ' (en ' + w.project + ')' : ''}</option>`).join('')}
       </select>
-      <button class="btn btn-amber" style="padding:8px 12px;" onclick="assignWorkerToObra('${id}')"><i class="fa-solid fa-plus"></i></button>
+      <button class="btn btn-amber" id="btn-asignar-trab" style="padding:8px 12px;" onclick="assignWorkerToObra('${id}')"><i class="fa-solid fa-plus"></i></button>
     </div>
 
     <div class="doc-section-title"><span class="f-display" style="font-size:15px;">${tm('PP')} (${pMachines.length})</span></div>
@@ -5869,7 +5869,7 @@ function openObraDrawer(id) {
         <option value="">Asignar ${tm('s')}…</option>
         ${freeMachines.map(m => `<option value="${esc(m.id)}">${esc(m.id)} · ${esc(m.type)}${m.project ? ' (en ' + m.project + ')' : ''}</option>`).join('')}
       </select>
-      <button class="btn btn-amber" style="padding:8px 12px;" onclick="assignMachineToObra('${id}')"><i class="fa-solid fa-plus"></i></button>
+      <button class="btn btn-amber" id="btn-asignar-maq" style="padding:8px 12px;" onclick="assignMachineToObra('${id}')"><i class="fa-solid fa-plus"></i></button>
     </div>
 
     <div class="doc-section-title"><span class="f-display" style="font-size:15px;">HORAS TRABAJADAS AQUÍ</span></div>
@@ -5899,13 +5899,21 @@ function openObraDrawer(id) {
   marcarNavegacion();
 }
 
+/* Los dos botones de asignar no daban NINGUNA señal mientras guardaban. En
+   una obra con dos rayas eso son varios segundos en los que tocas y no pasa
+   nada visible: se vuelve a tocar, y se mandaban dos peticiones. Ahora el
+   boton se bloquea y enseña que esta trabajando, y empezarOperacion() impide
+   que entren dos a la vez aunque el dedo sea mas rapido que la pantalla. */
 async function assignWorkerToObra(projId) {
   if (!esAdministrador()) return;
+  if (!hayConexion()) return;
   const code = document.getElementById('assign-worker-select').value;
   if (!code) return;
   const w = workers.find(x => x.id === code);
   const proj = projects.find(p => p.id === projId);
   if (!w || !proj) return;
+  if (!empezarOperacion('asignar-trab')) return;
+  setButtonLoading('btn-asignar-trab', true, '', '<i class="fa-solid fa-plus"></i>');
   try {
     const { error } = await getSupabase().from('workers')
       .update({ project_id: proj.dbId }).eq('id', w.dbId);
@@ -5916,16 +5924,22 @@ async function assignWorkerToObra(projId) {
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
+    setButtonLoading('btn-asignar-trab', false, '', '<i class="fa-solid fa-plus"></i>');
     aviso('No se pudo asignar: ' + mensajeError(err));
+  } finally {
+    terminarOperacion('asignar-trab');
   }
 }
 async function assignMachineToObra(projId) {
   if (!esAdministrador()) return;
+  if (!hayConexion()) return;
   const code = document.getElementById('assign-machine-select').value;
   if (!code) return;
   const m = machines.find(x => x.id === code);
   const proj = projects.find(p => p.id === projId);
   if (!m || !proj) return;
+  if (!empezarOperacion('asignar-maq')) return;
+  setButtonLoading('btn-asignar-maq', true, '', '<i class="fa-solid fa-plus"></i>');
   try {
     const { error } = await getSupabase().from('machines').update({ project_id: proj.dbId }).eq('id', m.dbId);
     if (error) throw error;
@@ -5940,7 +5954,10 @@ async function assignMachineToObra(projId) {
     openObraDrawer(projId);
     pintarPestanaActual();
   } catch (err) {
+    setButtonLoading('btn-asignar-maq', false, '', '<i class="fa-solid fa-plus"></i>');
     aviso('No se pudo asignar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
+  } finally {
+    terminarOperacion('asignar-maq');
   }
 }
 
@@ -11341,6 +11358,41 @@ function empezarOperacion(clave) {
   return true;
 }
 function terminarOperacion(clave) { operacionesEnCurso.delete(clave); }
+
+/* ======================================================================
+   FRENO GENERAL AL DOBLE TOQUE
+
+   Muchas acciones que escriben en la base (asignar, dar vacaciones, marcar
+   un cobro, cambiar el QR de una maquina...) no tenian ninguna proteccion
+   propia. Con buena cobertura no se nota, pero en obra la respuesta tarda
+   segundos: tocas, no pasa nada visible, vuelves a tocar, y se manda la
+   peticion DOS VECES. Ahi es donde salen las vacaciones duplicadas o los
+   dos apuntes iguales.
+
+   Esto ignora el segundo toque sobre el MISMO boton dentro de medio
+   segundo. Va en fase de captura para que el evento no llegue siquiera al
+   onclick del boton. No afecta a la barra de navegacion ni al menu (cambiar
+   de pestaña rapido es legitimo y no escribe nada), ni a nada que no sea un
+   <button>.
+
+   Es una red general: donde ademas hace falta bloquear el boton mientras
+   dura la peticion, se usa empezarOperacion() + setButtonLoading(). */
+const ultimoToquePorBoton = new WeakMap();
+document.addEventListener('click', (e) => {
+  const btn = e.target && e.target.closest && e.target.closest('button');
+  if (!btn) return;
+  if (btn.closest('#mobile-nav, #more-sheet, #nav-items')) return;
+
+  const ahora = Date.now();
+  const anterior = ultimoToquePorBoton.get(btn) || 0;
+  if (ahora - anterior < 500) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    return;
+  }
+  ultimoToquePorBoton.set(btn, ahora);
+}, true);
 
 /* El botón puede haber desaparecido si la pantalla se ha repintado mientras
    la operación estaba en marcha. Sin esta comprobación, la operación entera
