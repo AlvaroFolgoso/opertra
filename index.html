@@ -2,7 +2,26 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<!-- SE HA QUITADO interactive-widget=resizes-content, y es LA CAUSA del hueco
+     de abajo que llevaba días sin resolverse.
+
+     Esa opción le pide al navegador que ENCOJA el área de la página cuando
+     sale el teclado. Como #app va anclado a esa área (position:fixed con
+     inset:0), al encogerse la app se queda más corta que la pantalla y
+     aparece un hueco por debajo de la barra. Al cerrar el teclado, iOS no
+     siempre devuelve el área a su tamaño, así que el hueco se queda ahí. Y
+     instalada como app en la pantalla de inicio, ese estado sobrevive a
+     cerrarla y abrirla: por eso pasó de salir "solo al escribir" a salir
+     siempre.
+
+     Es exactamente lo que se describía: aparecía al sacar el teclado en
+     "añadir obra", y a partir de ahí ya no se iba.
+
+     Sin esa opción manda el comportamiento normal: el área de la página NO
+     cambia de tamaño y el teclado se pone por encima. La barra de abajo se
+     queda donde tiene que estar siempre, y el navegador ya se encarga de
+     desplazar el campo que estás escribiendo para que se vea. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Opertra · Gestión de flota y personal</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1C2126">
@@ -1524,6 +1543,15 @@
       padding: 6px calc(4px + env(safe-area-inset-left, 0px))
                var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px))))
                calc(4px + env(safe-area-inset-right, 0px));
+
+      /* Alto CALCULADO, no "lo que salga": relleno de arriba + fila de
+         botones + relleno de abajo. Con esto la barra no puede crecer por
+         nada — ni por un icono que llegue tarde, ni por un texto que ocupe
+         dos líneas, ni por algo que se cuele dentro. Y overflow:hidden
+         garantiza que si algo se pasa, se recorta en vez de estirarla. */
+      height: calc(6px + clamp(46px, 13vw, 60px)
+                   + var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px)))));
+      overflow: hidden;
       /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
          provocar el zoom del doble toque. */
       touch-action: manipulation;
