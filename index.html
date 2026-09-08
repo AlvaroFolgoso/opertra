@@ -13463,9 +13463,28 @@ async function handleAuthRedirect() {
     const vieneACambiarContrasena = url.searchParams.get('accion') === 'nueva-contrasena';
 
     if (code) {
-      await getSupabase().auth.exchangeCodeForSession(window.location.href);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return vieneACambiarContrasena ? 'nueva-contrasena' : undefined;
+      try {
+        await getSupabase().auth.exchangeCodeForSession(window.location.href);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return vieneACambiarContrasena ? 'nueva-contrasena' : undefined;
+      } catch (e) {
+        // El inicio con Google/correo se quedó a medias: normalmente porque el
+        // código de vuelta ya se usó en un primer intento (dos toques seguidos
+        // a "entrar con Google") y el segundo llega caducado. Antes esto caía
+        // en silencio y devolvía a la portada, que es lo que se veía como
+        // "se quedó pillado". Ahora se limpia la dirección y se enseña el login
+        // con un aviso claro para reintentar de forma limpia.
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showScreen('login');
+        showAuthPanel('login');
+        const err = document.getElementById('login-error-text');
+        if (err) {
+          err.textContent = 'No se pudo completar el inicio de sesión. Inténtalo otra vez.';
+          const caja = document.getElementById('login-error');
+          if (caja) caja.style.display = 'flex';
+        }
+        return 'entrada-fallida';
+      }
     }
     if (hashParams && hashParams.get('access_token')) {
       const access_token = hashParams.get('access_token');
@@ -14911,6 +14930,10 @@ comprobarInstalacion();
 vigilarSesion();
 avisarSinConexion(navigator.onLine !== false);
 handleAuthRedirect().then(async (motivo) => {
+  // Si la vuelta de Google/correo falló, handleAuthRedirect ya ha mostrado el
+  // login con su aviso: no seguimos, o checkExistingSession lo pisaría con la
+  // portada (que es justo el "me devolvió a la landing" de antes).
+  if (motivo === 'entrada-fallida') return;
   await checkExistingSession();
   // Ya dentro, se le obliga a poner contraseña antes de nada
   if (motivo === 'nueva-contrasena' && !currentUser.isWorker) mostrarModalNuevaContrasena();
