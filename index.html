@@ -3190,6 +3190,143 @@ function envolverEscrituras(cliente) {
    la respuesta, el segundo intento crea otra fila. Los fichajes tienen su
    propia cola con protección contra duplicados en el servidor.
    ====================================================================== */
+/* ======================================================================
+   RED DE SEGURIDAD PARA LOS FALLOS QUE NADIE HA PREVISTO
+
+   Hasta ahora no había NINGÚN manejador global de errores. Si algo
+   reventaba fuera de un try/catch —un fallo raro, un dato con una forma
+   inesperada, una promesa que nadie recoge— la app se quedaba a medias en
+   silencio: un botón que no hace nada, una pantalla que no termina de
+   pintarse. Ni el usuario sabía qué hacer, ni nosotros nos enterábamos.
+
+   Con cien empresas eso es lo peor que puede pasar: un fallo que afecta a
+   treinta clientes y del que te enteras cuando llama el primero.
+
+   Esto hace tres cosas:
+     - Guarda los últimos fallos en el móvil, con hora y sitio, para poder
+       consultarlos si alguien llama.
+     - Avisa a la persona de forma discreta y le ofrece recargar, en vez de
+       dejarla mirando una pantalla que no responde.
+     - Deja el sitio preparado para mandarlos al servidor (ver
+       supabase/registro-de-fallos.sql).
+   ====================================================================== */
+const FALLOS_GUARDADOS = 'opertra_fallos';
+const TOPE_FALLOS = 20;
+let ultimoAvisoDeFallo = 0;
+let fallosEstaSesion = 0;
+
+function leerFallos() {
+  try {
+    const t = localStorage.getItem(FALLOS_GUARDADOS);
+    const c = t ? JSON.parse(t) : [];
+    return Array.isArray(c) ? c : [];
+  } catch (e) { return []; }
+}
+
+function registrarFalloInesperado(origen, error, extra) {
+  try {
+    // Tope por sesión: si algo entra en bucle, no queremos mil apuntes ni
+    // mil avisos en pantalla.
+    if (++fallosEstaSesion > 25) return;
+
+    const apunte = {
+      cuando: new Date().toISOString(),
+      origen: String(origen || '').slice(0, 40),
+      mensaje: String((error && (error.message || error)) || '').slice(0, 300),
+      donde: String(extra || '').slice(0, 200),
+      pantalla: typeof currentTab !== 'undefined' ? currentTab : '',
+      version: typeof VERSION_LEGAL !== 'undefined' ? VERSION_LEGAL : '',
+    };
+    console.error('[Opertra]', apunte.origen, apunte.mensaje, apunte.donde);
+
+    const lista = leerFallos();
+    lista.push(apunte);
+    try { localStorage.setItem(FALLOS_GUARDADOS, JSON.stringify(lista.slice(-TOPE_FALLOS))); } catch (e) {}
+
+    mandarFalloAlServidor(apunte);
+
+    // Avisar como mucho una vez por minuto, y solo si ya se está usando la
+    // app: durante la carga inicial ya hay otros mensajes.
+    if (Date.now() - ultimoAvisoDeFallo > 60000 && datosEmpresaCargados) {
+      ultimoAvisoDeFallo = Date.now();
+      avisarDeFalloInesperado();
+    }
+  } catch (e) { /* ni el registro de fallos puede romper la app */ }
+}
+
+/* Manda el fallo al servidor para poder enterarnos de que algo se ha roto
+   en el móvil de un cliente sin esperar a que llame (tabla app_errors, ver
+   supabase/registro-de-fallos.sql).
+
+   Tres cuidados, porque un registro de errores que da problemas es peor que
+   no tenerlo:
+     - Si la tabla todavía no existe, falla en silencio y no pasa nada.
+     - No manda NINGÚN dato personal: solo el mensaje técnico, la pantalla y
+       el navegador.
+     - Nunca lanza ni espera: si el envío falla, se ignora. La app no puede
+       quedarse colgada por no haber podido apuntar un error. */
+function mandarFalloAlServidor(apunte) {
+  try {
+    if (!supabaseClient) return;                 // aún no hay cliente: nada que hacer
+    if (navigator.onLine === false) return;
+    supabaseClient.from('app_errors').insert({
+      company_id: (currentUser && currentUser.companyId) || null,
+      origen: apunte.origen,
+      mensaje: apunte.mensaje,
+      donde: apunte.donde,
+      pantalla: apunte.pantalla,
+      version: apunte.version,
+      navegador: String(navigator.userAgent || '').slice(0, 200),
+    }).then(() => {}, () => {});
+  } catch (e) { /* nunca puede estorbar */ }
+}
+
+function avisarDeFalloInesperado() {
+  if (document.getElementById('aviso-fallo')) return;
+  const av = document.createElement('div');
+  av.id = 'aviso-fallo';
+  av.setAttribute('role', 'status');
+  av.style.cssText = 'position:fixed;left:12px;right:12px;z-index:200;'
+    + 'bottom:calc(12px + env(safe-area-inset-bottom, 0px));max-width:420px;margin:0 auto;'
+    + 'background:var(--graphite);color:#fff;padding:13px 15px;border-radius:12px;'
+    + 'box-shadow:0 8px 28px rgba(0,0,0,.3);display:flex;gap:11px;align-items:flex-start;font-size:13px;';
+  av.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation" style="color:var(--amber);margin-top:2px;"></i>
+    <div style="flex:1;min-width:0;line-height:1.45;">
+      <div style="font-weight:600;">Algo no ha respondido como debía</div>
+      <div style="opacity:.85;margin-top:2px;">Si notas algo raro en la pantalla, recarga. No se ha perdido nada de lo guardado.</div>
+    </div>
+    <button class="btn-ghost" style="color:var(--amber);white-space:nowrap;"
+            onclick="location.reload()">Recargar</button>
+    <button class="btn-ghost" style="color:#fff;" aria-label="Cerrar"
+            onclick="this.closest('#aviso-fallo').remove()"><i class="fa-solid fa-xmark"></i></button>`;
+  document.body.appendChild(av);
+  setTimeout(() => { const e = document.getElementById('aviso-fallo'); if (e) e.remove(); }, 15000);
+}
+
+window.addEventListener('error', (ev) => {
+  /* Los fallos al cargar una imagen o un archivo llegan por aquí con
+     ev.target siendo el elemento. Esos se apuntan pero NO se avisa: una
+     foto que no carga no rompe nada y sacar un cartel sería alarmar por
+     nada. */
+  if (ev && ev.target && ev.target !== window && ev.target.tagName) {
+    const url = ev.target.src || ev.target.href || '';
+    console.warn('No se ha podido cargar un recurso:', url);
+    return;
+  }
+  registrarFalloInesperado('error', ev && (ev.error || ev.message),
+    ev && ev.filename ? `${ev.filename}:${ev.lineno}` : '');
+}, true);
+
+window.addEventListener('unhandledrejection', (ev) => {
+  /* Una promesa que falla y nadie recoge. Con tanto async/await es el fallo
+     más fácil de dejarse sin querer, y el más silencioso de todos. */
+  const motivo = ev && ev.reason;
+  // Si es un fallo de red del que ya se ha avisado por otro sitio, no se
+  // duplica el cartel: se apunta y ya está.
+  registrarFalloInesperado('promesa', motivo, motivo && motivo.code ? 'código ' + motivo.code : '');
+});
+
 function fallaPorAlgoPasajero(e) {
   if (!e) return false;
   const codigo = String(e.code || '');
