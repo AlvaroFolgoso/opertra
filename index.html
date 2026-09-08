@@ -1460,12 +1460,29 @@
       content: ''; position: absolute; left: 0; right: 0; top: 100%;
       height: 100vh; background: var(--graphite);
     }
-    /* La fila de botones tiene alto propio y fijo, reservado desde el
-       primer fotograma. Aunque los botones tarden en escribirse, el hueco
-       ya está hecho y nada se mueve cuando aparecen. */
+    /* La fila de botones tiene alto propio, reservado desde el primer
+       fotograma: aunque los botones tarden en escribirse, el hueco ya está
+       hecho y nada se mueve cuando aparecen.
+
+       Y ese alto se ADAPTA al aparato en vez de ser el mismo 52 px en un
+       iPhone SE que en un iPad. clamp() lo ata entre un mínimo y un máximo
+       y lo deja crecer con el ancho de la pantalla:
+         320 px (iPhone SE)     -> 46 px  (mínimo)
+         375 px (iPhone normal) -> 49 px
+         430 px (iPhone grande) -> 56 px
+         768 px (tablet)        -> 60 px  (máximo)
+       Se queda siempre dentro de lo que marcan las guías de Apple (49 pt) y
+       de Android (56 dp), que es la altura con la que el dedo acierta.
+
+       El max-width es para la tablet: cinco botones repartidos a lo ancho de
+       768 px quedan tan separados que hay que mover la mano para cambiar de
+       sección. Centrados en 560 px se alcanzan con el pulgar. */
     #mobile-nav-items {
       display: flex; width: 100%; justify-content: space-around;
-      align-items: stretch; height: 52px;
+      align-items: stretch;
+      height: 52px;                       /* respaldo si no hay clamp() */
+      height: clamp(46px, 13vw, 60px);
+      max-width: 560px; margin: 0 auto;
     }
     #mobile-nav .nav-item {
       flex: 1 1 0%; min-width: 0; max-width: none;
@@ -1493,25 +1510,35 @@
          dibujo fuera de sitio. */
       transition: none;
     }
-    /* La caja del dibujo: medida fija, pase lo que pase */
+    /* La caja del dibujo: medida propia y reservada, pase lo que pase, pero
+       proporcionada al aparato igual que la fila. 22 px en un móvil pequeño,
+       28 px en tablet. */
     #mobile-nav .nav-item > .nav-ico {
       display: flex; align-items: center; justify-content: center;
-      flex: 0 0 26px; width: 26px; height: 26px; line-height: 0;
+      flex: 0 0 26px; width: 26px; height: 26px; line-height: 0;   /* respaldo */
+      flex-basis: clamp(22px, 6.4vw, 28px);
+      width: clamp(22px, 6.4vw, 28px);
+      height: clamp(22px, 6.4vw, 28px);
     }
     #mobile-nav .nav-item > .nav-ico > svg {
-      display: block; width: 24px; height: 24px;
+      display: block; width: 24px; height: 24px;                   /* respaldo */
+      width: clamp(20px, 5.9vw, 26px);
+      height: clamp(20px, 5.9vw, 26px);
     }
-    /* La caja del nombre: una línea, medida fija, y si no cabe se recorta
-       con puntos suspensivos en vez de empujar al dibujo. */
+    /* La caja del nombre: una línea, medida reservada, y si no cabe se
+       recorta con puntos suspensivos en vez de empujar al dibujo. La letra
+       también acompaña al tamaño del aparato. */
     #mobile-nav .nav-item > .nav-txt {
-      display: block; flex: 0 0 14px; width: 100%; height: 14px;
-      margin-top: 4px; line-height: 14px; text-align: center;
-      font-size: 10.5px; font-weight: 600; letter-spacing: -.1px;
+      display: block; flex: 0 0 14px; width: 100%; height: 14px;   /* respaldo */
+      flex-basis: clamp(13px, 3.7vw, 16px);
+      height: clamp(13px, 3.7vw, 16px);
+      line-height: clamp(13px, 3.7vw, 16px);
+      margin-top: 4px; text-align: center;
+      font-size: 10.5px;                                           /* respaldo */
+      font-size: clamp(9.5px, 2.85vw, 12px);
+      font-weight: 600; letter-spacing: -.1px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    /* Pantallas estrechas (Android de 320-360): una pizca menos de letra
-       para que "Maquinaria" siga entrando entero. */
-    @media (max-width: 360px) { #mobile-nav .nav-item > .nav-txt { font-size: 9.5px; } }
     /* La señal de que has pulsado: solo el color, en el mismo fotograma */
     #mobile-nav .nav-item.active { background: rgba(251,177,20,.16); color: var(--amber); }
     #mobile-nav .nav-item:active { background: rgba(251,177,20,.28); color: var(--amber); }
@@ -1527,7 +1554,16 @@
       #mobile-nav-items { height: 44px; }
       #mobile-nav .nav-item > .nav-ico { flex-basis: 22px; width: 22px; height: 22px; }
       #mobile-nav .nav-item > .nav-ico > svg { width: 20px; height: 20px; }
-      #mobile-nav .nav-item > .nav-txt { margin-top: 2px; }
+      /* Tumbado, el ancho de pantalla es enorme y el clamp de la letra se
+         iba al máximo (12 px) dentro de una fila de solo 44 px. Aquí manda
+         el ALTO disponible, no el ancho. */
+      #mobile-nav .nav-item > .nav-txt {
+        margin-top: 2px;
+        font-size: 10px; flex-basis: 13px; height: 13px; line-height: 13px;
+      }
+      /* Y el relleno de abajo también se recorta: tumbado, cada píxel de
+         alto cuenta. */
+      #mobile-nav { padding-bottom: max(6px, calc(env(safe-area-inset-bottom, 0px) * 0.5)); }
     }
   }
 
