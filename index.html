@@ -1430,9 +1430,17 @@
          cambia nada. A los lados, por si el móvil está tumbado. */
       /* Primero la medida de siempre: si el móvil es antiguo y no entiende
          env(), se queda con esta y no pierde el relleno. */
-      padding: 6px 4px;
+      /* Abajo, el hueco de la franja del iPhone. Estaba en 6px MÁS la zona
+         segura entera (34px en un iPhone con indicador), o sea 40px por
+         debajo de los rótulos: con el fondo ya en oscuro eso se veía como
+         una barra desproporcionada, con los botones muy arriba.
+         Ahora se deja algo más de la mitad de la zona segura: los botones
+         bajan unos 18px y siguen sin pegarse al filo ni pisar el indicador
+         del iPhone. En Android, donde la zona segura vale 0, quedan 10px de
+         margen en vez de 6. */
+      padding: 6px 4px 10px;
       padding: 6px calc(4px + env(safe-area-inset-left, 0px))
-               calc(6px + env(safe-area-inset-bottom, 0px))
+               max(10px, calc(env(safe-area-inset-bottom, 0px) * 0.62))
                calc(4px + env(safe-area-inset-right, 0px));
       /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
          provocar el zoom del doble toque. */
@@ -3117,12 +3125,57 @@ async function asegurarMapa() {
   return !!(window.L && window.L.map);
 }
 
+/* ======================================================================
+   SABER CUÁNDO UN CAMBIO LO HEMOS HECHO NOSOTROS
+
+   La suscripción en tiempo real avisa de CUALQUIER cambio en las tablas de
+   la empresa... incluidos los que acaba de hacer esta misma pantalla. El
+   resultado era absurdo: cambiabas el operario de una máquina y, unos
+   segundos después, te salía "Datos actualizados por otra persona" y la app
+   se recargaba entera — por tu propio cambio, estando solo.
+
+   Además de quedar fatal en una app profesional, esa recarga tira la ficha
+   que tuvieras abierta y hace que todo parezca lento y con vida propia.
+
+   Aquí se apunta la hora de la última escritura hecha desde este
+   navegador. Se envuelven los métodos que escriben del cliente de Supabase
+   para no tener que acordarse de marcarlo en los cincuenta sitios que
+   guardan algo.
+   ====================================================================== */
+let ultimaEscrituraPropia = 0;
+function marcarEscrituraPropia() { ultimaEscrituraPropia = Date.now(); }
+function esEcoDeLoNuestro(margenMs) {
+  return (Date.now() - ultimaEscrituraPropia) < (margenMs || 6000);
+}
+
+function envolverEscrituras(cliente) {
+  const fromOriginal = cliente.from.bind(cliente);
+  cliente.from = function (tabla) {
+    const consulta = fromOriginal(tabla);
+    ['insert', 'update', 'upsert', 'delete'].forEach(metodo => {
+      const original = consulta[metodo];
+      if (typeof original !== 'function') return;
+      consulta[metodo] = function (...args) {
+        marcarEscrituraPropia();
+        return original.apply(this, args);
+      };
+    });
+    return consulta;
+  };
+  const rpcOriginal = cliente.rpc.bind(cliente);
+  cliente.rpc = function (...args) {
+    marcarEscrituraPropia();
+    return rpcOriginal(...args);
+  };
+}
+
 let supabaseClient = null;
 function getSupabase() {
   if (!supabaseClient) {
     supabaseClient = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
       auth: { storage: almacenSesionSupabase, persistSession: true, autoRefreshToken: true },
     });
+    envolverEscrituras(supabaseClient);
   }
   return supabaseClient;
 }
@@ -4708,8 +4761,28 @@ async function cargarResumenObra(projectDbId) {
       </div>
     `);
   } catch (e) {
-    pinta('No se pudieron calcular las horas.');
+    // El mensaje de antes no decia nada ni dejaba rastro: con "No se pudieron
+    // calcular las horas" era imposible saber si faltaba un permiso en la
+    // base, si no habia conexion o si el calculo habia fallado.
+    console.error('resumen_horas_obra:', e);
+    pinta(mensajeResumenFallido(e));
   }
+}
+
+/* Traduce el fallo de un resumen a algo accionable. El caso mas comun de
+   lejos es que a la funcion de la base le falte el permiso de ejecucion
+   (codigo 42501): se arregla con supabase/arreglar-permisos-funciones.sql,
+   y hasta que no se ejecuta no hay forma de que salgan las horas. */
+function mensajeResumenFallido(e) {
+  const codigo = e && (e.code || e.status);
+  if (codigo === '42501' || codigo === 42501) {
+    return 'No se han podido calcular las horas: falta un permiso en la base de datos. '
+         + 'Avísanos y lo dejamos arreglado en un momento.';
+  }
+  if (navigator.onLine === false) {
+    return 'Sin conexión: las horas se calculan en el servidor. Inténtalo cuando vuelva la cobertura.';
+  }
+  return 'No se pudieron calcular las horas. Vuelve a entrar en la ficha dentro de un momento.';
 }
 
 /* ======================================================================
@@ -5581,10 +5654,17 @@ async function guardarMaquina(code) {
       }
     }
 
-    const { error } = await getSupabase().from('machines').update({
+    /* .select('updated_at') no es un adorno: el servidor cambia esa marca en
+       cada guardado, y si no nos quedamos con la nueva, la copia que tenemos
+       aquí se queda con la vieja. Al siguiente guardado, la comprobación de
+       arriba las ve distintas y suelta "otra persona ha modificado esto"
+       estando tú solo. Pasaba en máquinas, trabajadores, obras y clientes:
+       era lo de "muchos botones de guardar van mal". */
+    const { data: guardada, error } = await getSupabase().from('machines').update({
       type, model, plate: plate || null, status, project_id: projectId, fuel,
-    }).eq('id', m.dbId);
+    }).eq('id', m.dbId).select('updated_at').maybeSingle();
     if (error) throw error;
+    if (guardada && guardada.updated_at) m.updatedAt = guardada.updated_at;
 
     if (m.status !== status) {
       registrarEnHistorial('estado', tm('S'), m.id, `${statusLabel[m.status]} → ${statusLabel[status]}`);
@@ -5723,10 +5803,12 @@ async function guardarTrabajador(code) {
       }
     }
 
-    const { error } = await getSupabase().from('workers').update({
+    const { data: guardado, error } = await getSupabase().from('workers').update({
       name, role, pin, project_id: projectId,
-    }).eq('id', w.dbId);
+    }).eq('id', w.dbId).select('updated_at').maybeSingle();
     if (error) throw error;
+    // Sin esto, el siguiente guardado creería que lo ha tocado otra persona.
+    if (guardado && guardado.updated_at) w.updatedAt = guardado.updated_at;
 
     if (w.pin !== pin) registrarEnHistorial('cambio de PIN', 'Trabajador', name, '');
     const proj = projects.find(p => p.dbId === projectId);
@@ -5876,8 +5958,11 @@ async function guardarObra(code) {
     if (status === 'finished' && p.status !== 'finished') cambios.finished_at = fechaLocalHoy();
     if (status !== 'finished') cambios.finished_at = null;
 
-    const { error } = await getSupabase().from('projects').update(cambios).eq('id', p.dbId);
+    const { data: guardada, error } = await getSupabase().from('projects')
+      .update(cambios).eq('id', p.dbId).select('updated_at').maybeSingle();
     if (error) throw error;
+    // Sin esto, el siguiente guardado creería que lo ha tocado otra persona.
+    if (guardada && guardada.updated_at) p.updatedAt = guardada.updated_at;
 
     // Dejar constancia del cambio de plazo, que es lo que más se discute con un cliente
     if (p.end !== end) {
@@ -5979,7 +6064,12 @@ function openObraDrawer(id) {
         pWorkers.map(w => `
         <div class="doc-row" style="cursor:pointer;" onclick="drawerBack=()=>openObraDrawer('${id}');openWorkerDrawer('${esc(w.id)}');">
           <div><div class="doc-name">${esc(w.name)}</div><div class="doc-expiry f-mono">${esc(w.role)}</div></div>
-          ${chip(w.status)}
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            ${chip(w.status)}
+            ${esAdministrador() ? `<button class="vac-delete" title="Quitar de esta ${t('s')}"
+                 onclick="event.stopPropagation();quitarTrabajadorDeObra('${id}','${esc(w.id)}')">
+                 <i class="fa-solid fa-link-slash"></i></button>` : ''}
+          </div>
         </div>`).join('')}
     </div>
     <div class="vac-form">
@@ -5996,7 +6086,12 @@ function openObraDrawer(id) {
         pMachines.map(m => `
         <div class="doc-row" style="cursor:pointer;" onclick="drawerBack=()=>openObraDrawer('${id}');openDrawer('${esc(m.id)}');">
           <div><div class="doc-name">${esc(m.id)} · ${esc(m.type)}</div><div class="doc-expiry f-mono">${esc(m.model)}</div></div>
-          ${chip(m.status)}
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            ${chip(m.status)}
+            ${esAdministrador() ? `<button class="vac-delete" title="Quitar de esta ${t('s')}"
+                 onclick="event.stopPropagation();quitarMaquinaDeObra('${id}','${esc(m.id)}')">
+                 <i class="fa-solid fa-link-slash"></i></button>` : ''}
+          </div>
         </div>`).join('')}
     </div>
     <div class="vac-form">
@@ -6065,6 +6160,85 @@ async function assignWorkerToObra(projId) {
     terminarOperacion('asignar-trab');
   }
 }
+/* ======================================================================
+   QUITAR DE UNA OBRA
+
+   Faltaba, y se echaba en falta: se podía meter gente y máquinas en una
+   obra pero no sacarlas. Cuando alguien termina su parte y se va a otro
+   sitio, la obra se quedaba con la lista de siempre y dejaba de reflejar
+   quién está allí de verdad.
+
+   Lo que se quita es LA ASIGNACIÓN ACTUAL (dónde está ahora), no el
+   historial. Los fichajes guardan su propia obra dentro de cada línea, así
+   que las horas que se trabajaron ahí siguen contando para esa obra, salgan
+   en el registro de jornada y en los informes exactamente igual que antes.
+   Por eso se puede quitar sin miedo: no se pierde nada de lo hecho.
+   ====================================================================== */
+async function quitarTrabajadorDeObra(projId, workerCode) {
+  if (!esAdministrador()) return;
+  if (!hayConexion()) return;
+  const w = workers.find(x => x.id === workerCode);
+  const p = projects.find(x => x.id === projId);
+  if (!w || !p) return yaNoExiste('Ese trabajador o esa ' + t('s'));
+
+  if (!await confirmar({
+    titulo: 'Quitar de la ' + t('s'),
+    aceptar: 'Sí, quitar',
+    texto: `¿Quitar a ${esc(w.name)} de "${esc(p.name)}"?\n\n`
+         + `Solo deja de estar asignad@ aquí: las horas que ya ha fichado en esta ${t('s')} se conservan y siguen contando para ella.`,
+  })) return;
+
+  if (!empezarOperacion('quitar-trab-obra')) return;
+  try {
+    const { data, error } = await getSupabase().from('workers')
+      .update({ project_id: null }).eq('id', w.dbId).select('updated_at').maybeSingle();
+    if (error) throw error;
+    if (data && data.updated_at) w.updatedAt = data.updated_at;
+    w.projectDbId = null; w.project = null;
+    registrarEnHistorial('desasignación', 'Trabajador', w.name, `Sacad@ de ${p.name}`);
+    datosCambiaron();
+    openObraDrawer(projId);
+    pintarPestanaActual();
+  } catch (err) {
+    aviso('No se pudo quitar: ' + mensajeError(err));
+  } finally {
+    terminarOperacion('quitar-trab-obra');
+  }
+}
+
+async function quitarMaquinaDeObra(projId, machineCode) {
+  if (!esAdministrador()) return;
+  if (!hayConexion()) return;
+  const m = machines.find(x => x.id === machineCode);
+  const p = projects.find(x => x.id === projId);
+  if (!m || !p) return yaNoExiste(tm('Es') + ' ' + tm('s') + ' o esa ' + t('s'));
+
+  if (!await confirmar({
+    titulo: 'Quitar de la ' + t('s'),
+    aceptar: 'Sí, quitar',
+    texto: `¿Quitar ${esc(m.id)} de "${esc(p.name)}"?\n\n`
+         + `Vuelve a quedar sin asignar, lista para otra ${t('s')}. Las horas fichadas con ell${tm('g')} aquí se conservan.`,
+  })) return;
+
+  if (!empezarOperacion('quitar-maq-obra')) return;
+  try {
+    const { data, error } = await getSupabase().from('machines')
+      .update({ project_id: null }).eq('id', m.dbId).select('updated_at').maybeSingle();
+    if (error) throw error;
+    if (data && data.updated_at) m.updatedAt = data.updated_at;
+    m.projectDbId = null; m.project = null;
+    m.location = 'Almacén / sin asignar';
+    registrarEnHistorial('desasignación', tm('S'), m.id, `Sacad${tm('g')} de ${p.name}`);
+    datosCambiaron();
+    openObraDrawer(projId);
+    pintarPestanaActual();
+  } catch (err) {
+    aviso('No se pudo quitar: ' + mensajeError(err));
+  } finally {
+    terminarOperacion('quitar-maq-obra');
+  }
+}
+
 async function assignMachineToObra(projId) {
   if (!esAdministrador()) return;
   if (!hayConexion()) return;
@@ -6694,6 +6868,13 @@ function estaEscribiendo() {
 }
 
 function recargarEnBreve() {
+  /* Si el cambio que ha llegado es el eco de algo que acabamos de guardar
+     nosotros, no hay nada que recargar: la pantalla ya está actualizada, y
+     avisar de "otra persona" sería mentira. Esto es lo que hacía que, al
+     cambiar un operario estando solo, saliera un aviso de cambio ajeno y la
+     app se recargara entera tirando la ficha abierta. */
+  if (esEcoDeLoNuestro()) return;
+
   clearTimeout(recargaPendiente);
   const espera = Math.max(800, 15000 - (Date.now() - ultimaRecarga));
   recargaPendiente = setTimeout(() => {
@@ -8821,27 +9002,55 @@ async function reasignarOperario(machineCode) {
   if (!hayConexion()) return;
   if (!esAdministrador()) return;
   const m = machines.find(x => x.id === machineCode);
-  const workerDbId = document.getElementById('reassign-operator').value || null;
+  if (!m) return yaNoExiste(tm('Est') + ' ' + tm('s'));
+  const selector = document.getElementById('reassign-operator');
+  const workerDbId = (selector && selector.value) || null;
+  if (!empezarOperacion('reasignar-operario')) return;
+  // Mientras guarda, el desplegable se bloquea: si no, se toca otra vez
+  // creyendo que no ha hecho caso y se mandan dos cambios seguidos.
+  if (selector) selector.disabled = true;
   try {
     const sb = getSupabase();
-    // Quitar esta máquina a quien la tuviera antes
     const anterior = workers.find(w => w.machineDbId === m.dbId);
-    if (anterior && anterior.dbId !== workerDbId) {
-      await sb.from('workers').update({ machine_id: null }).eq('id', anterior.dbId);
+    const quitar = anterior && anterior.dbId !== workerDbId;
+
+    /* Las dos escrituras van A LA VEZ, no una detrás de otra. Con la
+       cobertura de una obra, dos viajes al servidor en fila son los 3-4
+       segundos de espera en los que parece que el botón no responde. */
+    const [resQuitar, resPoner] = await Promise.all([
+      quitar
+        ? sb.from('workers').update({ machine_id: null }).eq('id', anterior.dbId).select('updated_at').maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      workerDbId
+        ? sb.from('workers').update({ machine_id: m.dbId }).eq('id', workerDbId).select('updated_at').maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    if (resQuitar.error) throw resQuitar.error;
+    if (resPoner.error) throw resPoner.error;
+
+    if (quitar) {
       anterior.machineDbId = null; anterior.machine = '—';
+      // Guardar la marca nueva: si no, editar luego a ese trabajador avisaba
+      // de que "otra persona" lo habia cambiado.
+      if (resQuitar.data && resQuitar.data.updated_at) anterior.updatedAt = resQuitar.data.updated_at;
     }
     if (workerDbId) {
-      const { error } = await sb.from('workers').update({ machine_id: m.dbId }).eq('id', workerDbId);
-      if (error) throw error;
       const nuevo = workers.find(w => w.dbId === workerDbId);
-      if (nuevo) { nuevo.machineDbId = m.dbId; nuevo.machine = m.id; m.operator = nuevo.name; }
+      if (nuevo) {
+        nuevo.machineDbId = m.dbId; nuevo.machine = m.id; m.operator = nuevo.name;
+        if (resPoner.data && resPoner.data.updated_at) nuevo.updatedAt = resPoner.data.updated_at;
+      }
     } else {
       m.operator = '—';
     }
+    datosCambiaron();
     openDrawer(machineCode);
     pintarPestanaActual();
   } catch (err) {
+    if (selector) selector.disabled = false;
     aviso('No se pudo reasignar: ' + mensajeError(err));
+  } finally {
+    terminarOperacion('reasignar-operario');
   }
 }
 
@@ -8878,8 +9087,17 @@ function validarFecha(iso, campo, opciones) {
 function mensajeError(err) {
   const m = String((err && err.message) || err || '').toLowerCase();
 
-  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed'))
-    return 'Se ha perdido la conexión. Comprueba tu internet e inténtalo de nuevo.';
+  /* "Load failed" es lo que dice Safari cuando una peticion no llega a
+     completarse, y NO siempre es la conexion: tambien lo dice cuando la
+     peticion se corta porque la pantalla se ha repintado por debajo, que es
+     lo que pasaba al tocar dos veces un boton lento. Culpar al wifi cuando
+     el wifi va bien deja al usuario mirando el router sin motivo. Solo se
+     habla de conexion si el navegador dice que de verdad no hay. */
+  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed')) {
+    return navigator.onLine === false
+      ? 'Se ha perdido la conexión. Comprueba tu internet e inténtalo de nuevo.'
+      : 'La operación se ha quedado a medias. Vuelve a intentarlo: no se ha guardado nada.';
+  }
   if (m.includes('duplicate key') || m.includes('already exists'))
     return 'Ya existe un registro con esos datos. Revisa que no lo hayas creado antes.';
   if (m.includes('row-level security') || m.includes('permission denied'))
@@ -9711,7 +9929,8 @@ async function cargarResumenTrabajador(workerDbId) {
       <button class="add-doc-btn" onclick="verHorasDe('${workerDbId}')"><i class="fa-solid fa-table-list"></i> Ver todos sus fichajes</button>
     `);
   } catch (e) {
-    pinta('No se pudieron calcular las horas.');
+    console.error('resumen_horas_trabajador:', e);
+    pinta(mensajeResumenFallido(e));
   }
 }
 
@@ -9817,11 +10036,20 @@ async function reasignarMaquina(workerCode) {
   if (!esAdministrador()) return;
   const w = workers.find(x => x.id === workerCode);
   if (!w) return yaNoExiste('Este trabajador');
-  const machineDbId = document.getElementById('reassign-machine').value || null;
+  const selector = document.getElementById('reassign-machine');
+  const machineDbId = (selector && selector.value) || null;
+  if (!empezarOperacion('reasignar-maquina')) return;
+  // Bloqueado mientras guarda: sin esto se toca otra vez creyendo que no ha
+  // hecho caso, la peticion anterior se corta al repintar, y Safari lo
+  // reporta como "Load failed" -> salia un error de conexion con el wifi bien.
+  if (selector) selector.disabled = true;
   try {
-    const { error } = await getSupabase().from('workers')
-      .update({ machine_id: machineDbId }).eq('id', w.dbId);
+    const { data: guardado, error } = await getSupabase().from('workers')
+      .update({ machine_id: machineDbId }).eq('id', w.dbId)
+      .select('updated_at').maybeSingle();
     if (error) throw error;
+    if (guardado && guardado.updated_at) w.updatedAt = guardado.updated_at;
+
     // La máquina anterior se queda sin operario
     const anterior = machines.find(m => m.dbId === w.machineDbId);
     if (anterior) anterior.operator = '—';
@@ -9833,7 +10061,10 @@ async function reasignarMaquina(workerCode) {
     openWorkerDrawer(workerCode);
     pintarPestanaActual();
   } catch (err) {
+    if (selector) selector.disabled = false;
     aviso('No se pudo reasignar: ' + mensajeError(err));
+  } finally {
+    terminarOperacion('reasignar-maquina');
   }
 }
 
