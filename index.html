@@ -6475,21 +6475,71 @@ function refrescoLigeroFichajes() {
    máquina, trabajador...). Con tope de una recarga cada 15 segundos como
    máximo, para que un admin haciendo cambios rápidos no dispare diez recargas. */
 let ultimaRecarga = 0;
+let recargaEsperandoAlCampo = false;
+let aplazosSeguidos = 0;
+const MAX_APLAZOS = 24;      // 24 x 5 s = 2 minutos escribiendo sin parar
+
+function estaEscribiendo() {
+  const a = document.activeElement;
+  return !!(a && ['SELECT','INPUT','TEXTAREA'].includes(a.tagName));
+}
+
 function recargarEnBreve() {
   clearTimeout(recargaPendiente);
   const espera = Math.max(800, 15000 - (Date.now() - ultimaRecarga));
   recargaPendiente = setTimeout(() => {
-    // Si está con un desplegable abierto o escribiendo, no le interrumpimos
-    const activo = document.activeElement;
-    if (activo && ['SELECT','INPUT','TEXTAREA'].includes(activo.tagName)) {
-      recargarEnBreve();
+    /* Si está escribiendo o con un desplegable abierto, no se le interrumpe:
+       recargar le borraría lo que lleve escrito.
+
+       Antes, en ese caso, esto se volvía a llamar A SÍ MISMO — y como la
+       espera baja a 800 ms en cuanto pasan 15 segundos, quedaba un
+       temporizador dando vueltas cada 0,8 s para siempre. Peor todavía: los
+       cambios de otras personas NO LLEGABAN NUNCA mientras el cursor
+       siguiera dentro de un campo. Bastaba con dejar el cursor en el
+       buscador para que la pantalla se quedara congelada sin motivo
+       aparente.
+
+       Ahora se apunta la recarga pendiente y se hace en cuanto suelta el
+       campo, sin dejar ningún temporizador girando de fondo. */
+    if (estaEscribiendo()) {
+      recargaEsperandoAlCampo = true;
+      /* Reintento ACOTADO, por si soltar el campo no llega a avisar (o
+         simplemente tarda mucho en soltarlo). Cada 5 segundos y como mucho
+         dos minutos: ni un temporizador girando para siempre, ni cambios que
+         se pierden sin que nadie se entere. Si al cabo de los dos minutos
+         sigue escribiendo, al menos se le avisa de que hay datos nuevos. */
+      if (aplazosSeguidos < MAX_APLAZOS) {
+        aplazosSeguidos++;
+        recargaPendiente = setTimeout(recargarEnBreve, 5000);
+      } else {
+        aplazosSeguidos = 0;
+        recargaEsperandoAlCampo = false;
+        avisarCambioExterno();
+      }
       return;
     }
+    aplazosSeguidos = 0;
+
+    // En segundo plano no se gasta nada: al volver, el manejador de
+    // visibilitychange ya recarga si los datos tienen más de 20 segundos.
     if (document.hidden) return;
+
     ultimaRecarga = Date.now();
+    recargaEsperandoAlCampo = false;
     loadCompanyData().then(() => avisarCambioExterno());
   }, espera);
 }
+
+/* En cuanto deja de escribir, se hace la recarga que quedó pendiente. El
+   pequeño retraso es para no dispararla al saltar de un campo a otro. */
+document.addEventListener('focusout', () => {
+  if (!recargaEsperandoAlCampo) return;
+  setTimeout(() => {
+    if (!recargaEsperandoAlCampo || estaEscribiendo()) return;
+    recargaEsperandoAlCampo = false;
+    recargarEnBreve();
+  }, 200);
+});
 
 /* Si la app queda en segundo plano un buen rato, se suelta la conexión para
    no ocupar sitio en la cuenta; al volver se reconecta sola. Así cien móviles
@@ -12975,12 +13025,14 @@ function arrancarVigilanciaDeVersion() {
     });
   }
 
-  // Y al volver a la app después de tenerla en segundo plano, que es
-  // justo cuando se ha podido subir una versión nueva.
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) comprobarVersionNueva(true);
-  });
-  window.addEventListener('online', () => comprobarVersionNueva(true));
+  /* Había un SEGUNDO visibilitychange aquí que llamaba a comprobarVersionNueva()
+     sin ningún límite, además del de arriba. Entre los dos, cada vez que
+     alguien volvía a la app se disparaban dos comprobaciones, y el límite de
+     una por minuto no servía de nada porque este se lo saltaba. Se queda solo
+     el de arriba, que ya hace lo mismo y además pide al service worker que
+     mire. Al recuperar la conexión sí se comprueba aparte: ahí puede haber
+     pasado mucho tiempo desconectado. */
+  window.addEventListener('online', () => rondaDeComprobacion(60 * 1000));
 }
 
 function avisarVersionNueva() {
