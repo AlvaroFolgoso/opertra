@@ -7547,6 +7547,11 @@ function suscribirCambios() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: filtro }, recargarEnBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'clients', filter: filtro }, recargarEnBreve)
+    // Los fichajes van por su propio camino: loadCompanyData() NO recarga
+    // time_logs, así que el registro de horas necesita su propia recarga.
+    // Con esto, cuando alguien ficha entrada o salida, el registro y "quién
+    // trabaja ahora" se actualizan solos en las pantallas de los responsables.
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_logs', filter: filtro }, recargarFichajesEnBreve)
     // Si a alguien le revocan el acceso, se entera al momento y no cuando
     // le apetezca actualizar la página.
     .on('postgres_changes',
@@ -7676,6 +7681,27 @@ function recargarEnBreve() {
     recargaEsperandoAlCampo = false;
     loadCompanyData().then(() => avisarCambioExterno());
   }, espera);
+}
+
+/* Recarga SOLO los fichajes cuando llega un cambio en time_logs por tiempo
+   real (alguien fichó). Va aparte de recargarEnBreve porque loadCompanyData()
+   no toca los fichajes. Con freno de 1,5 s: si entra la plantilla entera a la
+   vez, llegan muchos avisos seguidos y se recarga una sola vez, no cien. */
+let recargaFichajesPendiente = null;
+function recargarFichajesEnBreve() {
+  clearTimeout(recargaFichajesPendiente);
+  recargaFichajesPendiente = setTimeout(async () => {
+    // En segundo plano no se gasta: al volver, visibilitychange ya refresca.
+    if (document.hidden) return;
+    try {
+      await cargarFichajes();   // recarga el registro y "quién trabaja ahora"
+      // Se repinta solo si estás en una pantalla que depende de los fichajes,
+      // para no rehacer de balde una que no los usa.
+      if (currentTab === 'fichaje' || currentTab === 'trabajadores' || currentTab === 'dashboard') {
+        pintarPestanaActual();
+      }
+    } catch (e) { /* si falla, se reintenta con el siguiente cambio o al volver */ }
+  }, 1500);
 }
 
 /* En cuanto deja de escribir, se hace la recarga que quedó pendiente. El
