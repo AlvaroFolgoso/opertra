@@ -1505,9 +1505,24 @@
          Y va con TOPE: pase lo que pase, nunca deja más de 22 px por debajo
          de los botones, que es lo que hacía que la barra pareciera enorme y
          los botones quedaran muy arriba. */
+      /* Tres capas, de la más tonta a la más lista, para que esto salga bien
+         en CUALQUIER aparato aunque falle todo lo demás:
+
+         1ª  10 px fijos. Un navegador antiguo que no entienda nada de lo de
+             abajo se queda aquí y la barra sigue siendo usable.
+         2ª  El margen que declare el aparato, ATADO entre 8 y 22 px. Esta
+             es la que manda normalmente y no necesita JavaScript: da igual
+             el modelo, el fabricante o lo que declare — nunca va a dejar
+             más de 22 px por debajo de los botones, que es lo que hacía que
+             la barra pareciera enorme.
+         3ª  Si el JavaScript ha llegado a medir el aparato, su resultado
+             manda sobre las anteriores (ver ajustarBarraInferior).
+
+         El tope es la clave: sin él, un modelo que declare un margen raro
+         empuja los botones hacia arriba y no hay forma de preverlo. */
       padding: 6px 4px 10px;
       padding: 6px calc(4px + env(safe-area-inset-left, 0px))
-               var(--relleno-barra, 10px)
+               var(--relleno-barra, min(22px, max(8px, env(safe-area-inset-bottom, 0px))))
                calc(4px + env(safe-area-inset-right, 0px));
       /* El dedo no puede arrastrar la barra, ni seleccionar sus textos, ni
          provocar el zoom del doble toque. */
