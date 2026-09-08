@@ -13294,6 +13294,9 @@ function openUserSettings() {
         <button class="btn btn-outline" style="font-size:12.5px;" onclick="reabrirCookies()">
           <i class="fa-solid fa-cookie-bite"></i> Cookies
         </button>
+        <button class="btn btn-outline" style="font-size:12.5px;" onclick="mostrarInfoTecnica()">
+          <i class="fa-solid fa-circle-info"></i> Información técnica
+        </button>
       </div>
       <div class="aj-nota">
         <i class="fa-solid fa-shield-halved" style="margin-top:2px;"></i>
@@ -13362,6 +13365,61 @@ async function subirFotoPerfil(event) {
     aviso('No se pudo subir la foto: ' + mensajeError(err));
     openUserSettings();
   }
+}
+
+/* ======================================================================
+   INFORMACIÓN TÉCNICA
+
+   Con cien empresas, cuando alguien dice "se me ve raro" o "no me carga",
+   lo primero que hace falta son las medidas reales de SU pantalla y SU
+   navegador. Adivinarlas desde una captura no funciona: los márgenes que
+   reserva iOS para la franja del indicador y para la barra de estado no se
+   pueden deducir mirando una imagen, y sin ellos no hay forma de saber si
+   una barra está donde debe.
+
+   Esto lo enseña todo de un vistazo, para poder mandarlo en una captura.
+   No hay ni un dato personal: solo medidas y versiones.
+   ====================================================================== */
+function mostrarInfoTecnica() {
+  const cs = getComputedStyle(document.documentElement);
+  const medir = (nombre) => {
+    // env() no se puede leer directamente: se pinta en una variable y se mide.
+    const d = document.createElement('div');
+    d.style.cssText = `position:fixed;visibility:hidden;height:env(${nombre},0px);`;
+    document.body.appendChild(d);
+    const v = Math.round(parseFloat(getComputedStyle(d).height) || 0);
+    d.remove();
+    return v;
+  };
+  const nav = document.getElementById('mobile-nav');
+  const app = document.getElementById('app');
+  const rNav = nav ? nav.getBoundingClientRect() : null;
+  const rApp = app ? app.getBoundingClientRect() : null;
+  const csNav = nav ? getComputedStyle(nav) : null;
+  const vv = window.visualViewport;
+
+  const filas = [
+    ['Pantalla (CSS)', `${window.innerWidth} x ${window.innerHeight}`],
+    ['Pantalla (real)', `${screen.width} x ${screen.height} @${window.devicePixelRatio}x`],
+    ['Área visible', vv ? `${Math.round(vv.width)} x ${Math.round(vv.height)} (desplazada ${Math.round(vv.offsetTop)})` : 'no disponible'],
+    ['Margen arriba (iOS)', medir('safe-area-inset-top') + ' px'],
+    ['Margen abajo (iOS)', medir('safe-area-inset-bottom') + ' px'],
+    ['Alto de la barra', rNav ? Math.round(rNav.height) + ' px' : '—'],
+    ['Relleno de la barra', csNav ? `arriba ${csNav.paddingTop}, abajo ${csNav.paddingBottom}` : '—'],
+    ['Barra: arriba / abajo', rNav ? `${Math.round(rNav.top)} / ${Math.round(rNav.bottom)}` : '—'],
+    ['App: arriba / abajo', rApp ? `${Math.round(rApp.top)} / ${Math.round(rApp.bottom)}` : '—'],
+    ['Hueco bajo la barra', rNav ? Math.round(window.innerHeight - rNav.bottom) + ' px' : '—'],
+    ['Instalada como app', (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) ? 'SÍ' : 'no (navegador)'],
+    ['Versión legal', typeof VERSION_LEGAL !== 'undefined' ? VERSION_LEGAL : '—'],
+    ['Fallos guardados', String(leerFallos().length)],
+    ['Navegador', String(navigator.userAgent || '').slice(0, 120)],
+  ];
+
+  mostrarDatos({
+    titulo: 'Información técnica',
+    pie: 'Si algo se ve mal, manda una captura de esta pantalla: con estos números se identifica el problema sin tener que adivinar.',
+    datos: filas.map(([etiqueta, valor]) => ({ etiqueta, valor: String(valor) })),
+  });
 }
 
 async function mostrarUsoAlmacen() {
