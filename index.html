@@ -11853,7 +11853,26 @@ function enterAppOrShowTrialExpired() {
     renderTopbarUser(); renderNav(); renderTrialBanner();
     switchTab(currentUser.isWorker ? 'fichaje' : 'dashboard');
     loadCompanyData().then(() => comprobarTutorialTrabajador());
+    precargarLectorQR();
   }
+}
+
+/* El lector de códigos ya no viene en la carga inicial (ver cargarRecurso),
+   pero SÍ tiene que estar en el móvil antes de llegar a la obra: el
+   trabajador abre la app en la oficina o en casa, con wifi, y luego escanea
+   en un sitio donde no hay ni una raya. Si esperásemos a la primera vez que
+   pulsa "escanear", ahí ya no habría de dónde descargarlo.
+
+   Así que se pide en cuanto la app está en marcha y el móvil tiene un rato
+   libre: no estorba al arranque y deja el lector guardado por el service
+   worker para cuando haga falta. El mapa y el generador de etiquetas no
+   entran aquí: son cosas de oficina, con cobertura. */
+function precargarLectorQR() {
+  const pedir = () => { asegurarLectorQR().catch(() => {}); };
+  try {
+    if (window.requestIdleCallback) requestIdleCallback(pedir, { timeout: 8000 });
+    else setTimeout(pedir, 3000);
+  } catch (e) { setTimeout(pedir, 3000); }
 }
 
 async function handleWorkerLogin() {
