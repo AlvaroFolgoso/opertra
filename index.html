@@ -3881,6 +3881,17 @@ function huellaDeDatos() {
   ].join('|');
 }
 
+/* Repinta la pestaña actual, pero un par de fotogramas DESPUÉS. Sirve para
+   cuando se acaba de abrir una ficha o cerrar una ventana: así la animación
+   pinta su primer fotograma sin competir con la reconstrucción de la lista
+   (que está tapada por la ficha y no se ve reconstruirse). Cambia solo CUÁNDO
+   se repinta (~30 ms más tarde), no QUÉ. Es lo que quita el tirón al guardar. */
+function repintarSuave() {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    try { pintarPestanaActual(); } catch (e) {}
+  }));
+}
+
 function pintarPestanaActual(permitirSaltar) {
   const pintores = {
     dashboard: renderDashboard, obras: renderObras, fichaje: renderFichaje,
@@ -6387,7 +6398,7 @@ async function guardarMaquina(code) {
     });
     closeAddMachineModal();
     openDrawer(code);
-    pintarPestanaActual();
+    repintarSuave();
   } catch (err) {
     document.getElementById('em-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
@@ -6525,7 +6536,7 @@ async function guardarTrabajador(code) {
     Object.assign(w, { name, role, pin, projectDbId: projectId, project: proj ? proj.id : null });
     closeAddMachineModal();
     openWorkerDrawer(code);
-    pintarPestanaActual();
+    repintarSuave();
   } catch (err) {
     document.getElementById('ew-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
@@ -6687,7 +6698,7 @@ async function guardarObra(code) {
     _totalesObra = null; _resumenClientes = null;
     closeAddMachineModal();
     openObraDrawer(code);
-    pintarPestanaActual();
+    repintarSuave();
   } catch (err) {
     document.getElementById('eo-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     errBox.style.display = 'flex';
@@ -9977,7 +9988,7 @@ async function subirFotoMaquina(machineCode, event) {
     if (rutaAnterior) borrarArchivo(rutaAnterior);
     m.photoUrl = ruta; m.hasPhoto = true;
     openDrawer(machineCode);
-    renderMaquinaria();
+    repintarSuave();
   } catch (err) {
     aviso('No se pudo subir la foto: ' + mensajeError(err));
     openDrawer(machineCode);
@@ -10217,7 +10228,7 @@ async function submitLinkDevice(machineCode) {
     if (!m.lat) m.gpsAge = 'esperando señal';
     closeAddMachineModal();
     openDrawer(machineCode);
-    renderMaquinaria();
+    repintarSuave();
   } catch (err) {
     document.getElementById('ld-error-text').textContent = 'No se pudo vincular: ' + mensajeError(err);
     errBox.style.display = 'flex';
@@ -10239,7 +10250,7 @@ async function desvincularDispositivo(machineCode) {
     m.gpsAge = 'sin dispositivo';
     closeAddMachineModal();
     openDrawer(machineCode);
-    renderMaquinaria();
+    repintarSuave();
   } catch (err) {
     aviso('No se pudo desvincular: ' + mensajeError(err));
   }
@@ -11849,7 +11860,7 @@ async function guardarCliente(clientId) {
     _resumenClientes = null;
     closeAddMachineModal();
     openClientDrawer(clientId);
-    pintarPestanaActual();
+    repintarSuave();
   } catch (err) {
     document.getElementById('cl-error-text').textContent = 'No se pudo guardar: ' + mensajeError(err);
     document.getElementById('cl-error').style.display = 'flex';
