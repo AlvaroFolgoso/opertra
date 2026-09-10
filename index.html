@@ -10179,7 +10179,7 @@ function openLinkDeviceModal(machineCode) {
 
     <div class="form-group">
       <label class="form-label">Código del dispositivo</label>
-      <input class="form-input f-mono" id="ld-id" placeholder="Ej. TRK-2301" value="${m.device.id || ''}">
+      <input class="form-input f-mono" id="ld-id" placeholder="Ej. TRK-2301" value="${esc(m.device.id || '')}">
     </div>
     <div class="form-group">
       <label class="form-label">Modelo del dispositivo</label>
@@ -10634,7 +10634,7 @@ function renderTrabajadores() {
     <div class="toolbar">
       <div class="search-box">
         <input class="search-input" id="trabajadores-search" placeholder="Buscar trabajador..."
-               value="${workerQuery}" autocomplete="off" oninput="searchWorkers(this.value)"
+               value="${esc(workerQuery)}" autocomplete="off" oninput="searchWorkers(this.value)"
                onkeydown="tecladoEnSugerencias(event,'trabajadores-sug')">
         <div class="sugerencias" id="trabajadores-sug"></div>
       </div>

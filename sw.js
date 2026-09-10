@@ -25,7 +25,7 @@
    Al cambiar, el 'activate' de abajo borra las cachés de la versión
    anterior, que es lo que limpia de un plumazo cualquier archivo viejo que
    se hubiera quedado guardado. */
-const VERSION = 'opertra-v12';
+const VERSION = 'opertra-v13';
 const CACHE_APP = VERSION + '-app';
 /* El almacén de librerías NO se borra en cada despliegue a propósito: las
    librerías no cambian y así no se vuelven a descargar. Pero lleva número
