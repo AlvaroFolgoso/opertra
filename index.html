@@ -876,21 +876,31 @@
   #overlay { position: fixed; inset: 0; background: rgba(28,33,38,0.5); display: none; align-items: stretch; justify-content: flex-end; z-index: 92; }
   #overlay.active { display: flex; }
 
-  /* ====== Entradas fluidas de fichas y ventanas ======
-     Antes aparecían de golpe: display:none→flex no se puede animar. Ahora el
-     fondo se funde y el panel entra deslizando/escalando. Solo se animan
-     transform y opacity (van por GPU a 60 fps y NO recalculan el layout), así
-     que no afecta a ningún dato ni botón. Se respeta "reducir movimiento". */
-  #overlay.active { animation: op-fondo-entra .18s ease-out; }
-  #overlay.active > #drawer { animation: op-panel-lateral .26s cubic-bezier(.22,.61,.36,1) both; }
-  #modal-overlay.active { animation: op-fondo-entra .16s ease-out; }
-  #modal-overlay.active > #add-machine-modal { animation: op-ventana-entra .22s cubic-bezier(.22,.61,.36,1) both; }
-  @keyframes op-fondo-entra { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes op-panel-lateral { from { transform: translate3d(40px,0,0); opacity: 0; } to { transform: translate3d(0,0,0); opacity: 1; } }
-  @keyframes op-ventana-entra { from { transform: translate3d(0,10px,0) scale(.985); opacity: 0; } to { transform: translate3d(0,0,0) scale(1); opacity: 1; } }
+  /* ====== Aperturas y CIERRES suaves de fichas y ventanas ======
+     Antes: display:none→flex no se puede animar (aparecían Y cerraban de golpe).
+     Ahora se usan transiciones + @starting-style + transition-behavior:allow-discrete,
+     que permiten animar TAMBIÉN el cierre SIN tocar una sola línea de JavaScript:
+     las funciones de cerrar siguen quitando .active igual que siempre, solo cambia
+     la transición visual. Un navegador sin soporte hace el cambio instantáneo (como
+     antes): nunca se rompe abrir/cerrar. Solo se animan opacity y transform (60 fps).
+     Se respeta "reducir movimiento". */
+  #overlay, #modal-overlay { opacity: 0;
+    transition: opacity .2s ease, display .28s allow-discrete; }
+  #overlay.active, #modal-overlay.active { opacity: 1; }
+  @starting-style { #overlay.active, #modal-overlay.active { opacity: 0; } }
+
+  #overlay > #drawer { transform: translate3d(44px,0,0); opacity: 0;
+    transition: transform .26s cubic-bezier(.22,.61,.36,1), opacity .2s ease; }
+  #overlay.active > #drawer { transform: none; opacity: 1; }
+  @starting-style { #overlay.active > #drawer { transform: translate3d(44px,0,0); opacity: 0; } }
+
+  #modal-overlay > #add-machine-modal { transform: translate3d(0,10px,0) scale(.985); opacity: 0;
+    transition: transform .22s cubic-bezier(.22,.61,.36,1), opacity .18s ease; }
+  #modal-overlay.active > #add-machine-modal { transform: none; opacity: 1; }
+  @starting-style { #modal-overlay.active > #add-machine-modal { transform: translate3d(0,10px,0) scale(.985); opacity: 0; } }
+
   @media (prefers-reduced-motion: reduce) {
-    #overlay.active, #overlay.active > #drawer,
-    #modal-overlay.active, #modal-overlay.active > #add-machine-modal { animation: none !important; }
+    #overlay, #modal-overlay, #overlay > #drawer, #modal-overlay > #add-machine-modal { transition: none; }
   }
   #drawer { width: 380px; max-width: 100%; height: 100%; background: var(--card); padding: 24px;
     padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); overflow-y: auto;
