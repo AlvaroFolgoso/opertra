@@ -13511,6 +13511,18 @@ async function handleForgotPassword() {
 async function logout() {
   closeUserDropdown();
   cortarSuscripcion();
+  // Móvil compartido: al salir no dejamos en memoria los datos de la empresa
+  // anterior ni los enlaces de fotos (que siguen válidos ~50 min). El siguiente
+  // login recarga todo limpio. Va tras cortarSuscripcion() para que el tiempo
+  // real no los vuelva a escribir, y envuelto en try para que nunca rompa el
+  // cierre de sesión aunque el día de mañana cambie alguna de estas variables.
+  try {
+    projects = []; workers = []; machines = []; incidents = []; invoices = []; clients = [];
+    timeLogs = []; usuariosEmpresa = []; empresasPanel = [];
+    _resumenClientes = null; _totalesObra = null; _idxFichajes = null; _fichajesDelTrabajador = null;
+    enlacesArchivo.clear();
+    datosEmpresaCargados = false;
+  } catch (e) {}
   try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
   currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
