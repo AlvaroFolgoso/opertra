@@ -7420,11 +7420,13 @@ async function enviarColaFichajes(avisarAlTerminar) {
 
   for (const f of cola) {
     try {
-      const { data, error } = await getSupabase().rpc('worker_fichar_pendiente', {
+      const { data, error } = await getSupabase().rpc('worker_fichar_v2', {
         p_worker_id: f.workerId, p_pin: f.pin,
         p_project_id: f.projectId || null, p_machine_id: f.machineId || null,
         p_horas_previstas: f.horasPrevistas || null,
         p_verificado: f.verificado !== false,
+        p_op_id: f.opId || null,
+        p_accion: f.accion || null,
         p_momento: new Date(f.momento).toISOString(),
       });
       if (error) throw error;
@@ -7433,7 +7435,7 @@ async function enviarColaFichajes(avisarAlTerminar) {
       // Las lecturas de la máquina, si las apuntó
       const logId = data && data[0] ? data[0].log_id : null;
       const accion = data && data[0] ? data[0].accion : null;
-      if (logId && f.lecturas) {
+      if (logId && f.lecturas && (accion === 'entrada' || accion === 'salida')) {
         await guardarLecturas(logId, accion === 'salida', f.lecturas);
       }
     } catch (e) {
@@ -8294,6 +8296,39 @@ async function guardarLecturas(logId, esSalida, lecturas) {
   }
 }
 
+/* Un codigo unico por fichaje. Si el mismo fichaje se reintenta (mala
+   cobertura, salto de WiFi a datos), el servidor lo reconoce por este codigo
+   y NO lo repite ni lo invierte. */
+function nuevoOpId() {
+  try {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  } catch (e) {}
+  return 'op-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+/* Ficha reintentando si parece un corte de red. Es SEGURO reintentar porque
+   cada fichaje lleva su op_id: aunque la primera vez sí llegara al servidor y
+   solo se perdiera la respuesta, el reintento devuelve el mismo resultado sin
+   duplicar. Un rechazo del servidor (PIN, baja) NO se reintenta: guardarlo no
+   arreglaria nada. */
+async function llamarFichar(params) {
+  let ultimoError = null;
+  for (let intento = 0; intento < 3; intento++) {
+    try {
+      const { data, error } = await getSupabase().rpc('worker_fichar_v2', params);
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      ultimoError = e;
+      const esDeRed = navigator.onLine === false
+        || /fetch|network|failed to fetch|timeout|load failed/i.test(String(e && e.message));
+      if (!esDeRed) throw e;
+      if (intento < 2) await new Promise(r => setTimeout(r, 600 * (intento + 1)));
+    }
+  }
+  throw ultimoError;
+}
+
 async function ficharAhora(opciones) {
   if (fichajeCargando) return;
   // Lo primero de todo: lo que haya escrito en los campos, antes de que
@@ -8316,6 +8351,10 @@ async function ficharAhora(opciones) {
   }
   // Si va a fichar entrada, comprobamos que la lista de trabajos esté al día
   if (!fichajeAbierto) await refrescarAntesDeFichar();
+  // Le decimos al servidor EXPLICITAMENTE si es entrada o salida (ya no lo
+  // adivina) y le damos un codigo unico para este fichaje.
+  const accionPrevista = fichajeAbierto ? 'salida' : 'entrada';
+  const opId = nuevoOpId();
   fichajeCargando = true;
   const btn = document.getElementById('btn-fichar');
   const textoOriginal = btn ? btn.innerHTML : '';
@@ -8331,14 +8370,14 @@ async function ficharAhora(opciones) {
 
     const ficha = miFichaTrabajador();
     if (!ficha) throw new Error('No tienes ficha de trabajador para poder fichar.');
-    const { data, error } = await getSupabase().rpc('worker_fichar', {
+    const data = await llamarFichar({
       p_worker_id: ficha.dbId, p_pin: ficha.pin,
       p_project_id: projectId || null, p_machine_id: machine ? machine.dbId : null,
       p_horas_previstas: fichajeAbierto ? null : horasPrevistas,
       // false = no se pudo leer el código de la máquina
       p_verificado: !(opciones && opciones.verificado === false),
+      p_op_id: opId, p_accion: accionPrevista, p_momento: null,
     });
-    if (error) throw error;
 
     const accion = data && data[0] ? data[0].accion : null;
     const idFichaje = data && data[0] ? data[0].log_id : null;
@@ -8358,6 +8397,18 @@ async function ficharAhora(opciones) {
       if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
       await cargarFichajes();
       renderFichaje();
+      return;
+    }
+
+    // El servidor no tenía ninguna jornada abierta que cerrar: ya estaba
+    // cerrada (una salida anterior sí llegó aunque se perdiera la respuesta).
+    if (accion === 'nada_que_cerrar') {
+      aviso('Esa jornada ya estaba cerrada. Te he actualizado la pantalla.');
+      fichajeAbierto = null;
+      if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+      await cargarFichajes();
+      renderFichaje();
+      renderDashboard();
       return;
     }
 
@@ -8397,6 +8448,7 @@ async function ficharAhora(opciones) {
           horasPrevistas: fichajeAbierto ? null : horasPrevistas,
           verificado: !(opciones && opciones.verificado === false),
           lecturas: lecturasApuntadas,
+          opId: opId, accion: accionPrevista,
         });
         mostrarDatos({
           titulo: 'Guardado en tu móvil',
