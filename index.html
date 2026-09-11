@@ -3315,17 +3315,45 @@ async function enviarLoteDeEnlaces() {
   const rutas = [...new Set(lote.map(p => p.ruta))];   // sin repetir
   const porRuta = {};
   try {
-    const { data, error } = await getSupabase().storage.from(BUCKET)
-      .createSignedUrls(rutas, 3600);
-    if (error) throw error;
-    (data || []).forEach((d, i) => {
-      // Algunas versiones no devuelven 'path': se cae al orden pedido.
-      const r = (d && d.path) || rutas[i];
-      if (d && d.signedUrl && r) {
-        porRuta[r] = d.signedUrl;
-        enlacesArchivo.set(r, { url: d.signedUrl, caduca: Date.now() + VIDA_ENLACE });
-      }
-    });
+    if (currentUser.isWorker) {
+      /* El trabajador entra con PIN: para Storage es un anónimo y las reglas
+         del bucket NO le dejan firmar ningún enlace (por eso no veía la foto
+         de las máquinas). Se los pide a la función del servidor, que valida su
+         PIN y solo firma ficheros de la carpeta de SU empresa. */
+      const ficha = miFichaTrabajador();
+      const workerId = (ficha && ficha.dbId) || currentUser.id;
+      const pin = (ficha && ficha.pin) || currentUser.pin;
+      const base = String(SUPABASE_CONFIG.url).replace(/\/+$/, '');
+      const resp = await fetch(base + '/functions/v1/swift-worker', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_CONFIG.anonKey,
+          Authorization: 'Bearer ' + SUPABASE_CONFIG.anonKey,
+        },
+        body: JSON.stringify({ worker_id: workerId, pin: pin, rutas }),
+      });
+      let j = null;
+      try { j = await resp.json(); } catch (e) {}
+      const enlaces = (j && j.enlaces) || {};
+      Object.keys(enlaces).forEach(r => {
+        if (!enlaces[r]) return;
+        porRuta[r] = enlaces[r];
+        enlacesArchivo.set(r, { url: enlaces[r], caduca: Date.now() + VIDA_ENLACE });
+      });
+    } else {
+      const { data, error } = await getSupabase().storage.from(BUCKET)
+        .createSignedUrls(rutas, 3600);
+      if (error) throw error;
+      (data || []).forEach((d, i) => {
+        // Algunas versiones no devuelven 'path': se cae al orden pedido.
+        const r = (d && d.path) || rutas[i];
+        if (d && d.signedUrl && r) {
+          porRuta[r] = d.signedUrl;
+          enlacesArchivo.set(r, { url: d.signedUrl, caduca: Date.now() + VIDA_ENLACE });
+        }
+      });
+    }
   } catch (e) { /* sin enlaces: cada foto enseña su icono de "no se pudo" */ }
 
   lote.forEach(p => p.resolver(porRuta[p.ruta] || null));

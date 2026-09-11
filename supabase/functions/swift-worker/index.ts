@@ -1,21 +1,26 @@
 // ============================================================================
-// OPERTRA · Subida de fotos del trabajador (que entra con PIN, sin sesión)
+// OPERTRA · Fotos del trabajador que entra con PIN (sin sesión)
 // ============================================================================
 //
 // EL PROBLEMA QUE RESUELVE
-//   Las reglas del bucket de Storage solo dejan SUBIR ficheros a usuarios con
-//   sesión iniciada (rol 'authenticated'). El personal de obra entra con PIN,
-//   que para Supabase es un usuario ANÓNIMO. Por eso, cuando un trabajador
-//   intentaba adjuntar la FOTO de una incidencia (o su propia foto de perfil),
-//   la subida se rechazaba y se caía el envío entero: creía que había
-//   reportado la avería y no se guardaba nada.
+//   Las reglas del bucket de Storage solo dejan SUBIR y LEER ficheros a
+//   usuarios con sesión iniciada (rol 'authenticated'). El personal de obra
+//   entra con PIN, que para Supabase es un usuario ANÓNIMO. Por eso:
+//     · Al SUBIR la foto de una incidencia o su foto de perfil, se rechazaba.
+//     · Al VER una foto (la de una máquina, por ejemplo), no se le podía dar
+//       el enlace temporal y salía el icono de "no se pudo cargar".
 //
 // CÓMO LO RESUELVE
-//   El trabajador manda aquí la foto junto a su worker_id y su PIN. Esta
-//   función valida el PIN contra la ficha (igual que worker_login y las demás
-//   funciones del trabajador), deduce la EMPRESA de esa ficha —nunca se fía de
-//   un dato del navegador— y sube el fichero con permisos de servicio a la
-//   carpeta de su empresa. Devuelve la ruta, que la app guarda en la fila.
+//   El trabajador manda aquí su worker_id y su PIN. Esta función valida el PIN
+//   contra la ficha (igual que worker_login y las demás funciones del
+//   trabajador), deduce la EMPRESA de esa ficha —nunca se fía de un dato del
+//   navegador— y actúa con permisos de servicio:
+//     · SUBIR  (multipart/form-data): guarda el fichero en la carpeta de su
+//       empresa y devuelve la ruta.
+//     · ENLACES (application/json): firma enlaces de lectura, pero SOLO de
+//       ficheros que estén en la carpeta de su empresa (la primera carpeta de
+//       la ruta es el company_id). Así un trabajador no puede pedir la foto de
+//       otra empresa aunque adivine la ruta.
 //
 // NOMBRE DESPLEGADO
 //   En Supabase quedó con el slug 'swift-worker' (la dirección
@@ -59,10 +64,65 @@ function limpiarNombre(nombre: string): string {
     .slice(-60) || 'foto.jpg';
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (req.method !== 'POST') return responder({ error: 'Solo se acepta POST.' }, 405);
+function clienteServicio() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  );
+}
 
+// El guardia de la puerta: PIN correcto y trabajador de alta. Devuelve la
+// empresa (nunca se fía de un parámetro del navegador) o null si no cuela.
+async function empresaDelTrabajador(supabase: any, workerId: string, pin: string): Promise<string | null> {
+  const { data: w, error } = await supabase
+    .from('workers')
+    .select('id, company_id')
+    .eq('id', workerId)
+    .eq('pin', pin)
+    .eq('active', true)
+    .maybeSingle();
+  if (error) throw error;
+  return w ? w.company_id : null;
+}
+
+// ---- ENLACES DE LECTURA (application/json) --------------------------------
+async function darEnlaces(req: Request): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return responder({ error: 'Formato no válido.' }, 400); }
+
+  const workerId = String(body.worker_id || '').trim();
+  const pin      = String(body.pin || '').trim();
+  const rutas    = Array.isArray(body.rutas) ? body.rutas.map((r: unknown) => String(r || '')).filter(Boolean) : [];
+
+  if (!workerId || !pin) return responder({ error: 'Faltan los datos de acceso.' }, 400);
+  if (!rutas.length) return responder({ enlaces: {} }, 200);
+
+  const supabase = clienteServicio();
+  let company: string | null;
+  try { company = await empresaDelTrabajador(supabase, workerId, pin); }
+  catch { return responder({ error: 'No se pudo validar el acceso.' }, 500); }
+  if (!company) return responder({ error: 'PIN incorrecto.' }, 401);
+
+  // SOLO fotos de SU empresa: la primera carpeta de la ruta es el company_id.
+  const prefijo = `${company}/`;
+  const permitidas = rutas.filter((r: string) => r.startsWith(prefijo));
+  if (!permitidas.length) return responder({ enlaces: {} }, 200);
+
+  const { data: firmadas, error } = await supabase.storage
+    .from('opertra')
+    .createSignedUrls(permitidas, 3600);
+  if (error) return responder({ error: 'No se pudieron generar los enlaces.' }, 500);
+
+  const enlaces: Record<string, string> = {};
+  (firmadas || []).forEach((f: any, i: number) => {
+    const ruta = (f && f.path) || permitidas[i];
+    if (f && f.signedUrl && ruta) enlaces[ruta] = f.signedUrl;
+  });
+  return responder({ enlaces }, 200);
+}
+
+// ---- SUBIDA DE FOTO (multipart/form-data) ---------------------------------
+async function subirFoto(req: Request): Promise<Response> {
   let form: FormData;
   try {
     form = await req.formData();
@@ -87,25 +147,14 @@ Deno.serve(async (req) => {
   if (!tipoMime.startsWith('image/')) return responder({ error: 'Solo se admiten imágenes.' }, 400);
   if (archivo.size > 12 * 1024 * 1024) return responder({ error: 'La imagen es demasiado grande.' }, 413);
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  );
+  const supabase = clienteServicio();
 
-  // El guardia de la puerta: PIN correcto y trabajador de alta. La empresa se
-  // saca de aquí, nunca de un parámetro del navegador.
-  const { data: w, error: eW } = await supabase
-    .from('workers')
-    .select('id, company_id')
-    .eq('id', workerId)
-    .eq('pin', pin)
-    .eq('active', true)
-    .maybeSingle();
+  let company: string | null;
+  try { company = await empresaDelTrabajador(supabase, workerId, pin); }
+  catch { return responder({ error: 'No se pudo validar el acceso.' }, 500); }
+  if (!company) return responder({ error: 'PIN incorrecto.' }, 401);
 
-  if (eW) return responder({ error: 'No se pudo validar el acceso.' }, 500);
-  if (!w) return responder({ error: 'PIN incorrecto.' }, 401);
-
-  const ruta = `${w.company_id}/${carpeta}/${Date.now()}-${limpiarNombre(archivo.name)}`;
+  const ruta = `${company}/${carpeta}/${Date.now()}-${limpiarNombre(archivo.name)}`;
 
   const bytes = new Uint8Array(await archivo.arrayBuffer());
   const { error: eUp } = await supabase.storage
@@ -115,4 +164,17 @@ Deno.serve(async (req) => {
   if (eUp) return responder({ error: 'No se pudo guardar la imagen.' }, 500);
 
   return responder({ ruta }, 200);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  if (req.method !== 'POST') return responder({ error: 'Solo se acepta POST.' }, 405);
+
+  // Si llega JSON, es una petición de ENLACES de lectura (ver fotos). Si no,
+  // es una SUBIDA de foto (multipart), como siempre.
+  const contentType = req.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return await darEnlaces(req);
+  }
+  return await subirFoto(req);
 });
