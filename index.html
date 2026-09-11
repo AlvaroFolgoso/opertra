@@ -4849,6 +4849,22 @@ function textoDeHoy() {
 }
 
 let currentTab = 'dashboard';
+
+/* Recordar la última pestaña. Si vuelves a la app en menos de 5 min, te deja
+   donde estabas; si tardas más, se vuelve al Inicio (panel general). */
+const PESTANA_KEY = 'opertra_ultima_pestana';
+const PESTANA_MEMORIA_MS = 5 * 60 * 1000;
+function recordarPestana() {
+  try { localStorage.setItem(PESTANA_KEY, JSON.stringify({ tab: currentTab, ts: Date.now() })); } catch (e) {}
+}
+function pestanaAlVolver() {
+  try {
+    const g = JSON.parse(localStorage.getItem(PESTANA_KEY) || 'null');
+    if (g && g.tab && (Date.now() - g.ts) <= PESTANA_MEMORIA_MS && canAccess(g.tab)) return g.tab;
+  } catch (e) {}
+  return 'dashboard';
+}
+
 function switchTab(tab) {
   if (!canAccess(tab)) tab = 'dashboard'; // sin permiso para este módulo
   // Si se llega desde la hoja del menú, se suelta el bloqueo del fondo
@@ -4866,6 +4882,7 @@ function switchTab(tab) {
     if (fleetMap) { fleetMap.remove(); fleetMap = null; }
   }
   currentTab = tab;
+  recordarPestana();
 
   // 1) Respuesta inmediata: se marca el botón y se cambia de vista. Esto es
   //    instantáneo porque solo cambia una clase.
@@ -5195,6 +5212,13 @@ function bloquePrimerosPasos() {
 }
 
 function renderDashboard() {
+  // El trabajador NO ve el panel de empresa (compañeros en tiempo real, flota,
+  // todas las obras, cobros, incidencias de otros). Tiene su propio Inicio con
+  // SOLO lo suyo: su jornada y sus horas.
+  if (currentUser.isWorker === true || currentUser.accessLevel === 'trabajador') {
+    renderDashboardTrabajador();
+    return;
+  }
   const active = machines.filter(m => m.status === 'active').length;
   const maint = machines.filter(m => m.status === 'maintenance').length;
   const workingNow = workers.filter(w => w.status === 'working').length;
@@ -5364,6 +5388,84 @@ function renderDashboard() {
         ? `<div style="text-align:center;font-size:12.5px;color:var(--steel);margin-top:10px;">
              Mostrando las 6 más urgentes de ${projects.filter(p => p.status !== 'finished').length} en curso
            </div>` : ''}
+    </div>
+  `;
+}
+
+/* El Inicio del TRABAJADOR: solo su jornada actual y sus horas. Nada de la
+   empresa (compañeros, flota, obras, cobros) — eso no le corresponde ver. */
+function renderDashboardTrabajador() {
+  const logs = Array.isArray(_fichajesDelTrabajador) ? _fichajesDelTrabajador : [];
+  const ficha = (typeof miFichaTrabajador === 'function') ? miFichaTrabajador() : null;
+  const nombre = ((currentUser.name || (ficha && ficha.name) || '').trim().split(/\s+/)[0]) || '';
+
+  const ahora = new Date();
+  const hoyISO = fechaLocalHoy();
+  const lunes = new Date(ahora);
+  lunes.setDate(ahora.getDate() - ((ahora.getDay() + 6) % 7));   // 0 = lunes
+  lunes.setHours(0, 0, 0, 0);
+
+  let msHoy = 0, msSemana = 0;
+  logs.forEach(l => {
+    if (!l || !l.check_in) return;
+    const ini = new Date(l.check_in);
+    if (isNaN(ini)) return;
+    const fin = l.check_out ? new Date(l.check_out) : ahora;
+    const dur = Math.max(0, fin - ini);
+    if (String(l.check_in).slice(0, 10) === hoyISO) msHoy += dur;
+    if (ini >= lunes) msSemana += dur;
+  });
+  const fmtH = (ms) => { const m = Math.round(ms / 60000); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
+
+  const abierto = fichajeAbierto;
+  const obra = abierto ? (projects.find(p => p.dbId === abierto.projectId) || null) : null;
+  const desde = abierto && abierto.entrada ? horaDe(abierto.entrada) : '';
+
+  const estadoHTML = abierto
+    ? `<div class="plate" style="padding:20px;background:var(--success-bg);border:1px solid var(--success);">${rivets}
+         <div style="display:flex;align-items:center;gap:10px;">
+           <i class="fa-solid fa-circle-check" style="color:var(--success);font-size:20px;"></i>
+           <div>
+             <div style="font-size:15px;font-weight:700;color:var(--ink);">Jornada en curso${desde ? ' desde las ' + desde : ''}</div>
+             <div style="font-size:13px;color:var(--steel);">${obra ? esc(obra.name) : 'Sin obra asignada'}</div>
+           </div>
+         </div>
+         <button class="btn btn-dark" style="width:100%;justify-content:center;margin-top:14px;" onclick="switchTab('fichaje')"><i class="fa-solid fa-right-from-bracket"></i> Ir a fichar salida</button>
+       </div>`
+    : `<div class="plate" style="padding:20px;">${rivets}
+         <div style="display:flex;align-items:center;gap:10px;">
+           <i class="fa-solid fa-clock" style="color:var(--steel);font-size:20px;"></i>
+           <div>
+             <div style="font-size:15px;font-weight:700;color:var(--ink);">No tienes ninguna jornada abierta</div>
+             <div style="font-size:13px;color:var(--steel);">Cuando llegues a la obra, ficha tu entrada.</div>
+           </div>
+         </div>
+         <button class="btn btn-amber" style="width:100%;justify-content:center;margin-top:14px;" onclick="switchTab('fichaje')"><i class="fa-solid fa-tower-broadcast"></i> Fichar entrada</button>
+       </div>`;
+
+  document.getElementById('view-dashboard').innerHTML = `
+    <div style="margin-bottom:16px;">
+      <div class="f-display" style="font-size:20px;">Hola${nombre ? ', ' + esc(nombre) : ''}</div>
+      <div style="font-size:13px;color:var(--steel);">${esc(currentUser.company || '')}</div>
+    </div>
+    ${estadoHTML}
+    <div class="kpi-grid" style="margin-top:16px;">
+      <div class="plate kpi-card">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Mis horas hoy</div><div class="stat-value">${fmtH(msHoy)}</div><div class="stat-sub">solo tus fichajes</div></div>
+          <div class="stat-icon" style="background:#2C5F8A18;color:var(--blue)"><i class="fa-solid fa-clock"></i></div>
+        </div>
+      </div>
+      <div class="plate kpi-card">${rivets}
+        <div class="stat-top">
+          <div><div class="stat-label">Mis horas esta semana</div><div class="stat-value">${fmtH(msSemana)}</div><div class="stat-sub">desde el lunes</div></div>
+          <div class="stat-icon" style="background:#2F8F5B18;color:var(--success)"><i class="fa-solid fa-calendar-week"></i></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+      <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="fichajeSubTab='registro'; switchTab('fichaje'); renderFichaje();"><i class="fa-solid fa-table-list"></i> Ver mi registro de horas</button>
+      <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="switchTab('avisos')"><i class="fa-solid fa-bullhorn"></i> Reportar una incidencia</button>
     </div>
   `;
 }
@@ -7302,6 +7404,7 @@ let temporizadorOculta = null;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     clearInterval(contadorHandle);
+    recordarPestana();           // guardar dónde estaba y cuándo se fue
     // Tras 5 minutos sin mirarla, se suelta la conexión
     clearTimeout(temporizadorOculta);
     temporizadorOculta = setTimeout(soltarConexionSiOculta, 300000);
@@ -7311,6 +7414,16 @@ document.addEventListener('visibilitychange', () => {
   if (!currentUser.companyId) return;
   arrancarContador();
   suscribirCambios();          // reconectar si se había soltado
+  // Si ha estado fuera más de 5 min, vuelve al Inicio; si vuelve enseguida, se
+  // queda donde estaba. De paso re-sincroniza el menú con la pantalla (antes el
+  // menú podía quedar marcando una sección distinta a la que se veía).
+  const destino = pestanaAlVolver();
+  if (destino !== currentTab) {
+    switchTab(destino);
+  } else {
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + currentTab));
+    if (typeof marcarBotonActivo === 'function') marcarBotonActivo(currentTab);
+  }
   // Al volver, los datos pueden estar viejos: se refrescan
   const ahora = Date.now();
   if (!window.__ultimaCarga || ahora - window.__ultimaCarga > 20000) {
@@ -13055,7 +13168,7 @@ function enterAppOrShowTrialExpired() {
     registrarAceptacionLegal();
     comprobarSiSoyDueno();
     renderTopbarUser(); renderNav(); renderTrialBanner();
-    switchTab(currentUser.isWorker ? 'fichaje' : 'dashboard');
+    switchTab(pestanaAlVolver());
     loadCompanyData().then(() => comprobarTutorialTrabajador());
     precargarLectorQR();
   }
