@@ -8541,6 +8541,18 @@ async function ficharAhora(opciones) {
       return;
     }
 
+    // Otro compañero tiene esa máquina cogida ahora mismo. No se dice quién:
+    // el trabajador no tiene por qué ver la actividad de los demás.
+    if (accion === 'maquina_ocupada') {
+      aviso('Esa ' + tm('s') + ' ya la está usando otro compañero ahora mismo.\n\n'
+          + 'Ficha con otra, o a pie si hoy vas sin ' + tm('s') + '. '
+          + 'Si crees que es un error, díselo a tu encargado.', 'malo');
+      if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
+      await cargarFichajes();
+      renderFichaje();
+      return;
+    }
+
     // El servidor no tenía ninguna jornada abierta que cerrar: ya estaba
     // cerrada (una salida anterior sí llegó aunque se perdiera la respuesta).
     if (accion === 'nada_que_cerrar') {
