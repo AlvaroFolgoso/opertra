@@ -2,45 +2,38 @@
 // OPERTRA · Fotos del trabajador que entra con PIN (sin sesión)
 // ============================================================================
 //
-// EL PROBLEMA QUE RESUELVE
-//   Las reglas del bucket de Storage solo dejan SUBIR y LEER ficheros a
-//   usuarios con sesión iniciada (rol 'authenticated'). El personal de obra
-//   entra con PIN, que para Supabase es un usuario ANÓNIMO. Por eso:
-//     · Al SUBIR la foto de una incidencia o su foto de perfil, se rechazaba.
-//     · Al VER una foto (la de una máquina, por ejemplo), no se le podía dar
-//       el enlace temporal y salía el icono de "no se pudo cargar".
+// DOS COSAS EN UNA MISMA FUNCIÓN
+//   · SUBIR   (multipart/form-data): guarda la foto en la carpeta de su empresa.
+//   · ENLACES (application/json):    firma enlaces de lectura de fotos, SOLO de
+//                                    su empresa. Sin esto el trabajador no veía
+//                                    la foto de ninguna máquina ni incidencia:
+//                                    la regla de lectura del bucket solo deja
+//                                    a 'authenticated', y él es anónimo.
 //
-// CÓMO LO RESUELVE
-//   El trabajador manda aquí su worker_id y su PIN. Esta función valida el PIN
-//   contra la ficha (igual que worker_login y las demás funciones del
-//   trabajador), deduce la EMPRESA de esa ficha —nunca se fía de un dato del
-//   navegador— y actúa con permisos de servicio:
-//     · SUBIR  (multipart/form-data): guarda el fichero en la carpeta de su
-//       empresa y devuelve la ruta.
-//     · ENLACES (application/json): firma enlaces de lectura, pero SOLO de
-//       ficheros que estén en la carpeta de su empresa (la primera carpeta de
-//       la ruta es el company_id). Así un trabajador no puede pedir la foto de
-//       otra empresa aunque adivine la ruta.
+// SEGURIDAD
+//   Se valida el PIN aquí dentro y la EMPRESA se deduce de la ficha, nunca de
+//   un dato del navegador. En "enlaces" solo se firman rutas que empiecen por
+//   la carpeta de su empresa: no puede pedir fotos de otra.
+//
+// CLAVE CON LA QUE HABLA CON LA BASE
+//   Este proyecto usa el sistema NUEVO de claves de Supabase (sb_publishable_ /
+//   sb_secret_). La antigua SUPABASE_SERVICE_ROLE_KEY que Supabase inyecta ya
+//   no vale aquí. Por eso lee el secreto OPERTRA_SERVICE_KEY (Edge Functions →
+//   Secrets), que contiene la clave sb_secret_ del proyecto. Además, el rol
+//   service_role necesita SELECT sobre public.workers (se le devolvió el
+//   2026-09-13; en la auditoría se le había quitado por error).
 //
 // NOMBRE DESPLEGADO
-//   En Supabase quedó con el slug 'swift-worker' (la dirección
-//   /functions/v1/swift-worker no se puede cambiar una vez creada). La app la
-//   llama por ese nombre. Este archivo es esa misma función.
+//   Slug 'swift-worker' (la dirección /functions/v1/swift-worker no se puede
+//   cambiar una vez creada). En el panel aparece como 'subir-archivo-trabajador'.
 //
 // CÓMO SE (RE)DESPLIEGA
-//   Por el editor del panel de Supabase (Edit function → pegar → Deploy), o
-//   por CLI:  supabase functions deploy swift-worker --no-verify-jwt
-//   (--no-verify-jwt: quien llama es el trabajador con PIN, no un usuario con
-//    sesión; la seguridad la pone el PIN validado aquí dentro.)
-//   IMPORTANTE: en Settings de la función, "Verify JWT" debe quedar EN OFF.
-//   No hace falta crear ningún secreto nuevo: usa SUPABASE_URL y
-//   SUPABASE_SERVICE_ROLE_KEY, que el proyecto ya tiene.
+//   Panel de Supabase: Functions → subir-archivo-trabajador → Code → pegar →
+//   Deploy. "Verify JWT" en OFF (quien llama es el trabajador con PIN).
 // ============================================================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-// El navegador llama desde opertra.com a *.supabase.co: es otra dirección, así
-// que hay que permitir la llamada (CORS) y responder a la comprobación previa.
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -54,8 +47,8 @@ function responder(cuerpo: unknown, status = 200): Response {
   });
 }
 
-// Deja el nombre del fichero en algo seguro para una ruta (letras, números,
-// punto, guion). Igual que limpiarNombre() en la app.
+// Deja el nombre del fichero en algo seguro para una ruta. Igual que
+// limpiarNombre() en la app.
 function limpiarNombre(nombre: string): string {
   return String(nombre || 'foto.jpg')
     .toLowerCase()
@@ -65,14 +58,14 @@ function limpiarNombre(nombre: string): string {
 }
 
 function clienteServicio() {
-  return createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  );
+  const clave = Deno.env.get('OPERTRA_SERVICE_KEY')
+             || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+             || '';
+  return createClient(Deno.env.get('SUPABASE_URL')!, clave);
 }
 
 // El guardia de la puerta: PIN correcto y trabajador de alta. Devuelve la
-// empresa (nunca se fía de un parámetro del navegador) o null si no cuela.
+// empresa de la ficha, o null si el PIN no vale.
 async function empresaDelTrabajador(supabase: any, workerId: string, pin: string): Promise<string | null> {
   const { data: w, error } = await supabase
     .from('workers')
@@ -99,11 +92,15 @@ async function darEnlaces(req: Request): Promise<Response> {
 
   const supabase = clienteServicio();
   let company: string | null;
-  try { company = await empresaDelTrabajador(supabase, workerId, pin); }
-  catch { return responder({ error: 'No se pudo validar el acceso.' }, 500); }
+  try {
+    company = await empresaDelTrabajador(supabase, workerId, pin);
+  } catch (e) {
+    console.error('validar acceso (enlaces):', e);
+    return responder({ error: 'No se pudo validar el acceso.' }, 500);
+  }
   if (!company) return responder({ error: 'PIN incorrecto.' }, 401);
 
-  // SOLO fotos de SU empresa: la primera carpeta de la ruta es el company_id.
+  // Solo fotos de SU empresa: cualquier otra ruta se ignora.
   const prefijo = `${company}/`;
   const permitidas = rutas.filter((r: string) => r.startsWith(prefijo));
   if (!permitidas.length) return responder({ enlaces: {} }, 200);
@@ -111,7 +108,10 @@ async function darEnlaces(req: Request): Promise<Response> {
   const { data: firmadas, error } = await supabase.storage
     .from('opertra')
     .createSignedUrls(permitidas, 3600);
-  if (error) return responder({ error: 'No se pudieron generar los enlaces.' }, 500);
+  if (error) {
+    console.error('firmar enlaces:', error);
+    return responder({ error: 'No se pudieron generar los enlaces.' }, 500);
+  }
 
   const enlaces: Record<string, string> = {};
   (firmadas || []).forEach((f: any, i: number) => {
@@ -142,7 +142,7 @@ async function subirFoto(req: Request): Promise<Response> {
   }
   if (!(archivo instanceof File)) return responder({ error: 'No llegó ningún archivo.' }, 400);
 
-  // Comprobación de tipo y tamaño también en el servidor (no solo en el móvil).
+  // Tipo y tamaño también en el servidor (no solo en el móvil).
   const tipoMime = archivo.type || '';
   if (!tipoMime.startsWith('image/')) return responder({ error: 'Solo se admiten imágenes.' }, 400);
   if (archivo.size > 12 * 1024 * 1024) return responder({ error: 'La imagen es demasiado grande.' }, 413);
@@ -150,8 +150,12 @@ async function subirFoto(req: Request): Promise<Response> {
   const supabase = clienteServicio();
 
   let company: string | null;
-  try { company = await empresaDelTrabajador(supabase, workerId, pin); }
-  catch { return responder({ error: 'No se pudo validar el acceso.' }, 500); }
+  try {
+    company = await empresaDelTrabajador(supabase, workerId, pin);
+  } catch (e) {
+    console.error('validar acceso (subida):', e);
+    return responder({ error: 'No se pudo validar el acceso.' }, 500);
+  }
   if (!company) return responder({ error: 'PIN incorrecto.' }, 401);
 
   const ruta = `${company}/${carpeta}/${Date.now()}-${limpiarNombre(archivo.name)}`;
@@ -161,7 +165,10 @@ async function subirFoto(req: Request): Promise<Response> {
     .from('opertra')
     .upload(ruta, bytes, { contentType: tipoMime, upsert: false });
 
-  if (eUp) return responder({ error: 'No se pudo guardar la imagen.' }, 500);
+  if (eUp) {
+    console.error('subir foto:', eUp);
+    return responder({ error: 'No se pudo guardar la imagen.' }, 500);
+  }
 
   return responder({ ruta }, 200);
 }
@@ -170,8 +177,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return responder({ error: 'Solo se acepta POST.' }, 405);
 
-  // Si llega JSON, es una petición de ENLACES de lectura (ver fotos). Si no,
-  // es una SUBIDA de foto (multipart), como siempre.
+  // JSON = pedir enlaces de lectura; cualquier otra cosa = subir foto.
   const contentType = req.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     return await darEnlaces(req);
