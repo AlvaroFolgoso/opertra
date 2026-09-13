@@ -25,7 +25,7 @@
    Al cambiar, el 'activate' de abajo borra las cachés de la versión
    anterior, que es lo que limpia de un plumazo cualquier archivo viejo que
    se hubiera quedado guardado. */
-const VERSION = 'opertra-v21';
+const VERSION = 'opertra-v22';
 const CACHE_APP = VERSION + '-app';
 /* El almacén de librerías NO se borra en cada despliegue a propósito: las
    librerías no cambian y así no se vuelven a descargar. Pero lleva número
@@ -79,6 +79,46 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data && e.data.tipo === 'saltar-espera') self.skipWaiting();
+});
+
+/* ======================================================================
+   AVISOS PUSH (con la app cerrada)
+
+   El aviso de "¿has terminado?" lo mandaba la propia app, así que solo
+   sonaba si estaba abierta. Ahora es el SERVIDOR quien lo envía a la hora
+   prevista (función enviar-avisos, lanzada cada minuto), y este service
+   worker lo recibe y lo enseña esté la app abierta, en segundo plano o
+   cerrada del todo. En iPhone solo funciona con la app instalada en la
+   pantalla de inicio (iOS 16.4 o más): en una pestaña de Safari, Apple no
+   deja recibir push.
+   ====================================================================== */
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; }
+  catch (err) { d = { body: e.data ? e.data.text() : '' }; }
+  const titulo = d.title || 'Opertra';
+  const opciones = {
+    body: d.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: d.tag || 'opertra-aviso',      // el mismo tag reemplaza al anterior: no se apilan
+    renotify: true,
+    data: { url: d.url || '/' },
+  };
+  e.waitUntil(self.registration.showNotification(titulo, opciones));
+});
+
+/* Al tocar el aviso: si la app ya está abierta se trae al frente; si no, se abre. */
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil((async () => {
+    const abiertas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of abiertas) {
+      if ('focus' in c) { try { await c.focus(); return; } catch (err) {} }
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(url);
+  })());
 });
 
 self.addEventListener('fetch', (e) => {

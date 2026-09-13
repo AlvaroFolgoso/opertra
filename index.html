@@ -3290,6 +3290,46 @@ const VIDA_ENLACE = 50 * 60 * 1000;
 let lotePendiente = [];
 let loteTimer = null;
 
+/* Los enlaces se RECUERDAN en el móvil entre aperturas. Un enlace vale una
+   hora; sin esto, cada vez que se abría la app había que volver a pedirlos
+   todos y las fotos aparecían con retraso (para el trabajador son dos
+   viajes: pedir el enlace a la función del servidor y bajar la imagen).
+   Reutilizando el mismo enlace, además, el navegador reaprovecha la imagen
+   que ya tenía descargada: la foto sale al instante. */
+const ENLACES_KEY = 'opertra_enlaces_fotos';
+(function hidratarEnlaces() {
+  try {
+    const g = JSON.parse(localStorage.getItem(ENLACES_KEY) || 'null');
+    if (!g || typeof g !== 'object') return;
+    const ahora = Date.now();
+    Object.keys(g).forEach(r => {
+      const e = g[r];
+      if (e && e.url && e.caduca > ahora) enlacesArchivo.set(r, e);
+    });
+  } catch (e) {}
+})();
+function guardarEnlaces() {
+  try {
+    const obj = {};
+    enlacesArchivo.forEach((e, r) => { obj[r] = e; });
+    localStorage.setItem(ENLACES_KEY, JSON.stringify(obj));
+  } catch (e) {}
+}
+
+/* Pide por adelantado los enlaces de las fotos que se van a ver (máquinas y
+   la propia foto) nada más cargar los datos: cuando la persona entre en
+   Maquinaria, las fotos ya están listas en vez de ir apareciendo con
+   retraso. Va en un solo paquete (el lote de urlArchivo) y no bloquea nada.
+   Se limita a 120 por si la flota es enorme: el resto se pide al verlas. */
+function precalentarFotos() {
+  try {
+    const rutas = [];
+    (machines || []).forEach(m => { if (m && m.photoUrl) rutas.push(m.photoUrl); });
+    if (currentUser && currentUser.photoPath) rutas.push(currentUser.photoPath);
+    rutas.slice(0, 120).forEach(r => { urlArchivo(r).catch(() => {}); });
+  } catch (e) {}
+}
+
 async function urlArchivo(ruta) {
   if (!ruta) return null;
   const guardado = enlacesArchivo.get(ruta);
@@ -3364,12 +3404,14 @@ async function enviarLoteDeEnlaces() {
     let sobran = enlacesArchivo.size - 300;
     for (const k of enlacesArchivo.keys()) { if (sobran-- <= 0) break; enlacesArchivo.delete(k); }
   }
+  guardarEnlaces();
 }
 
 async function borrarArchivo(ruta) {
   if (!ruta) return;
   // Sin esto se seguiría sirviendo el enlace guardado de una foto que ya no existe
   enlacesArchivo.delete(ruta);
+  guardarEnlaces();
   try { await getSupabase().storage.from(BUCKET).remove([ruta]); } catch (e) {}
 }
 
@@ -4298,6 +4340,9 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
     datosEmpresaCargados = true;
     renderNav();
     pintarPestanaActual();
+    precalentarFotos();   // las fotos, listas antes de que las busque
+    // Si ya dio permiso de avisos, se asegura la suscripción push al abrir
+    if (currentUser.isWorker && typeof suscribirPush === 'function') suscribirPush();
     arrancarContador();
     suscribirCambios();
     window.__ultimaCarga = Date.now();
@@ -8187,22 +8232,90 @@ function comprobarAvisoJornada() {
   avisoJornadaMostrado = true;
   if (currentTab === 'fichaje') renderFichaje();
 
-  // Aviso del sistema, para que le llegue aunque tenga el móvil guardado
+  // Aviso del sistema con la app abierta (el de la app cerrada lo manda el
+  // servidor por push, ver suscribirPush). Va por el service worker: en
+  // iPhone, new Notification() desde la página no funciona; showNotification
+  // sí. Si no hay service worker, se cae al método clásico.
   if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      new Notification('Opertra · ¿Has terminado?', {
-        body: 'Tenías previsto terminar sobre ahora. No olvides fichar la salida.',
-        icon: '/icon-192.png', tag: 'fin-jornada',
-      });
-    } catch (e) {}
+    const titulo = 'Opertra · ¿Has terminado?';
+    const opts = {
+      body: 'Tenías previsto terminar sobre ahora. No olvides fichar la salida.',
+      icon: '/icon-192.png', tag: 'fin-jornada',
+    };
+    const clasico = () => { try { new Notification(titulo, opts); } catch (e) {} };
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then(r => r.showNotification(titulo, opts)).catch(clasico);
+    } else clasico();
   }
 }
 
-/* Se pide permiso solo al fichar entrada, no al abrir la app */
+/* ======================================================================
+   AVISOS PUSH (con la app cerrada)
+
+   El aviso de "¿has terminado?" lo ponía la propia app, así que solo sonaba
+   con la app abierta. Ahora el móvil se SUSCRIBE a avisos push y es el
+   servidor quien lo manda a la hora prevista, esté la app como esté.
+
+   Cómo va: el servidor tiene una clave pública (push_clave_publica). Con
+   ella el navegador crea una suscripción (una dirección única de este
+   móvil) y se la manda al servidor (worker_guardar_push, validando el PIN).
+   Cada minuto, la función enviar-avisos busca jornadas cuya hora prevista
+   ha llegado y manda el aviso a las suscripciones de ese trabajador.
+
+   En iPhone solo funciona con la app instalada en la pantalla de inicio
+   (iOS 16.4+). Si el servidor aún no tiene push preparado (clave vacía),
+   esto no hace nada y queda el aviso de dentro de la app.
+   ====================================================================== */
+function b64uABytes(s) {
+  const pad = '='.repeat((4 - s.length % 4) % 4);
+  const b = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+  return out;
+}
+let suscribiendoPush = false;
+async function suscribirPush() {
+  if (suscribiendoPush) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const ficha = (typeof miFichaTrabajador === 'function') ? miFichaTrabajador() : null;
+  const workerId = (ficha && ficha.dbId) || currentUser.id;
+  const pin = (ficha && ficha.pin) || currentUser.pin;
+  if (!workerId || !pin) return;
+  suscribiendoPush = true;
+  try {
+    const { data: clave } = await getSupabase().rpc('push_clave_publica');
+    if (!clave) return;                 // el servidor aún no tiene push preparado
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uABytes(clave) });
+    }
+    const j = sub.toJSON();
+    if (!j || !j.endpoint || !j.keys) return;
+    // Solo se manda al servidor si ha cambiado, no en cada apertura
+    const huella = j.endpoint + '|' + workerId;
+    let ya = null; try { ya = localStorage.getItem('opertra_push_huella'); } catch (e) {}
+    if (ya === huella) return;
+    const { error } = await getSupabase().rpc('worker_guardar_push', {
+      p_worker_id: workerId, p_pin: pin, p_endpoint: j.endpoint,
+      p_p256dh: j.keys.p256dh, p_auth: j.keys.auth,
+    });
+    if (!error) { try { localStorage.setItem('opertra_push_huella', huella); } catch (e) {} }
+  } catch (e) { /* sin push: queda el aviso de dentro de la app */ }
+  finally { suscribiendoPush = false; }
+}
+
+/* Se pide permiso solo al fichar entrada, no al abrir la app. En cuanto lo
+   da, el móvil se suscribe a los avisos push. */
 function pedirPermisoAvisos() {
   if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') { suscribirPush(); return; }
   if (Notification.permission === 'default') {
-    try { Notification.requestPermission(); } catch (e) {}
+    try {
+      const r = Notification.requestPermission();
+      if (r && typeof r.then === 'function') r.then(p => { if (p === 'granted') suscribirPush(); });
+    } catch (e) {}
   }
 }
 
@@ -8531,6 +8644,20 @@ async function ficharAhora(opciones) {
   const accionPrevista = fichajeAbierto ? 'salida' : 'entrada';
   const opId = nuevoOpId();
 
+  // CANDADO DE LOS 2 MINUTOS. Nada más fichar la entrada, el botón pasa a
+  // "Fichar salida": un toque de más (o alguien que toca varias veces) y la
+  // jornada se cerraba con 0 minutos. Se comprueba aquí, sin viaje al
+  // servidor, y el servidor lo vuelve a comprobar por su cuenta.
+  if (accionPrevista === 'salida' && fichajeAbierto && fichajeAbierto.entrada) {
+    const desdeMs = Date.now() - new Date(fichajeAbierto.entrada).getTime();
+    if (desdeMs >= 0 && desdeMs < 2 * 60 * 1000) {
+      aviso('Acabas de fichar la entrada a las ' + horaDe(fichajeAbierto.entrada) + '.\n\n'
+          + 'Para evitar toques por error, la salida se puede fichar a partir de 2 minutos después. '
+          + 'Si te has equivocado de botón, no pasa nada: sigue trabajando.');
+      soltarBoton(); fichajeCargando = false; return;
+    }
+  }
+
   try {
     // La máquina de HOY, que puede no ser la habitual: un maquinista puede
     // llevar el camión un día o ir a pie de peón.
@@ -8568,6 +8695,17 @@ async function ficharAhora(opciones) {
       if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
       await cargarFichajes();
       renderFichaje();
+      return;
+    }
+
+    // El servidor también protege los 2 primeros minutos (por si el reloj
+    // del móvil va torcido o llega una petición fuera de la app).
+    if (accion === 'recien_entrado') {
+      const desde = data[0].hora ? horaDe(data[0].hora) : '';
+      aviso('Acabas de fichar la entrada' + (desde ? ' a las ' + desde : '') + '.\n\n'
+          + 'Para evitar toques por error, la salida se puede fichar a partir de 2 minutos después. '
+          + 'Si te has equivocado de botón, no pasa nada: sigue trabajando.');
+      if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; }
       return;
     }
 
@@ -11246,13 +11384,22 @@ async function deleteVacation(workerId, vacId) {
   const w = workers.find(x => x.id === workerId);
   if (!w) return yaNoExiste('Este trabajador');
   if (!(w.vacations || []).some(v => v.id === vacId)) return yaNoExiste('Este periodo de vacaciones');
+  // En optimista: desaparece de la lista al instante; si el servidor falla,
+  // vuelve a su sitio y se avisa.
+  const antes = w.vacations.slice();
+  const repintar = () => {
+    const lista = document.getElementById('vac-list');
+    if (lista) lista.innerHTML = renderVacList(w);
+    renderTrabajadores();
+  };
+  w.vacations = w.vacations.filter(v => v.id !== vacId);
+  repintar();
   try {
     const { error } = await getSupabase().from('vacations').delete().eq('id', vacId);
     if (error) throw error;
-    w.vacations = w.vacations.filter(v => v.id !== vacId);
-    document.getElementById('vac-list').innerHTML = renderVacList(w);
-    renderTrabajadores();
   } catch (err) {
+    w.vacations = antes;
+    repintar();
     aviso('No se pudieron borrar las vacaciones: ' + mensajeError(err));
   }
 }
@@ -12443,19 +12590,27 @@ function renderFacturacion() {
   `;
 }
 
+/* Marcar cobrado / deshacer van "en optimista": se pinta el cambio EN EL
+   ACTO y se manda al servidor por detrás. Antes se esperaba al servidor con
+   la pantalla quieta, y con cobertura floja parecía que el toque no había
+   ido. Si el servidor dice que no, se deshace el cambio y se avisa. */
 async function markInvoicePaid(dbId) {
   if (!hayConexion()) return;
   if (!esAdministrador()) return;
-  if (!invoices.some(i => i.dbId === dbId)) return yaNoExiste('Este cobro');
+  const inv = invoices.find(i => i.dbId === dbId);
+  if (!inv) return yaNoExiste('Este cobro');
+  const antes = { status: inv.status, paidAt: inv.paidAt };
+  const ahora = new Date().toISOString();
+  inv.status = 'paid'; inv.paidAt = ahora;
+  datosCambiaron();   // la ficha del cliente lo seguia dando por vencido
+  pintarPestanaActual();
   try {
     const { error } = await getSupabase().from('invoices')
-      .update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', dbId);
+      .update({ status: 'paid', paid_at: ahora }).eq('id', dbId);
     if (error) throw error;
-    const inv = invoices.find(i => i.dbId === dbId);
-    if (inv) { inv.status = 'paid'; inv.paidAt = new Date().toISOString(); }
-    datosCambiaron();   // la ficha del cliente lo seguia dando por vencido
-    pintarPestanaActual();
   } catch (err) {
+    inv.status = antes.status; inv.paidAt = antes.paidAt;
+    datosCambiaron(); pintarPestanaActual();
     aviso('No se pudo marcar como cobrado: ' + mensajeError(err));
   }
 }
@@ -12463,16 +12618,19 @@ async function markInvoicePaid(dbId) {
 async function markInvoicePending(dbId) {
   if (!hayConexion()) return;
   if (!esAdministrador()) return;
-  if (!invoices.some(i => i.dbId === dbId)) return yaNoExiste('Este cobro');
+  const inv = invoices.find(i => i.dbId === dbId);
+  if (!inv) return yaNoExiste('Este cobro');
+  const antes = { status: inv.status, paidAt: inv.paidAt };
+  inv.status = 'pending'; inv.paidAt = null;
+  datosCambiaron();
+  pintarPestanaActual();
   try {
     const { error } = await getSupabase().from('invoices')
       .update({ status: 'pending', paid_at: null }).eq('id', dbId);
     if (error) throw error;
-    const inv = invoices.find(i => i.dbId === dbId);
-    if (inv) { inv.status = 'pending'; inv.paidAt = null; }
-    datosCambiaron();
-    pintarPestanaActual();
   } catch (err) {
+    inv.status = antes.status; inv.paidAt = antes.paidAt;
+    datosCambiaron(); pintarPestanaActual();
     aviso('No se pudo deshacer: ' + mensajeError(err));
   }
 }
@@ -13776,6 +13934,7 @@ async function logout() {
     timeLogs = []; usuariosEmpresa = []; empresasPanel = [];
     _resumenClientes = null; _totalesObra = null; _idxFichajes = null; _fichajesDelTrabajador = null;
     enlacesArchivo.clear();
+    try { localStorage.removeItem(ENLACES_KEY); } catch (e) {}   // móvil compartido: nada del anterior
     datosEmpresaCargados = false;
   } catch (e) {}
   try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}
