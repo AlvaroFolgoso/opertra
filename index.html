@@ -8470,8 +8470,41 @@ async function llamarFichar(params) {
   throw ultimoError;
 }
 
+/* Pone al día la lista LOCAL de fichajes del trabajador con lo que acaba de
+   responder el servidor, sin volver a pedírsela. Así "Mis horas" y el
+   registro reflejan el fichaje en el mismo instante. Antes se quedaban con
+   la lista vieja hasta la siguiente recarga y parecía que no se había
+   guardado, aunque sí estaba en el servidor. */
+function apuntarFichajeEnLocal(accion, fila, projectId, machineId) {
+  if (!fila) return;
+  if (!Array.isArray(_fichajesDelTrabajador)) _fichajesDelTrabajador = [];
+  if (accion === 'entrada') {
+    _fichajesDelTrabajador.unshift({
+      id: fila.log_id, worker_id: currentUser.id,
+      project_id: projectId || null, machine_id: machineId || null,
+      check_in: fila.hora, check_out: null,
+      expected_end: horasPrevistas ? new Date(Date.now() + horasPrevistas * 3600000).toISOString() : null,
+      verified: true, auto_closed: false,
+    });
+  } else if (accion === 'salida') {
+    const l = _fichajesDelTrabajador.find(x => x && x.id === fila.log_id);
+    if (l) l.check_out = fila.hora;
+  }
+}
+
 async function ficharAhora(opciones) {
   if (fichajeCargando) return;
+  // RESPUESTA INMEDIATA AL DEDO. El botón se bloquea y enseña que está en
+  // ello en el MISMO instante del toque, antes de cualquier viaje al
+  // servidor. Es la regla de las apps nativas: primero se contesta al dedo,
+  // luego se hace el trabajo. Antes se esperaba un refresco de la lista de
+  // obras sin enseñar nada, y ahí la gente volvía a tocar.
+  fichajeCargando = true;
+  const btn = document.getElementById('btn-fichar');
+  const textoOriginal = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...'; }
+  const soltarBoton = () => { if (btn) { btn.disabled = false; btn.innerHTML = textoOriginal; } };
+
   // Lo primero de todo: lo que haya escrito en los campos, antes de que
   // cualquier repintado los deje en blanco.
   const lecturasApuntadas = leerLecturasDeLaPantalla(!!fichajeAbierto);
@@ -8488,18 +8521,15 @@ async function ficharAhora(opciones) {
            + `Un contador no baja solo — revisa que no te hayas dejado ningún dígito.\n\n¿Seguro que es correcto?`,
       aceptar: 'Sí, es correcto', cancelar: 'Voy a revisarlo', peligro: true,
     });
-    if (!seguir) return;
+    if (!seguir) { soltarBoton(); fichajeCargando = false; return; }
   }
-  // Si va a fichar entrada, comprobamos que la lista de trabajos esté al día
-  if (!fichajeAbierto) await refrescarAntesDeFichar();
+  // Ya NO se refresca aquí la lista de obras: la obra ya está elegida y el
+  // servidor comprueba de todas formas que sea de la empresa. Ese refresco
+  // era un viaje entero al servidor de más en el camino crítico del fichaje.
   // Le decimos al servidor EXPLICITAMENTE si es entrada o salida (ya no lo
   // adivina) y le damos un codigo unico para este fichaje.
   const accionPrevista = fichajeAbierto ? 'salida' : 'entrada';
   const opId = nuevoOpId();
-  fichajeCargando = true;
-  const btn = document.getElementById('btn-fichar');
-  const textoOriginal = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registrando...'; }
 
   try {
     // La máquina de HOY, que puede no ser la habitual: un maquinista puede
@@ -8572,6 +8602,9 @@ async function ficharAhora(opciones) {
     avisoJornadaMostrado = false;
     if (accion === 'salida') { maquinaElegidaManual = undefined; obraElegidaManual = undefined; }
     if (accion === 'entrada' && horasPrevistas) pedirPermisoAvisos();
+
+    // El registro del trabajador se pone al día EN LOCAL, sin otro viaje.
+    if (currentUser.isWorker) apuntarFichajeEnLocal(accion, data[0], projectId, machine ? machine.dbId : null);
 
     await cargarFichajes();
     renderFichaje();
@@ -8675,9 +8708,14 @@ function cerrarEscaneo() {
 
 /* Abre el escáner para confirmar el fichaje con la máquina */
 async function abrirEscaneo() {
-  // Red de seguridad: si el responsable acaba de crear la obra, aquí se
-  // recoge aunque el aviso en vivo no haya llegado todavía.
-  if (!fichajeAbierto) await refrescarAntesDeFichar();
+  // La lista de obras/máquinas se refresca EN SEGUNDO PLANO: no se hace
+  // esperar a la persona con la cámara cerrada por un viaje al servidor.
+  // Antes se esperaba aquí, sin enseñar nada ni bloquear el botón: en obra
+  // con mala cobertura eran 1-3 segundos en blanco, la gente volvía a tocar
+  // y el segundo toque acababa en "ya habías fichado". Si el responsable
+  // acaba de crear algo, se recoge igual: el refresco llega en menos de un
+  // segundo, antes de que dé tiempo a escanear.
+  if (!fichajeAbierto) refrescarAntesDeFichar().catch(() => {});
 
   const machine = fichajeAbierto
     ? machines.find(m => m.dbId === fichajeAbierto.machineId) || null
