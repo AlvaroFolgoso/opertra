@@ -1363,15 +1363,17 @@
     position: fixed; z-index: 200;
     left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     max-width: 620px; margin: 0 auto;
-    background: #262C33; border: 1px solid #3A424B; border-top: 3px solid var(--amber);
+    /* Tarjeta CLARA: antes era oscura y sobre la portada (también oscura)
+       se confundía con el fondo. Así se ve como un aviso, esté donde esté. */
+    background: #FFFFFF; border: 1px solid #D5DBE1; border-top: 3px solid var(--amber);
     border-radius: 16px; padding: 16px 18px;
-    box-shadow: 0 14px 40px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+    box-shadow: 0 18px 48px rgba(0,0,0,.42), 0 2px 10px rgba(0,0,0,.22);
     animation: avisoEntra .22s ease-out;
     transform: translateZ(0);
   }
   /* Mientras haya un aviso abajo, la página deja hueco para no quedar tapada */
   body.con-aviso-abajo { padding-bottom: 190px; }
-  #cookie-banner-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; color: white; }
+  #cookie-banner-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; color: var(--ink); }
   @media (max-width: 768px) {
     #cookie-banner { padding: 15px 16px; }
     #cookie-banner-inner { gap: 12px; }
@@ -2566,14 +2568,14 @@
 <div id="cookie-banner" class="hidden">
   <div id="cookie-banner-inner">
     <div style="flex:1;min-width:240px;">
-      <div style="font-size:14px;font-weight:700;margin-bottom:5px;">Cookies en Opertra</div>
-      <div style="font-size:12.5px;color:#C7CBD0;line-height:1.55;">
+      <div style="font-size:14px;font-weight:700;margin-bottom:5px;color:var(--ink);">Cookies en Opertra</div>
+      <div style="font-size:12.5px;color:var(--steel);line-height:1.55;">
         Usamos solo cookies técnicas necesarias para mantener tu sesión iniciada. No usamos cookies
-        publicitarias ni de seguimiento. <a onclick="openLegal('cookies')" style="color:var(--amber);text-decoration:underline;cursor:pointer;">Más información</a>
+        publicitarias ni de seguimiento. <a onclick="openLegal('cookies')" style="color:var(--amber-deep);text-decoration:underline;cursor:pointer;">Más información</a>
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-outline" style="background:transparent;color:white;border-color:#4A5158;padding:10px 16px;" onclick="decidirCookies(false)">Solo necesarias</button>
+      <button class="btn btn-outline" style="padding:10px 16px;" onclick="decidirCookies(false)">Solo necesarias</button>
       <button class="btn btn-amber" style="padding:10px 18px;" onclick="decidirCookies(true)">Entendido</button>
     </div>
   </div>
@@ -3431,6 +3433,12 @@ async function borrarArchivo(ruta) {
   // Sin esto se seguiría sirviendo el enlace guardado de una foto que ya no existe
   enlacesArchivo.delete(ruta);
   guardarEnlaces();
+  // Y la copia que el service worker guardó en el móvil, fuera también
+  try {
+    const base = String(SUPABASE_CONFIG.url).replace(/\/+$/, '');
+    const clave = base + '/storage/v1/object/sign/' + BUCKET + '/' + ruta;
+    if (window.caches) caches.open('opertra-fotos-v1').then(c => c.delete(clave)).catch(() => {});
+  } catch (e) {}
   try { await getSupabase().storage.from(BUCKET).remove([ruta]); } catch (e) {}
 }
 
@@ -3441,20 +3449,36 @@ async function pintarImagen(elId, ruta, alt) {
   try {
     const url = await urlArchivo(ruta);
     if (!el) return;
+    // Se quita lo que hubiera (spinner, icono, imagen anterior) pero se
+    // CONSERVAN los controles: el campo de archivo y los botones Cambiar /
+    // Quitar. Antes se hacía con innerHTML y, en cuanto cargaba la foto,
+    // desaparecía la única forma de cambiarla.
+    const limpiar = () => el.querySelectorAll(':scope > img, :scope > i, :scope > span').forEach(n => n.remove());
+    limpiar();
     if (url) {
       // crossorigin="anonymous": la respuesta llega "abierta" (CORS) y así el
       // service worker puede guardar la foto en el móvil para servirla al
       // instante la próxima vez. Aparece con un fundido en vez de de golpe.
-      el.innerHTML = `<img src="${url}" alt="${esc(alt||'')}" crossorigin="anonymous" loading="lazy" decoding="async"
-        style="width:100%;height:100%;object-fit:cover;border-radius:6px;opacity:0;transition:opacity .18s ease;"
-        onload="this.style.opacity=1;this.parentElement.classList.remove('cargando')">`;
+      const img = document.createElement('img');
+      img.src = url; img.alt = alt || ''; img.crossOrigin = 'anonymous';
+      img.loading = 'lazy'; img.decoding = 'async';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:6px;opacity:0;transition:opacity .18s ease;';
+      img.onload = () => { img.style.opacity = '1'; el.classList.remove('cargando'); };
+      img.onerror = () => { el.classList.remove('cargando'); };
+      el.prepend(img);
       el.classList.add('cargando');
     } else {
       // Si no se pudo obtener el enlace, no dejamos un spinner girando para siempre
-      el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);" title="No se pudo cargar la imagen"></i>`;
+      const i = document.createElement('i');
+      i.className = 'fa-solid fa-image-slash'; i.style.color = 'var(--idle)'; i.title = 'No se pudo cargar la imagen';
+      el.prepend(i);
     }
   } catch (e) {
-    if (el) el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);"></i>`;
+    if (el) {
+      el.querySelectorAll(':scope > img, :scope > i, :scope > span').forEach(n => n.remove());
+      const i = document.createElement('i'); i.className = 'fa-solid fa-image-slash'; i.style.color = 'var(--idle)';
+      el.prepend(i);
+    }
   }
 }
 
@@ -9804,7 +9828,8 @@ function openDrawer(id) {
     <div class="drawer-photo ${m.photoUrl ? 'has-photo' : 'no-photo'}" id="drawer-photo-${esc(m.id)}">
       ${m.photoUrl ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-camera"></i><span>Añadir foto de ' + tm('el') + ' ' + tm('s') + '</span>'}
       <input type="file" accept="image/*" id="file-machine-${esc(m.id)}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoMaquina('${esc(m.id)}', event)">
-      <label class="drawer-upload" for="file-machine-${esc(m.id)}"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar' : 'Subir'}</label>
+      ${esAdministrador() ? `<label class="drawer-upload" for="file-machine-${esc(m.id)}"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar' : 'Subir'}</label>` : ''}
+      ${esAdministrador() && m.photoUrl ? `<button type="button" class="drawer-upload" style="right:auto;left:8px;" onclick="quitarFotoMaquina('${esc(m.id)}')"><i class="fa-solid fa-trash"></i> Quitar</button>` : ''}
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
       <div style="min-width:0;"><div class="drawer-title">${esc(m.type)}</div><div class="drawer-model">${esc(m.model)}</div></div>
@@ -10151,6 +10176,20 @@ function mostrarFotoMaquinaNueva(event) {
   lector.readAsDataURL(f);
 }
 
+/* Vista previa de la foto en el formulario de nuevo trabajador */
+function mostrarFotoTrabajadorNuevo(event) {
+  const f = event.target.files[0];
+  if (!f) return;
+  const lector = new FileReader();
+  lector.onload = e => {
+    const caja = document.getElementById('nw-photo-box');
+    if (caja) caja.innerHTML =
+      `<img src="${e.target.result}" alt="Vista previa de la foto" style="max-height:120px;border-radius:6px;">
+       <div style="font-size:12px;color:var(--steel);margin-top:6px;">${esc(f.name)} — toca para cambiar</div>`;
+  };
+  lector.readAsDataURL(f);
+}
+
 /* Al elegir el tipo se propone lo que suele contar esa clase de máquina.
    Si el usuario ya lo ha tocado a mano, no se le pisa. */
 function proponerMedidor(idTipo, idMedidor, idOtro) {
@@ -10410,6 +10449,54 @@ async function subirFotoMaquina(machineCode, event) {
   } catch (err) {
     aviso('No se pudo subir la foto: ' + mensajeError(err));
     openDrawer(machineCode);
+  }
+}
+
+/* Quitar la foto: se borra de la ficha Y del almacén, para que no quede
+   ocupando espacio. Antes no había forma de quitarla, solo de cambiarla. */
+async function quitarFotoMaquina(machineCode) {
+  if (!esAdministrador()) return;
+  const m = machines.find(x => x.id === machineCode);
+  if (!m || !m.photoUrl) return;
+  const ok = await confirmar({
+    peligro: true, titulo: 'Quitar la foto', aceptar: 'Sí, quitar',
+    texto: 'Se borrará la foto de ' + tm('el') + ' ' + tm('s') + ' del almacén. Podrás subir otra cuando quieras.',
+  });
+  if (!ok) return;
+  const anterior = m.photoUrl;
+  try {
+    const { error } = await getSupabase().from('machines')
+      .update({ photo_url: null, has_photo: false }).eq('id', m.dbId);
+    if (error) throw error;
+    m.photoUrl = null; m.hasPhoto = false;
+    borrarArchivo(anterior);
+    openDrawer(machineCode);
+    repintarSuave();
+  } catch (err) {
+    aviso('No se pudo quitar la foto: ' + mensajeError(err));
+  }
+}
+
+async function quitarFotoTrabajador(workerCode) {
+  if (!esAdministrador()) return;
+  const w = workers.find(x => x.id === workerCode);
+  if (!w || !w.photoPath) return;
+  const ok = await confirmar({
+    peligro: true, titulo: 'Quitar la foto', aceptar: 'Sí, quitar',
+    texto: 'Se borrará la foto del trabajador del almacén. Podrás subir otra cuando quieras.',
+  });
+  if (!ok) return;
+  const anterior = w.photoPath;
+  try {
+    const { error } = await getSupabase().from('workers')
+      .update({ photo_path: null }).eq('id', w.dbId);
+    if (error) throw error;
+    w.photoPath = null;
+    borrarArchivo(anterior);
+    openWorkerDrawer(workerCode);
+    renderTrabajadores();
+  } catch (err) {
+    aviso('No se pudo quitar la foto: ' + mensajeError(err));
   }
 }
 
@@ -10741,6 +10828,13 @@ async function openAddWorkerModal() {
       </div>
     </div>
     <div class="form-group">
+      <label class="form-label">Foto del trabajador</label>
+      <input type="file" accept="image/*" id="nw-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="mostrarFotoTrabajadorNuevo(event)">
+      <label class="form-photo-upload" for="nw-photo" id="nw-photo-box" style="display:block;">
+        <i class="fa-solid fa-camera" style="margin-right:6px;"></i>Subir foto (opcional)
+      </label>
+    </div>
+    <div class="form-group">
       <label class="form-label">${tm('S')} habitual (opcional)</label>
       <select class="form-select" id="nw-machine">
         <option value="">Sin ${tm('s')} asignad${tm('g')}</option>
@@ -10791,6 +10885,7 @@ async function submitAddWorker() {
     errBox.style.display = 'flex'; return;
   }
 
+  const foto = (document.getElementById('nw-photo') || { files: [] }).files[0];
   setButtonLoading('nw-submit', true, 'Guardando...', 'Guardar trabajador');
   if (!empezarOperacion('crear-trabajador')) return;
   try {
@@ -10801,12 +10896,28 @@ async function submitAddWorker() {
     }).select().single();
     if (error) throw error;
 
+    // La foto va después de crear la ficha (necesita su código para la
+    // carpeta). Si fallara, el trabajador ya existe: se avisa y se puede
+    // subir desde su ficha.
+    let rutaFoto = null;
+    if (foto) {
+      setButtonLoading('nw-submit', true, 'Subiendo foto...', 'Guardar trabajador');
+      try {
+        rutaFoto = await subirArchivo(foto, `workers/${code}`);
+        const { error: eF } = await getSupabase().from('workers').update({ photo_path: rutaFoto }).eq('id', data.id);
+        if (eF) throw eF;
+      } catch (eFoto) {
+        rutaFoto = null;
+        aviso('El trabajador se ha creado, pero no se pudo subir la foto. Puedes añadirla desde su ficha.');
+      }
+    }
+
     const machineCode = machineId ? (machines.find(m => m.dbId === machineId)?.id || '—') : '—';
     workers.push({
       dbId: data.id, id: data.code, name: data.name, role: data.role, pin: data.pin,
       machine: machineCode, machineDbId: data.machine_id,
       project: projectId ? (projects.find(p => p.dbId === projectId)?.id || null) : null,
-      projectDbId: data.project_id,
+      projectDbId: data.project_id, photoPath: rutaFoto,
       status: 'off', since: '—', documents: [], vacations: [],
     });
     if (machineId) {
@@ -11236,7 +11347,8 @@ function openWorkerDrawer(id) {
     <div class="drawer-photo ${w.photoPath ? 'has-photo' : 'no-photo'}" style="height:120px;" id="drawer-photo-w-${esc(w.id)}">
       ${w.photoPath ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-user" style="font-size:28px;"></i><span>Añadir foto del trabajador</span>'}
       <input type="file" accept="image/*" id="file-worker-${esc(w.id)}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="subirFotoTrabajador('${esc(w.id)}', event)">
-      <label class="drawer-upload" for="file-worker-${esc(w.id)}"><i class="fa-solid fa-camera"></i> ${w.photoPath ? 'Cambiar' : 'Subir'}</label>
+      ${esAdministrador() ? `<label class="drawer-upload" for="file-worker-${esc(w.id)}"><i class="fa-solid fa-camera"></i> ${w.photoPath ? 'Cambiar' : 'Subir'}</label>` : ''}
+      ${esAdministrador() && w.photoPath ? `<button type="button" class="drawer-upload" style="right:auto;left:8px;" onclick="quitarFotoTrabajador('${esc(w.id)}')"><i class="fa-solid fa-trash"></i> Quitar</button>` : ''}
     </div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
       <div style="min-width:0;"><div class="drawer-title">${esc(w.name)}</div><div class="drawer-model">${esc(w.role)}</div></div>
