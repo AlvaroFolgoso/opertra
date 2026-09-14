@@ -3439,7 +3439,13 @@ async function borrarArchivo(ruta) {
     const clave = base + '/storage/v1/object/sign/' + BUCKET + '/' + ruta;
     if (window.caches) caches.open('opertra-fotos-v1').then(c => c.delete(clave)).catch(() => {});
   } catch (e) {}
-  try { await getSupabase().storage.from(BUCKET).remove([ruta]); } catch (e) {}
+  // OJO: si un permiso impide borrar, Supabase NO da error: devuelve una
+  // lista vacía. Se comprueba para que un fallo así no pase desapercibido.
+  try {
+    const { data, error } = await getSupabase().storage.from(BUCKET).remove([ruta]);
+    if (error) console.warn('borrarArchivo: error al borrar', ruta, error.message);
+    else if (!data || !data.length) console.warn('borrarArchivo: no se borró nada (¿permiso?)', ruta);
+  } catch (e) { console.warn('borrarArchivo:', ruta, e); }
 }
 
 /* Pinta una imagen guardada dentro de un elemento, cuando llegue su enlace */
@@ -6523,6 +6529,19 @@ function openEditMachineModal(code) {
     <div style="font-size:13px;color:var(--steel);margin-top:4px;"><span class="f-mono">${esc(m.id)}</span></div>
 
     <div class="form-group">
+      <label class="form-label">Foto</label>
+      <div id="em-photo-actual" class="drawer-photo ${m.photoUrl ? 'has-photo' : 'no-photo'}" style="height:140px;">
+        ${m.photoUrl ? '<i class="fa-solid fa-spinner fa-spin"></i>' : '<i class="fa-solid fa-camera"></i><span>Sin foto</span>'}
+      </div>
+      <input type="file" accept="image/*" id="em-photo" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="mostrarFotoMaquinaEditada(event)">
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <label class="btn btn-outline" for="em-photo" style="flex:1;justify-content:center;cursor:pointer;"><i class="fa-solid fa-camera"></i> ${m.photoUrl ? 'Cambiar foto' : 'Subir foto'}</label>
+        ${m.photoUrl ? `<button type="button" class="btn btn-outline" id="em-quitar-foto" style="flex:1;justify-content:center;color:var(--danger);" onclick="marcarQuitarFotoMaquina()"><i class="fa-solid fa-trash"></i> Quitar foto</button>` : ''}
+      </div>
+      <div id="em-photo-nota" style="font-size:12px;color:var(--steel);margin-top:6px;"></div>
+    </div>
+
+    <div class="form-group">
       <label class="form-label">Tipo</label>
       <select class="form-select" id="em-type" onchange="toggleEditTipo()">
         ${tipos.map(x => `<option ${x===m.type?'selected':''}>${x}</option>`).join('')}
@@ -6565,8 +6584,38 @@ function openEditMachineModal(code) {
       <button class="btn btn-amber" id="em-submit" onclick="guardarMaquina('${esc(m.id)}')">Guardar</button>
     </div>
   `;
+  emQuitarFoto = false;
+  if (m.photoUrl) pintarImagen('em-photo-actual', m.photoUrl, m.type);
   document.getElementById('modal-overlay').classList.add('active');
   marcarNavegacion();
+}
+
+/* Foto en el formulario de EDITAR máquina: se elige o se marca para quitar,
+   y se aplica al pulsar Guardar (la antigua se borra del almacén). */
+let emQuitarFoto = false;
+function mostrarFotoMaquinaEditada(event) {
+  const f = event.target.files[0];
+  if (!f) return;
+  emQuitarFoto = false;
+  const lector = new FileReader();
+  lector.onload = e => {
+    const caja = document.getElementById('em-photo-actual');
+    if (caja) {
+      caja.className = 'drawer-photo has-photo';
+      caja.innerHTML = `<img src="${e.target.result}" alt="Vista previa" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+    }
+    const nota = document.getElementById('em-photo-nota');
+    if (nota) nota.textContent = 'Foto nueva elegida: se subirá al guardar.';
+  };
+  lector.readAsDataURL(f);
+}
+function marcarQuitarFotoMaquina() {
+  emQuitarFoto = true;
+  const input = document.getElementById('em-photo'); if (input) input.value = '';
+  const caja = document.getElementById('em-photo-actual');
+  if (caja) { caja.className = 'drawer-photo no-photo'; caja.innerHTML = '<i class="fa-solid fa-camera"></i><span>Sin foto</span>'; }
+  const nota = document.getElementById('em-photo-nota');
+  if (nota) nota.textContent = 'La foto se quitará (y se borrará del almacén) al guardar.';
 }
 
 function toggleEditTipo() {
@@ -6617,11 +6666,30 @@ async function guardarMaquina(code) {
        arriba las ve distintas y suelta "otra persona ha modificado esto"
        estando tú solo. Pasaba en máquinas, trabajadores, obras y clientes:
        era lo de "muchos botones de guardar van mal". */
+    // La foto: nueva (se sube ahora) o marcada para quitar. En ambos casos
+    // la anterior se borra del almacén, para que no quede ocupando espacio.
+    const fotoNueva = (document.getElementById('em-photo') || { files: [] }).files[0];
+    let cambioFoto = {};
+    let rutaAnteriorFoto = null;
+    if (fotoNueva) {
+      setButtonLoading('em-submit', true, 'Subiendo foto...', 'Guardar');
+      const rutaFoto = await subirArchivo(fotoNueva, `machines/${code}`);
+      cambioFoto = { photo_url: rutaFoto, has_photo: true };
+      rutaAnteriorFoto = m.photoUrl || null;
+      setButtonLoading('em-submit', true, 'Guardando...', 'Guardar');
+    } else if (emQuitarFoto && m.photoUrl) {
+      cambioFoto = { photo_url: null, has_photo: false };
+      rutaAnteriorFoto = m.photoUrl;
+    }
+
     const { data: guardada, error } = await getSupabase().from('machines').update({
       type, model, plate: plate || null, status, project_id: projectId, fuel,
+      ...cambioFoto,
     }).eq('id', m.dbId).select('updated_at').maybeSingle();
     if (error) throw error;
     if (guardada && guardada.updated_at) m.updatedAt = guardada.updated_at;
+    if (cambioFoto.photo_url !== undefined) { m.photoUrl = cambioFoto.photo_url; m.hasPhoto = !!cambioFoto.photo_url; }
+    if (rutaAnteriorFoto) borrarArchivo(rutaAnteriorFoto);
 
     if (m.status !== status) {
       registrarEnHistorial('estado', tm('S'), m.id, `${statusLabel[m.status]} → ${statusLabel[status]}`);
