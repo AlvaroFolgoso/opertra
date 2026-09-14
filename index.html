@@ -862,6 +862,16 @@
   .machine-top > * { min-width: 0; }
   .machine-photo { width: 112px; height: 84px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); overflow: hidden; }
   .machine-photo.has-photo { background: #DCE3E8; color: var(--blue); font-size: 22px; }
+  /* Mientras se descarga la foto por primera vez: un brillo que recorre el
+     hueco, para que se vea que está llegando y no que está roto. En cuanto
+     la imagen carga, se quita (ver onload en pintarImagen). */
+  .machine-photo.cargando, .drawer-photo.cargando {
+    background: linear-gradient(100deg, #DCE3E8 30%, #EEF2F5 50%, #DCE3E8 70%);
+    background-size: 200% 100%;
+    animation: brillo-foto 1.1s ease-in-out infinite;
+  }
+  @keyframes brillo-foto { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  @media (prefers-reduced-motion: reduce) { .machine-photo.cargando, .drawer-photo.cargando { animation: none; } }
   .machine-photo.no-photo { background: var(--surface); color: var(--idle); flex-direction: column; gap: 2px; font-size: 10px; }
   .machine-id { font-size: 12px; color: var(--steel); font-family: 'IBM Plex Mono', monospace; }
   .machine-type { font-family: 'Oswald', sans-serif; font-size: 18px; margin-top: 2px; }
@@ -3326,7 +3336,16 @@ function precalentarFotos() {
     const rutas = [];
     (machines || []).forEach(m => { if (m && m.photoUrl) rutas.push(m.photoUrl); });
     if (currentUser && currentUser.photoPath) rutas.push(currentUser.photoPath);
-    rutas.slice(0, 120).forEach(r => { urlArchivo(r).catch(() => {}); });
+    rutas.slice(0, 120).forEach((r, i) => {
+      const p = urlArchivo(r).catch(() => null);
+      // Las 12 primeras (lo que cabe en una pantalla de Maquinaria) se
+      // descargan ya, en segundo plano: el service worker las guarda y al
+      // entrar en la pestaña salen al instante. Solo cuesta la primera vez.
+      if (i < 12) p.then(url => {
+        if (!url) return;
+        const im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async'; im.src = url;
+      });
+    });
   } catch (e) {}
 }
 
@@ -3423,7 +3442,13 @@ async function pintarImagen(elId, ruta, alt) {
     const url = await urlArchivo(ruta);
     if (!el) return;
     if (url) {
-      el.innerHTML = `<img src="${url}" alt="${esc(alt||'')}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+      // crossorigin="anonymous": la respuesta llega "abierta" (CORS) y así el
+      // service worker puede guardar la foto en el móvil para servirla al
+      // instante la próxima vez. Aparece con un fundido en vez de de golpe.
+      el.innerHTML = `<img src="${url}" alt="${esc(alt||'')}" crossorigin="anonymous" loading="lazy" decoding="async"
+        style="width:100%;height:100%;object-fit:cover;border-radius:6px;opacity:0;transition:opacity .18s ease;"
+        onload="this.style.opacity=1;this.parentElement.classList.remove('cargando')">`;
+      el.classList.add('cargando');
     } else {
       // Si no se pudo obtener el enlace, no dejamos un spinner girando para siempre
       el.innerHTML = `<i class="fa-solid fa-image-slash" style="color:var(--idle);" title="No se pudo cargar la imagen"></i>`;
@@ -13935,6 +13960,7 @@ async function logout() {
     _resumenClientes = null; _totalesObra = null; _idxFichajes = null; _fichajesDelTrabajador = null;
     enlacesArchivo.clear();
     try { localStorage.removeItem(ENLACES_KEY); } catch (e) {}   // móvil compartido: nada del anterior
+    try { if (window.caches) caches.delete('opertra-fotos-v1'); } catch (e) {}   // ni sus fotos guardadas
     datosEmpresaCargados = false;
   } catch (e) {}
   try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}

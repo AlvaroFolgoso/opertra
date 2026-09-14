@@ -25,7 +25,7 @@
    Al cambiar, el 'activate' de abajo borra las cachés de la versión
    anterior, que es lo que limpia de un plumazo cualquier archivo viejo que
    se hubiera quedado guardado. */
-const VERSION = 'opertra-v22';
+const VERSION = 'opertra-v23';
 const CACHE_APP = VERSION + '-app';
 /* El almacén de librerías NO se borra en cada despliegue a propósito: las
    librerías no cambian y así no se vuelven a descargar. Pero lleva número
@@ -39,6 +39,40 @@ const CACHE_APP = VERSION + '-app';
    hace que el activate de abajo borre el almacén viejo entero y todo se
    vuelva a descargar limpio una vez. */
 const CACHE_LIB = 'opertra-librerias-v2';
+
+/* FOTOS del almacén privado (máquinas, trabajadores, incidencias). Se guardan
+   en el móvil y se sirven de ahí AL INSTANTE, sin red. El enlace firmado
+   lleva un token que cambia cada hora, así que se guarda POR RUTA de la foto
+   (sin el token): cualquier enlace nuevo de la misma foto acierta. No se
+   borra en cada despliegue (las fotos no cambian con la app). Tope de 100
+   para no comerse el espacio del móvil; se tiran las más antiguas. */
+const CACHE_FOTOS = 'opertra-fotos-v1';
+const TOPE_FOTOS = 100;
+
+async function servirFoto(req, url) {
+  const clave = url.origin + url.pathname;      // sin ?token=...
+  const cache = await caches.open(CACHE_FOTOS);
+  const guardada = await cache.match(clave);
+  if (guardada) return guardada;
+  try {
+    const res = await fetch(req);
+    // Solo respuestas buenas y "abiertas" (CORS): las opacas no se pueden
+    // comprobar y además ocupan un espacio desmesurado en la caché.
+    if (res && res.ok && res.type !== 'opaque') {
+      cache.put(clave, res.clone()).then(() => recortarFotos(cache)).catch(() => {});
+    }
+    return res;
+  } catch (err) {
+    return Response.error();
+  }
+}
+
+async function recortarFotos(cache) {
+  const claves = await cache.keys();
+  if (claves.length <= TOPE_FOTOS) return;
+  const sobran = claves.length - TOPE_FOTOS;
+  for (let i = 0; i < sobran; i++) await cache.delete(claves[i]);
+}
 
 /* Lo mínimo para que la app arranque sin cobertura. supabase.js entra aquí
    porque sin él la app no es que se vea fea: es que no arranca — no se puede
@@ -67,7 +101,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const nombres = await caches.keys();
     await Promise.all(nombres
-      .filter(n => n !== CACHE_APP && n !== CACHE_LIB)
+      .filter(n => n !== CACHE_APP && n !== CACHE_LIB && n !== CACHE_FOTOS)
       .map(n => caches.delete(n)));
     // Se toma el mando de las pestañas que ya estaban abiertas
     await self.clients.claim();
@@ -132,7 +166,15 @@ self.addEventListener('fetch', (e) => {
   // servidor de verdad o nunca se enteraría de que hay algo nuevo.
   if (req.cache === 'no-store' || url.searchParams.has('v')) return;
 
-  // Nada de Supabase pasa por aquí: son datos, no archivos
+  // Las FOTOS del almacén sí: se guardan en el móvil (ver servirFoto)
+  if (url.hostname.endsWith('.supabase.co')
+      && url.pathname.includes('/storage/v1/object/')
+      && (req.destination === 'image' || /\.(jpe?g|png|webp|gif)$/i.test(url.pathname))) {
+    e.respondWith(servirFoto(req, url));
+    return;
+  }
+
+  // El resto de Supabase no pasa por aquí: son datos, no archivos
   if (url.hostname.endsWith('.supabase.co')) return;
 
   // ---- La página: primero la red, y lo guardado solo como respaldo ----
