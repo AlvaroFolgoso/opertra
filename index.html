@@ -13432,6 +13432,7 @@ function enterAppOrShowTrialExpired() {
     switchTab(pestanaAlVolver());
     loadCompanyData().then(() => comprobarTutorialTrabajador());
     precargarLectorQR();
+    ofrecerInstalacionEnIPhone();   // en iPhone, sin instalar no hay avisos
   }
 }
 
@@ -15224,6 +15225,15 @@ window.addEventListener('beforeinstallprompt', (e) => {
   mostrarBannerInstalacion();
 });
 
+/* En iPhone ese evento NO existe (Safari no lo tiene), así que el aviso de
+   instalación no salía nunca justo en el móvil donde más falta hace: sin
+   la app en la pantalla de inicio, Apple no deja recibir avisos push. Se
+   enseña a los pocos segundos de entrar, una vez (recuerda el "no"). */
+function ofrecerInstalacionEnIPhone() {
+  if (!esIOS() || yaInstalada()) return;
+  setTimeout(mostrarBannerInstalacion, 4000);
+}
+
 /* Los navegadores metidos dentro de otras apps (WhatsApp, Facebook) a
    veces no traen matchMedia. Sin esta protección, Ajustes reventaba
    entero al abrirse desde ahí. */
@@ -15266,8 +15276,10 @@ function mostrarBannerInstalacion() {
   const enOrdenador = !esMovil();
 
   if (esIOS()) {
-    if (titulo) titulo.textContent = 'Instala Opertra en tu móvil';
-    texto.textContent = 'Tenla en la pantalla de inicio, como cualquier otra app.';
+    if (titulo) titulo.textContent = 'Instala Opertra en tu iPhone';
+    // El motivo de verdad: sin instalarla, Apple no deja recibir avisos
+    // (el de "no olvides fichar la salida", por ejemplo).
+    texto.textContent = 'Para que te lleguen los avisos con la app cerrada, tiene que estar en la pantalla de inicio. Son 10 segundos.';
     boton.style.display = '';
     boton.textContent = 'Cómo se instala';
     boton.onclick = comoInstalarEnIPhone;
