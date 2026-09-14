@@ -13638,15 +13638,47 @@ function enterAppOrShowTrialExpired() {
     document.getElementById('trial-expired-worker-msg').style.display = currentUser.accessLevel === 'trabajador' ? 'block' : 'none';
     mostrarPlazoBorrado();
   } else {
-    showScreen('app');
     registrarAceptacionLegal();
     comprobarSiSoyDueno();
     renderTopbarUser(); renderNav(); renderTrialBanner();
+
+    // SIN PARPADEO AL ENTRAR. Antes se destapaba la app y luego se decidía
+    // la pestaña: un instante se veía lo que hubiera pintado antes (las
+    // pantallas vacías del arranque, o las del usuario anterior en un móvil
+    // compartido), después "Cargando…", y por fin lo bueno. Ahora: se
+    // vacían las pantallas, se elige la pestaña con la app aún tapada, y se
+    // destapa cuando ya están los datos — de la pantalla de carga a la
+    // definitiva, directamente. Si los datos tardan (mala cobertura), a los
+    // 4 s se destapa igual con su "Cargando…", que es honesto.
+    limpiarVistas();
     switchTab(pestanaAlVolver());
-    loadCompanyData().then(() => comprobarTutorialTrabajador());
+    const hayArranque = (() => { const a = document.getElementById('arranque'); return !!(a && !a.classList.contains('fuera')); })();
+    let revelada = false;
+    const revelar = () => { if (revelada) return; revelada = true; showScreen('app'); };
+    if (hayArranque) {
+      // Sesión restaurada al abrir la app: la pantalla de carga tapa todo
+      const tope = setTimeout(revelar, 4000);
+      loadCompanyData()
+        .then(() => comprobarTutorialTrabajador())
+        .finally(() => { clearTimeout(tope); revelar(); });
+    } else {
+      // Viene del formulario de entrar: se enseña ya (limpia, con "Cargando…")
+      revelar();
+      loadCompanyData().then(() => comprobarTutorialTrabajador());
+    }
     precargarLectorQR();
     ofrecerInstalacionEnIPhone();   // en iPhone, sin instalar no hay avisos
   }
+}
+
+/* Vacía las nueve pantallas y olvida con qué datos se pintaron. Se usa al
+   entrar y al salir: sin esto, al entrar se veía un instante el contenido
+   viejo (el vacío del arranque, o peor, el del usuario anterior en un móvil
+   compartido) hasta que llegaban los datos. */
+function limpiarVistas() {
+  document.querySelectorAll('#app .view').forEach(v => { v.innerHTML = ''; });
+  Object.keys(huellaPintada).forEach(k => delete huellaPintada[k]);
+  prepintadoHecho = false;
 }
 
 /* El lector de códigos ya no viene en la carga inicial (ver cargarRecurso),
@@ -14173,6 +14205,7 @@ async function logout() {
     timeLogs = []; usuariosEmpresa = []; empresasPanel = [];
     _resumenClientes = null; _totalesObra = null; _idxFichajes = null; _fichajesDelTrabajador = null;
     enlacesArchivo.clear();
+    if (typeof limpiarVistas === 'function') limpiarVistas();   // ni sus pantallas pintadas
     try { localStorage.removeItem(ENLACES_KEY); } catch (e) {}   // móvil compartido: nada del anterior
     try { if (window.caches) caches.delete('opertra-fotos-v1'); } catch (e) {}   // ni sus fotos guardadas
     datosEmpresaCargados = false;
