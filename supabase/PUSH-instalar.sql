@@ -104,7 +104,8 @@ select cron.schedule(
   select net.http_post(
     url     := 'https://uqfnijlmnybqznnnlkqj.supabase.co/functions/v1/enviar-avisos',
     headers := '{"Content-Type":"application/json","Authorization":"Bearer 1467c9d122003619637ab2d35a3a6774100a97a4f27f59d4"}'::jsonb,
-    body    := '{}'::jsonb
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 30000   -- la funcion tarda unos segundos en despertar; 5 s (por defecto) se quedaban cortos
   );
   $$
 );
