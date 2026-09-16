@@ -1560,6 +1560,180 @@
     .land-step::before { font-size: 72px; }
   }
 
+  /* ============ LANDING · CAPA 2: LO QUE VENDE ============
+     Ticker de diferenciadores, el móvil con el escáner QR abierto (escaneando
+     en directo, hecho en CSS/SVG), tabla comparativa contra papel/WhatsApp y
+     apps genéricas, banda de cifras grandes, "para quién es", preguntas
+     frecuentes y énfasis en lo que tiene que destacar. Todo centrado.
+     ========================================================================== */
+
+  /* --- Todo centrado (petición expresa) --- */
+  #landing .land-h2, #landing .land-h2-sub, #landing .land-eyebrow-sec { text-align: center; }
+  #landing .land-demo-valor h2 { text-align: center; }
+  #landing .land-demo-valor .land-eyebrow-sec { justify-content: center !important; }
+  #landing .land-demo-valor > p { text-align: center; }
+  #landing .land-demo-lista { max-width: 460px; margin-left: auto; margin-right: auto; }
+
+  /* --- El botón principal tiene que destacar DE VERDAD: brillo latente --- */
+  .land-cta-brillo { position: relative; box-shadow: 0 10px 30px -10px rgba(240,162,2,.6); animation: land-latido 2.6s ease-in-out infinite; }
+  @keyframes land-latido {
+    0%, 100% { box-shadow: 0 10px 30px -10px rgba(240,162,2,.6), 0 0 0 0 rgba(240,162,2,.45); }
+    50%      { box-shadow: 0 14px 36px -10px rgba(240,162,2,.75), 0 0 0 10px rgba(240,162,2,0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .land-cta-brillo { animation: none; } }
+
+  /* --- Ticker: diferenciadores en movimiento --- */
+  .land-ticker { background: #15181C; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 1px solid rgba(255,255,255,.06); overflow: hidden; padding: 14px 0; }
+  .land-ticker-pista { display: flex; width: max-content; animation: land-ticker 42s linear infinite; }
+  .land-ticker-pista:hover { animation-play-state: paused; }
+  .land-ticker span { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; letter-spacing: .16em; color: #C7CBD0; white-space: nowrap; padding: 0 28px; display: inline-flex; align-items: center; gap: 28px; }
+  .land-ticker span::after { content: ''; width: 7px; height: 7px; background: var(--amber); transform: rotate(45deg); flex-shrink: 0; }
+  @keyframes land-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .land-ticker-pista { animation: none; flex-wrap: wrap; width: auto; justify-content: center; } }
+
+  /* --- "Así se ficha": texto + móvil con el escáner abierto --- */
+  .land-scan { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 48px; max-width: 1100px; margin-left: auto; margin-right: auto; }
+  .land-scan-pasos { display: flex; flex-direction: column; gap: 14px; }
+  .land-scan-paso { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; border-radius: var(--l-radio); background: var(--card); border: 1px solid var(--border); box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -22px rgba(28,33,38,.35); }
+  .land-scan-paso .n { flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; background: var(--graphite); color: var(--amber); font-family: 'Oswald', sans-serif; font-size: 17px; display: flex; align-items: center; justify-content: center; }
+  .land-scan-paso b { display: block; font-family: 'Oswald', sans-serif; font-size: 17px; letter-spacing: .01em; margin-bottom: 4px; }
+  .land-scan-paso span { font-size: 14px; color: var(--steel); line-height: 1.55; }
+  .land-scan-dif { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 22px; }
+  .land-scan-dif span { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .08em; color: var(--graphite); background: var(--amber-bg); border: 1px solid rgba(240,162,2,.45); padding: 6px 11px; border-radius: 999px; }
+
+  .land-scan-wrap { display: flex; justify-content: center; }
+  .land-scan-phone { width: 300px; background: #0F1114; border-radius: 40px; padding: 10px; box-shadow: 0 50px 100px -30px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07), 0 0 90px -20px rgba(240,162,2,.28); position: relative; }
+  .land-scan-screen { background: #0B0D10; border-radius: 30px; overflow: hidden; position: relative; height: 560px; }
+  .land-scan-island { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 76px; height: 20px; background: #0F1114; border-radius: 12px; z-index: 5; }
+  .land-scan-top { position: absolute; top: 44px; left: 0; right: 0; text-align: center; z-index: 4; color: #fff; }
+  .land-scan-top b { font-family: 'Oswald', sans-serif; font-size: 16px; display: block; }
+  .land-scan-top span { font-size: 11px; color: #A8AEB4; }
+  /* El "visor de cámara": fondo con una máquina insinuada (formas y brillos) */
+  .land-scan-cam {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 62%, rgba(240,162,2,.18), transparent 70%),
+      linear-gradient(180deg, #1A1E23 0%, #0E1114 55%, #14181C 100%);
+  }
+  .land-scan-cam::before {
+    /* silueta insinuada de una máquina: cuerpo y brazo, muy tenue */
+    content: ''; position: absolute; left: 12%; right: 12%; top: 44%; height: 34%;
+    background:
+      linear-gradient(#22272D, #22272D) 0 60% / 100% 40% no-repeat,
+      linear-gradient(#262B31, #262B31) 8% 0 / 40% 62% no-repeat,
+      linear-gradient(#1D2126, #1D2126) 50% 20% / 44% 12% no-repeat;
+    border-radius: 6px; opacity: .9; filter: blur(.4px);
+  }
+  .land-scan-frame { position: absolute; left: 50%; top: 50%; width: 190px; height: 190px; transform: translate(-50%, -50%); z-index: 3; }
+  .land-scan-frame::before, .land-scan-frame::after,
+  .land-scan-frame i::before, .land-scan-frame i::after {
+    content: ''; position: absolute; width: 30px; height: 30px; border: 3px solid var(--amber); border-radius: 4px;
+    animation: land-marco 4.2s ease-in-out infinite;
+  }
+  .land-scan-frame::before { top: -3px; left: -3px; border-right: none; border-bottom: none; }
+  .land-scan-frame::after  { top: -3px; right: -3px; border-left: none; border-bottom: none; }
+  .land-scan-frame i { position: absolute; inset: 0; }
+  .land-scan-frame i::before { bottom: -3px; left: -3px; border-right: none; border-top: none; }
+  .land-scan-frame i::after  { bottom: -3px; right: -3px; border-left: none; border-top: none; }
+  @keyframes land-marco { 0%, 58% { border-color: var(--amber); } 66%, 92% { border-color: #3DD37A; } 100% { border-color: var(--amber); } }
+  .land-qr { position: absolute; inset: 22px; background: #fff; border-radius: 6px; padding: 10px; }
+  .land-qr svg { width: 100%; height: 100%; display: block; }
+  .land-scan-line {
+    position: absolute; left: 6px; right: 6px; top: 0; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--amber) 20%, #FFD277 50%, var(--amber) 80%, transparent);
+    box-shadow: 0 0 14px 3px rgba(240,162,2,.5);
+    animation: land-barrido 4.2s ease-in-out infinite;
+  }
+  @keyframes land-barrido {
+    0% { top: 4px; opacity: 0; } 6% { opacity: 1; } 52% { top: calc(100% - 8px); opacity: 1; } 58% { opacity: 0; } 100% { top: 4px; opacity: 0; }
+  }
+  .land-scan-hint { position: absolute; left: 0; right: 0; bottom: 118px; text-align: center; z-index: 4; font-size: 12px; color: #C7CBD0; animation: land-hint 4.2s ease-in-out infinite; }
+  @keyframes land-hint { 0%, 55% { opacity: 1; } 62%, 92% { opacity: 0; } 100% { opacity: 1; } }
+  .land-scan-toast {
+    position: absolute; left: 14px; right: 14px; bottom: 26px; z-index: 6;
+    background: #fff; border-radius: 14px; padding: 12px 14px; display: flex; gap: 12px; align-items: center;
+    box-shadow: 0 18px 40px -14px rgba(0,0,0,.6);
+    transform: translateY(24px); opacity: 0;
+    animation: land-toast 4.2s ease-in-out infinite;
+  }
+  .land-scan-toast .ok { width: 36px; height: 36px; border-radius: 10px; background: #E7F7EE; color: #2F8F5B; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .land-scan-toast b { display: block; font-size: 13px; color: var(--ink); }
+  .land-scan-toast span { font-size: 11.5px; color: var(--steel); }
+  @keyframes land-toast { 0%, 58% { transform: translateY(24px); opacity: 0; } 66%, 92% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(24px); opacity: 0; } }
+  .land-scan-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: #fff; border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center; z-index: 5; }
+  .land-scan-bar i { font-size: 15px; color: var(--steel); }
+  .land-scan-bar .on i { color: var(--amber); }
+  @media (prefers-reduced-motion: reduce) {
+    .land-scan-line, .land-scan-toast, .land-scan-hint, .land-scan-frame::before, .land-scan-frame::after, .land-scan-frame i::before, .land-scan-frame i::after { animation: none !important; }
+    .land-scan-toast { transform: none; opacity: 1; }
+  }
+  @media (max-width: 900px) {
+    .land-scan { grid-template-columns: 1fr; gap: 32px; }
+    .land-scan-wrap { order: -1; }
+    .land-scan-phone { width: 270px; }
+    .land-scan-screen { height: 500px; }
+  }
+
+  /* --- Comparativa: papel · apps genéricas · Opertra --- */
+  .land-comp-wrap { margin-top: 48px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+  .land-comp { width: 100%; min-width: 680px; max-width: 1000px; margin: 0 auto; border-collapse: separate; border-spacing: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--l-radio); overflow: hidden; box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 20px 50px -30px rgba(28,33,38,.4); }
+  .land-comp th, .land-comp td { padding: 15px 18px; text-align: center; font-size: 14px; border-bottom: 1px solid var(--border); }
+  .land-comp th { font-family: 'Oswald', sans-serif; font-size: 15px; letter-spacing: .03em; background: var(--surface); }
+  .land-comp th:first-child, .land-comp td:first-child { text-align: left; font-weight: 600; color: var(--ink); width: 34%; }
+  .land-comp tr:last-child td { border-bottom: none; }
+  .land-comp .op { background: var(--graphite); color: #fff; }
+  .land-comp th.op { color: var(--amber); font-size: 17px; }
+  .land-comp .si, .land-comp .no, .land-comp .med { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-size: 13px; }
+  .land-comp .si { background: #E7F7EE; color: #2F8F5B; }
+  .land-comp .op .si { background: rgba(61,211,122,.18); color: #3DD37A; }
+  .land-comp .no { background: #FCE9E7; color: #C0392B; }
+  .land-comp .med { background: #FFF3D6; color: #B8760A; font-size: 12px; font-weight: 700; }
+  .land-comp small { display: block; font-family: 'Manrope', sans-serif; font-weight: 400; font-size: 11.5px; color: var(--steel); letter-spacing: 0; margin-top: 3px; }
+  .land-comp th.op small { color: #C7CBD0; }
+  .land-comp-nota { text-align: center; font-size: 12.5px; color: var(--steel); margin-top: 16px; }
+  /* Móvil: la tabla se compacta para que quepan las TRES columnas sin
+     desplazar — la columna Opertra es justo la que tiene que verse. */
+  @media (max-width: 640px) {
+    .land-comp { min-width: 0; }
+    .land-comp th, .land-comp td { padding: 11px 5px; font-size: 12.5px; }
+    .land-comp th { font-size: 11.5px; letter-spacing: .02em; line-height: 1.2; }
+    .land-comp th.op { font-size: 13px; }
+    .land-comp th:first-child, .land-comp td:first-child { width: 44%; padding-left: 12px; font-size: 12.5px; line-height: 1.35; }
+    .land-comp small { display: none; }
+    .land-comp .si, .land-comp .no, .land-comp .med { width: 26px; height: 26px; font-size: 11px; }
+  }
+
+  /* --- Cifras grandes centradas --- */
+  .land-cifras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; max-width: 1100px; margin: 0 auto; text-align: center; }
+  .land-cifra { padding: 28px 16px; border-radius: var(--l-radio); background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); }
+  .land-cifra b { display: block; font-family: 'Oswald', sans-serif; font-size: clamp(40px, 5vw, 64px); line-height: 1; color: var(--amber); letter-spacing: -0.01em; }
+  .land-cifra b small { font-size: .5em; color: #FFD277; margin-left: 2px; }
+  .land-cifra b .land-contador { display: inline; font: inherit; color: inherit; margin: 0; }
+  .land-cifra > span { display: block; margin-top: 10px; font-size: 13.5px; color: #C7CBD0; line-height: 1.45; }
+  @media (max-width: 800px) { .land-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* --- Para quién es --- */
+  .land-quien { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 44px; max-width: 1100px; margin-left: auto; margin-right: auto; }
+  .land-quien-card { text-align: center; padding: 30px 24px; border-radius: var(--l-radio); background: var(--card); border: 1px solid var(--border); box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -22px rgba(28,33,38,.35); transition: transform .18s ease, box-shadow .18s ease; }
+  .land-quien-card:hover { transform: translateY(-3px); box-shadow: var(--l-sombra); }
+  .land-quien-card i { width: 56px; height: 56px; border-radius: 16px; background: var(--graphite); color: var(--amber); display: inline-flex; align-items: center; justify-content: center; font-size: 22px; }
+  .land-quien-card b { display: block; font-family: 'Oswald', sans-serif; font-size: 19px; margin: 16px 0 8px; letter-spacing: .01em; }
+  .land-quien-card span { font-size: 14px; color: var(--steel); line-height: 1.55; }
+  @media (max-width: 800px) { .land-quien { grid-template-columns: 1fr; } }
+
+  /* --- Preguntas frecuentes (acordeón nativo, sin JS) --- */
+  .land-faq { max-width: 760px; margin: 44px auto 0; display: flex; flex-direction: column; gap: 10px; }
+  .land-faq details { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .land-faq summary { list-style: none; cursor: pointer; padding: 18px 54px 18px 20px; font-family: 'Oswald', sans-serif; font-size: 17px; letter-spacing: .01em; position: relative; }
+  .land-faq summary::-webkit-details-marker { display: none; }
+  .land-faq summary::after { content: '+'; position: absolute; right: 18px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border-radius: 50%; background: var(--surface); color: var(--graphite); display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 16px; transition: transform .2s ease, background .2s ease; }
+  .land-faq details[open] summary::after { content: '−'; background: var(--amber); }
+  .land-faq details[open] summary { border-bottom: 1px solid var(--border); }
+  .land-faq p { margin: 0; padding: 16px 20px 20px; font-size: 14.5px; color: var(--steel); line-height: 1.65; text-align: left; }
+
+  /* --- Ajustes de bandas nuevas --- */
+  .land-band.oscura .land-cifra b { color: var(--amber); }
+
   /* ============ LOGIN ============ */
   /* padding-top con el hueco del notch sumado: en un iPhone con Dynamic
      Island ese hueco (~59px) es mayor que los 40px fijos que había, así
@@ -2213,8 +2387,8 @@
       <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde un solo sitio</h1>
       <p class="land-sub">Fichaje escaneando el código de la máquina, localización GPS de tu flota, incidencias al momento y control de cobros por trabajo. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
       <div class="land-cta-row">
-        <button class="btn btn-amber" style="padding:14px 24px;font-size:15px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
-        <button class="btn btn-outline" style="padding:14px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
+        <button class="btn btn-amber land-cta-brillo" style="padding:15px 26px;font-size:15.5px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
+        <button class="btn btn-outline" style="padding:15px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
       </div>
       <div class="land-trust">
         <span><i class="fa-solid fa-check"></i> 50 días gratis</span>
@@ -2319,8 +2493,17 @@
        después del hero a propósito. -->
   <div class="land-cinta" aria-hidden="true"></div>
 
+  <!-- Ticker: lo que nos diferencia, en movimiento. El contenido va dos
+       veces para que el bucle no tenga corte. -->
+  <div class="land-ticker" aria-hidden="true">
+    <div class="land-ticker-pista">
+      <span>FICHAJE ESCANEANDO LA MÁQUINA</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO AL MÓVIL A LA HORA DE SALIR</span><span>GPS EN LA MÁQUINA, NO EN LA PERSONA</span><span>REGISTRO LEGAL 4 AÑOS</span><span>INCIDENCIAS CON FOTO</span><span>SIN APP QUE INSTALAR</span><span>LISTO EN UNA TARDE</span><span>DATOS EN LA UNIÓN EUROPEA</span>
+      <span>FICHAJE ESCANEANDO LA MÁQUINA</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO AL MÓVIL A LA HORA DE SALIR</span><span>GPS EN LA MÁQUINA, NO EN LA PERSONA</span><span>REGISTRO LEGAL 4 AÑOS</span><span>INCIDENCIAS CON FOTO</span><span>SIN APP QUE INSTALAR</span><span>LISTO EN UNA TARDE</span><span>DATOS EN LA UNIÓN EUROPEA</span>
+    </div>
+  </div>
+
   <div class="land-band oscura">
-    <section class="land-section" id="land-legal" data-hoja="HOJA 01 / 06">
+    <section class="land-section" id="land-legal" data-hoja="HOJA 01 / 10">
       <span class="land-eyebrow-sec reveal"><em>01</em> Obligatorio en España desde 2019</span>
       <h2 class="land-h2 reveal">El registro de jornada no es opcional</h2>
       <p class="land-h2-sub reveal" style="max-width:640px;">
@@ -2351,7 +2534,7 @@
   </div>
 
   <div class="land-band">
-  <section class="land-section" id="land-problem" data-hoja="HOJA 02 / 06">
+  <section class="land-section" id="land-problem" data-hoja="HOJA 02 / 10">
     <span class="land-eyebrow-sec reveal"><em>02</em> El día a día</span>
     <h2 class="land-h2 reveal">El problema de siempre en obra</h2>
     <div class="land-problem-grid">
@@ -2363,9 +2546,57 @@
   </section>
   </div>
 
+  <!-- ASÍ SE FICHA: el móvil con el escáner abierto, escaneando en directo.
+       Hecho en CSS/SVG (visor, marco, QR, línea de barrido y aviso), sin
+       imágenes: nunca se desincroniza del diseño real. -->
   <div class="land-band clara">
-  <section class="land-section" id="land-features" data-hoja="HOJA 03 / 06">
-    <span class="land-eyebrow-sec reveal"><em>03</em> La app</span>
+  <section class="land-section" id="land-scan" data-hoja="HOJA 03 / 10">
+    <span class="land-eyebrow-sec reveal"><em>03</em> Así se ficha</span>
+    <h2 class="land-h2 reveal">Escanea la máquina. Ya está.</h2>
+    <p class="land-h2-sub reveal">Tres segundos, cualquier móvil, sin instalar nada. El fichaje queda ligado a la máquina y a la obra; las personas no se geolocalizan nunca.</p>
+    <div class="land-scan">
+      <div class="land-scan-pasos reveal">
+        <div class="land-scan-paso"><span class="n">1</span><div><b>Apunta al código de la máquina</b><span>Cada máquina lleva su etiqueta QR pegada. El trabajador abre Opertra y enfoca.</span></div></div>
+        <div class="land-scan-paso"><span class="n">2</span><div><b>Opertra la reconoce al instante</b><span>Identifica la máquina y la obra. Si no hay cobertura, guarda el fichaje con la hora real y lo envía solo después.</span></div></div>
+        <div class="land-scan-paso"><span class="n">3</span><div><b>Entrada fichada. A trabajar.</b><span>A la hora prevista de salir le llega un aviso al móvil, aunque tenga la app cerrada. Y si se le olvida, el responsable lo ve.</span></div></div>
+        <div class="land-scan-dif"><span>SIN COBERTURA</span><span>SIN APP</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
+      </div>
+      <div class="land-scan-wrap reveal" aria-hidden="true">
+        <div class="land-scan-phone">
+          <div class="land-scan-screen">
+            <div class="land-scan-island"></div>
+            <div class="land-scan-top"><b>Confirma tu máquina</b><span>Escanea el código de la etiqueta</span></div>
+            <div class="land-scan-cam"></div>
+            <div class="land-scan-frame"><i></i>
+              <div class="land-qr">
+                <svg viewBox="0 0 21 21" shape-rendering="crispEdges" aria-hidden="true">
+                  <rect x="0.5" y="0.5" width="6" height="6" fill="none" stroke="#111" stroke-width="1"/><rect x="2" y="2" width="3" height="3" fill="#111"/>
+                  <rect x="14.5" y="0.5" width="6" height="6" fill="none" stroke="#111" stroke-width="1"/><rect x="16" y="2" width="3" height="3" fill="#111"/>
+                  <rect x="0.5" y="14.5" width="6" height="6" fill="none" stroke="#111" stroke-width="1"/><rect x="2" y="16" width="3" height="3" fill="#111"/>
+                  <path fill="#111" d="M8 0h1v1h-1zM10 0h1v1h-1zM9 1h1v1h-1zM12 1h1v1h-1zM8 2h1v1h-1zM11 2h1v1h-1zM10 3h1v1h-1zM12 3h1v1h-1zM8 4h1v1h-1zM9 4h1v1h-1zM11 5h1v1h-1zM0 8h1v1h-1zM2 8h1v1h-1zM4 8h1v1h-1zM1 9h1v1h-1zM3 10h1v1h-1zM5 10h1v1h-1zM0 11h1v1h-1zM2 11h1v1h-1zM4 12h1v1h-1zM1 12h1v1h-1zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM6 8h1v1h-1zM6 10h1v1h-1zM6 12h1v1h-1zM8 8h1v1h-1zM9 8h1v1h-1zM11 8h1v1h-1zM13 8h1v1h-1zM15 8h1v1h-1zM16 8h1v1h-1zM18 8h1v1h-1zM20 8h1v1h-1zM8 9h1v1h-1zM10 9h1v1h-1zM12 9h1v1h-1zM14 9h1v1h-1zM17 9h1v1h-1zM19 9h1v1h-1zM9 10h1v1h-1zM11 10h1v1h-1zM12 10h1v1h-1zM15 10h1v1h-1zM16 10h1v1h-1zM20 10h1v1h-1zM8 11h1v1h-1zM10 11h1v1h-1zM13 11h1v1h-1zM14 11h1v1h-1zM18 11h1v1h-1zM19 11h1v1h-1zM9 12h1v1h-1zM12 12h1v1h-1zM16 12h1v1h-1zM17 12h1v1h-1zM20 12h1v1h-1zM8 13h1v1h-1zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h1v1h-1zM18 13h1v1h-1zM9 14h1v1h-1zM10 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM19 14h1v1h-1zM20 14h1v1h-1zM8 15h1v1h-1zM12 15h1v1h-1zM13 15h1v1h-1zM17 15h1v1h-1zM18 15h1v1h-1zM10 16h1v1h-1zM11 16h1v1h-1zM15 16h1v1h-1zM19 16h1v1h-1zM8 17h1v1h-1zM13 17h1v1h-1zM14 17h1v1h-1zM16 17h1v1h-1zM20 17h1v1h-1zM9 18h1v1h-1zM12 18h1v1h-1zM17 18h1v1h-1zM18 18h1v1h-1zM8 19h1v1h-1zM10 19h1v1h-1zM11 19h1v1h-1zM15 19h1v1h-1zM19 19h1v1h-1zM20 19h1v1h-1zM9 20h1v1h-1zM13 20h1v1h-1zM14 20h1v1h-1zM16 20h1v1h-1zM18 20h1v1h-1z"/>
+                </svg>
+              </div>
+              <div class="land-scan-line"></div>
+            </div>
+            <div class="land-scan-hint">Apunta al código pegado en la máquina</div>
+            <div class="land-scan-toast"><div class="ok"><i class="fa-solid fa-check"></i></div><div><b>EX-114 · Excavadora reconocida</b><span>Entrada fichada · 07:58 · Obra Casa La Zubia</span></div></div>
+            <div class="land-scan-bar">
+              <div><i class="fa-solid fa-gauge-high"></i></div>
+              <div class="on"><i class="fa-solid fa-clock"></i></div>
+              <div><i class="fa-solid fa-truck-fast"></i></div>
+              <div><i class="fa-solid fa-bullhorn"></i></div>
+              <div><i class="fa-solid fa-bars"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <div class="land-band">
+  <section class="land-section" id="land-features" data-hoja="HOJA 04 / 10">
+    <span class="land-eyebrow-sec reveal"><em>04</em> La app</span>
     <h2 class="land-h2 reveal">Todo lo que necesitas, conectado de verdad</h2>
     <p class="land-h2-sub reveal">No son módulos sueltos: cada trabajo conecta solo con sus máquinas, su gente, sus incidencias y lo que queda por cobrar.</p>
     <div class="land-feature-grid">
@@ -2384,9 +2615,55 @@
   </section>
   </div>
 
+  <!-- POR QUÉ OPERTRA Y NO OTRA COSA: la comparativa. Es la forma más
+       directa de dejar claro en qué nos diferenciamos. -->
+  <div class="land-band clara">
+  <section class="land-section" id="land-porque" data-hoja="HOJA 05 / 10">
+    <span class="land-eyebrow-sec reveal"><em>05</em> Por qué Opertra</span>
+    <h2 class="land-h2 reveal">Lo que hace Opertra que el papel y las apps genéricas no hacen</h2>
+    <p class="land-h2-sub reveal">Las apps de fichaje sirven para oficinas. La obra es otra cosa: máquinas, cuadrillas que rotan y sitios sin cobertura.</p>
+    <div class="land-comp-wrap reveal">
+      <table class="land-comp">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Papel / WhatsApp<small>lo de siempre</small></th>
+            <th>Apps de fichaje<small>genéricas, de oficina</small></th>
+            <th class="op">Opertra<small>hecha para la obra</small></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Fichaje escaneando el QR de la máquina</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Funciona sin cobertura y se envía solo después</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Aviso al móvil a la hora de salir, con la app cerrada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Registro legal 4 años, con rastro de cada corrección</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>No rastrea a las personas: el GPS va en la máquina</td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Maquinaria localizada en el mapa, documentación e ITV</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Incidencias con foto desde la obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Horas, máquinas y cobros ligados a cada obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td>Te lo montamos nosotros, en una tarde</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="land-comp-nota reveal">~ Solo en algunas apps, o como extra de pago.</p>
+  </section>
+  </div>
+
+  <!-- CIFRAS: grandes, centradas, con contador -->
+  <div class="land-band oscura">
+    <section class="land-section" style="padding-top:calc(var(--l-espacio) * .7);padding-bottom:calc(var(--l-espacio) * .7);">
+      <div class="land-cifras">
+        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="3">0</span><small>s</small></b><span>para fichar: escanear y listo</span></div>
+        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="0">0</span></b><span>papeles, Excel y llamadas para saber quién trabaja</span></div>
+        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="4">0</span><small>años</small></b><span>de registro guardados solos, listos para inspección</span></div>
+        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="100">0</span><small>%</small></b><span>de la flota localizada en el mapa</span></div>
+      </div>
+    </section>
+  </div>
+
   <div class="land-band">
-  <section class="land-section" id="land-how" data-hoja="HOJA 04 / 06">
-    <span class="land-eyebrow-sec reveal"><em>04</em> Puesta en marcha</span>
+  <section class="land-section" id="land-how" data-hoja="HOJA 06 / 10">
+    <span class="land-eyebrow-sec reveal"><em>06</em> Puesta en marcha</span>
     <h2 class="land-h2 reveal">De cero a fichando, en una tarde</h2>
     <p class="land-h2-sub reveal">Sin instalar nada y sin formación: tus trabajadores solo tienen que escanear.</p>
     <div class="land-steps">
@@ -2398,9 +2675,23 @@
   </section>
   </div>
 
+  <!-- PARA QUIÉN ES -->
   <div class="land-band clara">
-  <section class="land-section" id="land-pricing" data-hoja="HOJA 05 / 06">
-    <span class="land-eyebrow-sec reveal"><em>05</em> Precios</span>
+  <section class="land-section" id="land-quien" data-hoja="HOJA 07 / 10">
+    <span class="land-eyebrow-sec reveal"><em>07</em> Para quién es</span>
+    <h2 class="land-h2 reveal">Hecha para empresas que viven en la obra</h2>
+    <p class="land-h2-sub reveal">Si tienes máquinas, cuadrillas y varias obras a la vez, esto es para ti.</p>
+    <div class="land-quien">
+      <div class="land-quien-card reveal"><i class="fa-solid fa-helmet-safety"></i><b>Constructoras</b><span>Varias obras a la vez, cuadrillas que rotan y maquinaria repartida. Saber quién está en cada obra y con qué máquina, sin una sola llamada.</span></div>
+      <div class="land-quien-card reveal"><i class="fa-solid fa-mountain"></i><b>Excavaciones y movimiento de tierras</b><span>Máquinas caras que no pueden estar paradas ni perdidas. GPS, horómetro y gasoil apuntados en cada jornada, con cada operario.</span></div>
+      <div class="land-quien-card reveal"><i class="fa-solid fa-truck-ramp-box"></i><b>Alquiler y flotas de maquinaria</b><span>Cada máquina con su historial: quién la llevó, cuántas horas, qué averías. Documentación e ITV con aviso antes de caducar.</span></div>
+    </div>
+  </section>
+  </div>
+
+  <div class="land-band">
+  <section class="land-section" id="land-pricing" data-hoja="HOJA 08 / 10">
+    <span class="land-eyebrow-sec reveal"><em>08</em> Precios</span>
     <h2 class="land-h2 reveal">Precios pensados para pymes de construcción</h2>
     <p class="land-h2-sub">Sin permanencia. El precio depende del número de máquinas y trabajadores.</p>
     <p style="font-size:12.5px;color:var(--steel);max-width:580px;margin:10px auto 0;line-height:1.55;text-align:center;">
@@ -2452,11 +2743,28 @@
   </section>
   </div>
 
+  <!-- PREGUNTAS FRECUENTES: las objeciones de compra, respondidas -->
+  <div class="land-band clara">
+  <section class="land-section" id="land-faq" data-hoja="HOJA 09 / 10">
+    <span class="land-eyebrow-sec reveal"><em>09</em> Preguntas frecuentes</span>
+    <h2 class="land-h2 reveal">Lo que nos preguntan antes de empezar</h2>
+    <div class="land-faq reveal">
+      <details><summary>¿Hay que instalar algo en los móviles?</summary><p>No. Se abre desde el navegador del móvil y se puede añadir a la pantalla de inicio, como una app más. Recomendamos añadirla: así llegan los avisos aunque esté cerrada.</p></details>
+      <details><summary>¿Funciona en la obra sin cobertura?</summary><p>Sí. El fichaje se guarda en el móvil con la hora real y se envía solo en cuanto vuelve la señal. Cada fichaje lleva un código único, así que aunque se reintente nunca se duplica ni se pierde.</p></details>
+      <details><summary>¿Geolocaliza a los trabajadores?</summary><p>No, nunca. Las personas no se rastrean. El GPS va en la máquina (un dispositivo que instalamos nosotros), que es lo que interesa localizar. El fichaje solo guarda hora, obra y máquina.</p></details>
+      <details><summary>¿Cumple con la ley del registro de jornada?</summary><p>Sí. Cada jornada queda con su hora de entrada y de salida, se conserva cuatro años y cualquier corrección deja rastro de quién la hizo, cuándo y por qué, conservando los valores originales. El registro se exporta en un clic para una inspección.</p></details>
+      <details><summary>¿Y si alguien se equivoca al fichar?</summary><p>El responsable lo corrige desde el panel indicando el motivo, y queda registrado. Además, la app evita los errores más comunes: no deja fichar la salida en los dos primeros minutos ni que dos personas fichen con la misma máquina a la vez.</p></details>
+      <details><summary>¿Cuánto se tarda en empezar?</summary><p>Una tarde. Damos de alta contigo la empresa, los trabajadores (con su PIN) y las máquinas, imprimes las etiquetas QR, las pegas y ya se ficha. Sin formación: el trabajador solo tiene que escanear.</p></details>
+      <details><summary>¿Dónde están mis datos?</summary><p>En servidores de la Unión Europea, separados por empresa. Cada trabajador solo ve lo suyo (sus horas, sus avisos); el administrador lo ve todo. Si algún día lo dejas, tus datos se borran conforme a la ley.</p></details>
+    </div>
+  </section>
+  </div>
+
   <div class="land-band">
-  <section class="land-section" id="land-demo" data-hoja="HOJA 06 / 06">
+  <section class="land-section" id="land-demo" data-hoja="HOJA 10 / 10">
     <div class="land-demo-cols">
       <div class="land-demo-valor reveal">
-        <span class="land-eyebrow-sec" style="justify-content:flex-start;"><em>06</em> Demo gratuita</span>
+        <span class="land-eyebrow-sec"><em>10</em> Demo gratuita</span>
         <h2 class="land-h2">Te la enseñamos con tus propios datos</h2>
         <p style="color:var(--steel);font-size:14px;line-height:1.6;margin-top:10px;">
           Una llamada corta, sin compromiso y sin comerciales pesados. Nos cuentas cómo lleváis
@@ -2989,6 +3297,33 @@
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
 
   elementos.forEach(el => observador.observe(el));
+})();
+
+/* Cifras de la portada: el número sube de 0 a su valor cuando entra en
+   pantalla, con frenada suave al final. Solo en la portada; con las
+   animaciones desactivadas se pone el valor directamente. */
+(function contadoresPortada() {
+  const nums = document.querySelectorAll('#landing .land-contador');
+  if (!nums.length) return;
+  const poner = (el) => { el.textContent = el.dataset.hasta; };
+  let sinAnimacion = false;
+  try { sinAnimacion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  if (!('IntersectionObserver' in window) || sinAnimacion) { nums.forEach(poner); return; }
+  const animar = (el) => {
+    const hasta = parseFloat(el.dataset.hasta) || 0;
+    const dur = 1100, t0 = performance.now();
+    const paso = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(hasta * e);
+      if (p < 1) requestAnimationFrame(paso); else poner(el);
+    };
+    requestAnimationFrame(paso);
+  };
+  const obs = new IntersectionObserver((es) => {
+    es.forEach(en => { if (!en.isIntersecting) return; animar(en.target); obs.unobserve(en.target); });
+  }, { threshold: 0.4 });
+  nums.forEach(el => obs.observe(el));
 })();
 
 /* ======================================================================
