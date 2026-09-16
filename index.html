@@ -1734,6 +1734,118 @@
   /* --- Ajustes de bandas nuevas --- */
   .land-band.oscura .land-cifra b { color: var(--amber); }
 
+  /* ============ LANDING · CAPA 3: FLUIDEZ ENTRE BLOQUES ============
+     Lo que hacía que la portada pareciera "un PowerPoint hacia abajo" eran
+     los cortes rectos entre secciones y que todo fueran cajas. Aquí las
+     junturas se funden, las bandas oscuras proyectan sombra sobre la
+     siguiente, las cifras se solapan con la sección de abajo, el escáner
+     pierde las sombras sucias y los pasos pasan a línea de tiempo, y la
+     comparativa deja de ser una tabla blanca con borde.
+     ========================================================================== */
+
+  /* --- Junturas: las bandas claras se funden por arriba y por abajo (sin
+         línea de corte); las oscuras sueltan una sombra suave hacia abajo --- */
+  .land-band.clara { background: linear-gradient(180deg, var(--card) 0%, var(--surface) 9%, var(--surface) 91%, var(--card) 100%); }
+  .land-band.oscura { box-shadow: 0 34px 60px -34px rgba(0,0,0,.55); position: relative; z-index: 2; }
+  .land-band.oscura::after {
+    /* Filete ámbar muy fino en el borde inferior: como una cota de plano */
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; z-index: 3;
+    background: linear-gradient(90deg, transparent 0%, rgba(240,162,2,.55) 30%, rgba(240,162,2,.55) 70%, transparent 100%);
+  }
+  /* El hero también proyecta sombra sobre lo que viene y la cinta queda
+     integrada, no pegada */
+  .land-hero { box-shadow: 0 30px 60px -30px rgba(0,0,0,.6); position: relative; z-index: 2; }
+  .land-cinta { position: relative; z-index: 3; }
+
+  /* --- Franja de garantías (sustituye al ticker) --- */
+  .land-garantias { background: #15181C; padding: 18px 6vw; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .land-garantias-fila { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 14px; max-width: 1200px; margin: 0 auto; }
+  .land-garantias span {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: #D5D9DD; padding: 8px 14px; border-radius: 999px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  }
+  .land-garantias i { color: var(--amber); font-size: 12px; }
+  @media (max-width: 700px) { .land-garantias span { font-size: 10.5px; padding: 7px 11px; } }
+
+  /* --- Cifras solapadas con la sección siguiente --- */
+  .land-band.land-solape { padding-bottom: 0; box-shadow: none; }
+  .land-band.land-solape::after { display: none; }
+  .land-band.land-solape .land-section { padding-bottom: 0 !important; }
+  .land-band.land-solape .land-cifras { position: relative; z-index: 3; transform: translateY(46px); }
+  .land-band.land-solape .land-cifra { box-shadow: 0 30px 60px -28px rgba(0,0,0,.6); background: #262C33; border-color: rgba(255,255,255,.1); }
+  .land-band.land-tras-solape > .land-section { padding-top: calc(var(--l-espacio) + 46px); }
+
+  /* --- Escáner: visor limpio, pasos en línea de tiempo, móvil apoyado --- */
+  .land-scan-cam::before { display: none; }          /* fuera las sombras grises tras el QR */
+  .land-scan-cam {
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 55%, rgba(240,162,2,.22), transparent 70%),
+      linear-gradient(rgba(240,162,2,.06) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(90deg, rgba(240,162,2,.06) 1px, transparent 1px) 0 0 / 28px 28px,
+      linear-gradient(180deg, #1A1E23 0%, #0E1114 55%, #14181C 100%);
+  }
+  .land-scan-cam::after {
+    /* viñeta de cámara: oscurece los bordes, como un visor de verdad */
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 80% 70% at 50% 50%, transparent 40%, rgba(0,0,0,.55) 100%);
+  }
+  .land-scan-wrap { position: relative; }
+  .land-scan-wrap::after {
+    /* sombra de apoyo bajo el móvil */
+    content: ''; position: absolute; left: 50%; bottom: -26px; width: 240px; height: 40px; transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, rgba(28,33,38,.35), transparent 70%); filter: blur(6px); z-index: -1;
+  }
+  .land-scan-pasos { position: relative; padding-left: 4px; }
+  .land-scan-pasos::before {
+    /* la línea que une los tres pasos */
+    content: ''; position: absolute; left: 23px; top: 24px; bottom: 96px; width: 2px;
+    background: repeating-linear-gradient(180deg, var(--amber) 0 6px, transparent 6px 12px); opacity: .55;
+  }
+  .land-scan-paso { background: transparent; border: none; box-shadow: none; padding: 6px 0 22px 0; }
+  .land-scan-paso .n { box-shadow: 0 0 0 6px var(--surface); }
+  .land-scan-paso b { font-size: 18px; }
+  .land-scan-dif { justify-content: flex-start; padding-left: 56px; margin-top: 6px; }
+  @media (max-width: 900px) {
+    .land-scan-pasos::before { left: 23px; }
+    .land-scan-dif { justify-content: center; padding-left: 0; }
+  }
+  /* Con las animaciones del sistema apagadas, el visor se ve "reconocido":
+     marco verde, sin línea de barrido y aviso visible. Nunca a medias. */
+  @media (prefers-reduced-motion: reduce) {
+    .land-scan-line { display: none; }
+    .land-scan-hint { display: none; }
+    .land-scan-frame::before, .land-scan-frame::after, .land-scan-frame i::before, .land-scan-frame i::after { border-color: #3DD37A !important; }
+  }
+
+  /* --- Comparativa premium --- */
+  .land-comp { border: none; background: transparent; box-shadow: none; border-radius: 0; overflow: visible; }
+  .land-comp thead th { background: var(--graphite); color: #fff; border-bottom: none; padding: 18px 18px; }
+  .land-comp thead th:first-child { border-radius: 14px 0 0 0; background: var(--graphite); }
+  .land-comp thead th small { color: #A8AEB4; }
+  .land-comp thead th.op { background: #23282E; color: var(--amber); border-radius: 0 14px 0 0; box-shadow: inset 0 3px 0 var(--amber); }
+  .land-comp tbody tr { background: var(--card); }
+  .land-comp tbody tr:nth-child(even) { background: #FBFBFC; }
+  .land-comp tbody td { border-bottom: 1px solid var(--border); }
+  .land-comp tbody tr:hover td:not(.op) { background: #F3F5F7; }
+  .land-comp td:first-child { padding-left: 18px; }
+  .land-comp td:first-child i {
+    display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px;
+    background: var(--amber-bg); color: var(--amber-deep); font-size: 12.5px; margin-right: 12px; vertical-align: middle; flex-shrink: 0;
+  }
+  .land-comp td.op { background: #23282E; box-shadow: inset 3px 0 0 rgba(240,162,2,.35), inset -3px 0 0 rgba(240,162,2,.35); border-bottom-color: rgba(255,255,255,.06); }
+  .land-comp tbody tr:last-child td.op { border-bottom: none; }
+  .land-comp tfoot td { border: none; background: transparent; padding: 0; }
+  .land-comp tfoot td.op { background: #23282E; padding: 16px; border-radius: 0 0 14px 14px; box-shadow: inset 3px 0 0 rgba(240,162,2,.35), inset -3px 0 0 rgba(240,162,2,.35), 0 26px 50px -24px rgba(0,0,0,.55); }
+  .land-comp tbody tr:first-child td:first-child { }
+  .land-comp-wrap { filter: drop-shadow(0 22px 40px rgba(28,33,38,.18)); }
+  @media (max-width: 640px) {
+    .land-comp td:first-child i { display: none; }
+    .land-comp tfoot td.op { padding: 10px 6px; }
+    .land-comp tfoot .btn { font-size: 12px; padding: 9px 6px; }
+  }
+
   /* ============ LOGIN ============ */
   /* padding-top con el hueco del notch sumado: en un iPhone con Dynamic
      Island ese hueco (~59px) es mayor que los 40px fijos que había, así
@@ -2493,12 +2605,17 @@
        después del hero a propósito. -->
   <div class="land-cinta" aria-hidden="true"></div>
 
-  <!-- Ticker: lo que nos diferencia, en movimiento. El contenido va dos
-       veces para que el bucle no tenga corte. -->
-  <div class="land-ticker" aria-hidden="true">
-    <div class="land-ticker-pista">
-      <span>FICHAJE ESCANEANDO LA MÁQUINA</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO AL MÓVIL A LA HORA DE SALIR</span><span>GPS EN LA MÁQUINA, NO EN LA PERSONA</span><span>REGISTRO LEGAL 4 AÑOS</span><span>INCIDENCIAS CON FOTO</span><span>SIN APP QUE INSTALAR</span><span>LISTO EN UNA TARDE</span><span>DATOS EN LA UNIÓN EUROPEA</span>
-      <span>FICHAJE ESCANEANDO LA MÁQUINA</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO AL MÓVIL A LA HORA DE SALIR</span><span>GPS EN LA MÁQUINA, NO EN LA PERSONA</span><span>REGISTRO LEGAL 4 AÑOS</span><span>INCIDENCIAS CON FOTO</span><span>SIN APP QUE INSTALAR</span><span>LISTO EN UNA TARDE</span><span>DATOS EN LA UNIÓN EUROPEA</span>
+  <!-- Franja de garantías: lo que nos diferencia, de un vistazo. Fija (sin
+       ticker): se ve igual de bien con las animaciones del sistema apagadas. -->
+  <div class="land-garantias" aria-label="Lo que nos diferencia">
+    <div class="land-garantias-fila">
+      <span><i class="fa-solid fa-qrcode"></i>Fichaje escaneando la máquina</span>
+      <span><i class="fa-solid fa-signal"></i>Funciona sin cobertura</span>
+      <span><i class="fa-solid fa-bell"></i>Aviso al móvil al salir</span>
+      <span><i class="fa-solid fa-location-crosshairs"></i>GPS en la máquina, no en la persona</span>
+      <span><i class="fa-solid fa-scale-balanced"></i>Registro legal 4 años</span>
+      <span><i class="fa-solid fa-mobile-screen-button"></i>Se instala en un toque</span>
+      <span><i class="fa-solid fa-shield-halved"></i>Datos en la Unión Europea</span>
     </div>
   </div>
 
@@ -2553,13 +2670,13 @@
   <section class="land-section" id="land-scan" data-hoja="HOJA 03 / 10">
     <span class="land-eyebrow-sec reveal"><em>03</em> Así se ficha</span>
     <h2 class="land-h2 reveal">Escanea la máquina. Ya está.</h2>
-    <p class="land-h2-sub reveal">Tres segundos, cualquier móvil, sin instalar nada. El fichaje queda ligado a la máquina y a la obra; las personas no se geolocalizan nunca.</p>
+    <p class="land-h2-sub reveal">Tres segundos, desde cualquier móvil: funciona sin descargar nada, y se instala en un toque para abrirla al instante. El fichaje queda ligado a la máquina y a la obra; las personas no se geolocalizan nunca.</p>
     <div class="land-scan">
       <div class="land-scan-pasos reveal">
         <div class="land-scan-paso"><span class="n">1</span><div><b>Apunta al código de la máquina</b><span>Cada máquina lleva su etiqueta QR pegada. El trabajador abre Opertra y enfoca.</span></div></div>
         <div class="land-scan-paso"><span class="n">2</span><div><b>Opertra la reconoce al instante</b><span>Identifica la máquina y la obra. Si no hay cobertura, guarda el fichaje con la hora real y lo envía solo después.</span></div></div>
         <div class="land-scan-paso"><span class="n">3</span><div><b>Entrada fichada. A trabajar.</b><span>A la hora prevista de salir le llega un aviso al móvil, aunque tenga la app cerrada. Y si se le olvida, el responsable lo ve.</span></div></div>
-        <div class="land-scan-dif"><span>SIN COBERTURA</span><span>SIN APP</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
+        <div class="land-scan-dif"><span>FUNCIONA SIN COBERTURA</span><span>SIN DESCARGA OBLIGATORIA</span><span>SE INSTALA EN UN TOQUE</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
       </div>
       <div class="land-scan-wrap reveal" aria-hidden="true">
         <div class="land-scan-phone">
@@ -2603,8 +2720,8 @@
       <div class="land-feature-card grande reveal">
         <i class="fa-solid fa-qrcode"></i>
         <b>Fichaje con QR, sin geolocalizar a las personas</b>
-        <span>El trabajador escanea el código pegado en su máquina y ficha en tres segundos. Funciona en cualquier móvil y también sin cobertura: el fichaje se guarda y se envía solo cuando vuelve la señal.</span>
-        <div class="land-chips"><span>SIN APP QUE INSTALAR</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO A LA HORA DE SALIR</span></div>
+        <span>El trabajador escanea el código pegado en su máquina y ficha en tres segundos. Funciona en cualquier móvil sin descargar nada — y se instala en un toque en la pantalla de inicio para abrirla al instante. Sin cobertura, el fichaje se guarda y se envía solo cuando vuelve la señal.</span>
+        <div class="land-chips"><span>SIN DESCARGA OBLIGATORIA</span><span>SE INSTALA EN UN TOQUE</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO A LA HORA DE SALIR</span></div>
       </div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y cobros de cada trabajo en una ficha.</span></div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-truck"></i><b>Maquinaria con GPS</b><span>Ubicación de cada máquina en el mapa, en tiempo real. Documentación e ITV con avisos antes de que caduquen. Nosotros instalamos los dispositivos.</span></div>
@@ -2633,25 +2750,30 @@
           </tr>
         </thead>
         <tbody>
-          <tr><td>Fichaje escaneando el QR de la máquina</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Funciona sin cobertura y se envía solo después</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Aviso al móvil a la hora de salir, con la app cerrada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Registro legal 4 años, con rastro de cada corrección</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>No rastrea a las personas: el GPS va en la máquina</td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Maquinaria localizada en el mapa, documentación e ITV</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Incidencias con foto desde la obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Horas, máquinas y cobros ligados a cada obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td>Te lo montamos nosotros, en una tarde</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-qrcode"></i>Fichaje escaneando el QR de la máquina</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-signal"></i>Funciona sin cobertura y se envía solo después</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-bell"></i>Aviso al móvil a la hora de salir, con la app cerrada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-scale-balanced"></i>Registro legal 4 años, con rastro de cada corrección</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-user-shield"></i>No rastrea a las personas: el GPS va en la máquina</td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-map-location-dot"></i>Maquinaria localizada en el mapa, documentación e ITV</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-camera"></i>Incidencias con foto desde la obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-diagram-project"></i>Horas, máquinas y cobros ligados a cada obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-mobile-screen-button"></i>Sin pasar por la tienda de apps: se usa al momento y se instala en un toque</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-handshake"></i>Te lo montamos nosotros, en una tarde</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
         </tbody>
+        <tfoot>
+          <tr><td></td><td></td><td></td><td class="op"><button class="btn btn-amber" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button></td></tr>
+        </tfoot>
       </table>
     </div>
     <p class="land-comp-nota reveal">~ Solo en algunas apps, o como extra de pago.</p>
   </section>
   </div>
 
-  <!-- CIFRAS: grandes, centradas, con contador -->
-  <div class="land-band oscura">
-    <section class="land-section" style="padding-top:calc(var(--l-espacio) * .7);padding-bottom:calc(var(--l-espacio) * .7);">
+  <!-- CIFRAS: grandes, centradas, con contador. Las tarjetas se solapan con
+       la sección siguiente para romper la sensación de bloque tras bloque. -->
+  <div class="land-band oscura land-solape">
+    <section class="land-section" style="padding-top:calc(var(--l-espacio) * .7);padding-bottom:0;">
       <div class="land-cifras">
         <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="3">0</span><small>s</small></b><span>para fichar: escanear y listo</span></div>
         <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="0">0</span></b><span>papeles, Excel y llamadas para saber quién trabaja</span></div>
@@ -2661,11 +2783,11 @@
     </section>
   </div>
 
-  <div class="land-band">
+  <div class="land-band land-tras-solape">
   <section class="land-section" id="land-how" data-hoja="HOJA 06 / 10">
     <span class="land-eyebrow-sec reveal"><em>06</em> Puesta en marcha</span>
     <h2 class="land-h2 reveal">De cero a fichando, en una tarde</h2>
-    <p class="land-h2-sub reveal">Sin instalar nada y sin formación: tus trabajadores solo tienen que escanear.</p>
+    <p class="land-h2-sub reveal">Sin formación y sin descargas obligatorias: tus trabajadores solo tienen que escanear. Y si la instalan en un toque, aún más rápido.</p>
     <div class="land-steps">
       <div class="land-step reveal" data-n="01"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
       <div class="land-step reveal" data-n="02"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina lleva su etiqueta única. El trabajador la escanea para fichar.</span></div>
