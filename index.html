@@ -1297,6 +1297,269 @@
     .land-problem-card:hover, .land-feature-card:hover, .land-price-card:hover { transform: none; }
   }
 
+  /* ============ LANDING · CAPA "PLANO DE OBRA" ============
+     La portada entera como un plano técnico de construcción: rejilla de
+     dibujo muy sutil en todos los fondos, cada sección numerada como una
+     hoja de plano (01 · …), líneas de cota como separadores, una cinta de
+     obra ámbar/grafito como detalle firma, títulos grandes, aire, y las
+     funciones en rejilla "bento" (una grande + pequeñas). Va DESPUÉS de
+     las reglas anteriores para ganarles por orden. Solo afecta a #landing.
+     ========================================================================== */
+
+  /* --- Tokens de la portada --- */
+  #landing {
+    --l-espacio: clamp(64px, 9vw, 112px);
+    --l-radio: 16px;
+    --l-linea: rgba(28,33,38,.09);           /* rejilla sobre fondos claros */
+    --l-linea-oscura: rgba(240,162,2,.075);  /* rejilla sobre fondos oscuros */
+    --l-sombra: 0 24px 60px -28px rgba(28,33,38,.35);
+  }
+
+  /* --- Rejilla de plano en TODAS las bandas (las "rayas con sentido") --- */
+  .land-band { position: relative; isolation: isolate; }
+  .land-band::before {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(var(--l-linea) 1px, transparent 1px),
+      linear-gradient(90deg, var(--l-linea) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, #000 20%, transparent 95%);
+            mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, #000 20%, transparent 95%);
+    opacity: .9;
+  }
+  .land-band.oscura::before {
+    background-image:
+      linear-gradient(var(--l-linea-oscura) 1px, transparent 1px),
+      linear-gradient(90deg, var(--l-linea-oscura) 1px, transparent 1px);
+  }
+  .land-band > .land-section { position: relative; z-index: 1; }
+
+  /* --- Cinta de obra: la franja firma entre bloques --- */
+  .land-cinta {
+    height: 6px; width: 100%;
+    background: repeating-linear-gradient(-45deg, var(--amber) 0 18px, #23282E 18px 36px);
+    opacity: .9;
+  }
+
+  /* --- Ritmo: más aire, títulos grandes, subtítulos legibles --- */
+  .land-section { padding: var(--l-espacio) 6vw; }
+  .land-h2 {
+    font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; letter-spacing: -0.005em;
+    max-width: 820px; margin-left: auto; margin-right: auto;
+  }
+  .land-h2-sub { font-size: clamp(15px, 1.3vw, 17px); line-height: 1.65; margin-top: 14px; max-width: 600px; }
+
+  /* Etiqueta de hoja de plano: número + texto, en mono, con línea de cota */
+  .land-eyebrow-sec {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: .14em;
+    display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 18px;
+  }
+  .land-eyebrow-sec::before, .land-eyebrow-sec::after {
+    content: ''; width: 34px; height: 1px; background: currentColor; opacity: .45;
+  }
+  .land-eyebrow-sec em { font-style: normal; font-weight: 700; opacity: .75; }
+
+  /* Hoja de plano: cada sección lleva su número en la esquina, como un plano */
+  .land-section { position: relative; }
+  .land-section[data-hoja]::after {
+    content: attr(data-hoja); position: absolute; top: 28px; right: 6vw;
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .16em;
+    color: var(--steel); opacity: .55;
+  }
+  .land-band.oscura .land-section[data-hoja]::after { color: #A8AEB4; }
+  @media (max-width: 700px) { .land-section[data-hoja]::after { display: none; } }
+
+  /* --- Hero: más presencia --- */
+  .land-hero { padding: clamp(56px, 8vw, 96px) 6vw clamp(64px, 8vw, 96px); }
+  .land-hero-bg {
+    /* La rejilla principal más nítida y, encima, unas líneas de trazado a
+       45° muy tenues, como construcción auxiliar de un plano. */
+    background-image:
+      repeating-linear-gradient(45deg, rgba(240,162,2,.035) 0 1px, transparent 1px 90px),
+      linear-gradient(rgba(240,162,2,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(240,162,2,.07) 1px, transparent 1px);
+    background-size: auto, 42px 42px, 42px 42px;
+  }
+  @keyframes land-grid-drift { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 0, 42px 42px, 42px 42px; } }
+  /* Marcas de esquina de plano en el hero */
+  .land-hero::before, .land-hero::after {
+    content: ''; position: absolute; z-index: 0; pointer-events: none;
+    width: 26px; height: 26px; border: 1px solid rgba(240,162,2,.45);
+  }
+  .land-hero::before { top: 22px; left: 6vw; border-right: none; border-bottom: none; }
+  .land-hero::after  { bottom: 22px; right: 6vw; border-left: none; border-top: none; }
+  .land-eyebrow {
+    font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 12px; letter-spacing: .12em;
+    display: inline-flex; align-items: center; gap: 10px; line-height: 1.5;
+  }
+  /* Cuadradito de leyenda de plano delante de la etiqueta */
+  .land-eyebrow::before { content: ''; width: 9px; height: 9px; background: var(--amber); flex-shrink: 0; box-shadow: 0 0 0 3px rgba(240,162,2,.18); }
+  @media (max-width: 900px) { .land-eyebrow { justify-content: center; } }
+  .land-h1 { font-size: clamp(34px, 4.6vw, 60px); line-height: 1.04; letter-spacing: -0.01em; max-width: 640px; margin-top: 22px; }
+  .land-sub { font-size: clamp(16px, 1.35vw, 18px); max-width: 520px; margin-top: 22px; }
+  /* Fila de datos del hero: como una cartela de plano, con divisores */
+  .land-hero-stats { gap: 0; margin-top: 44px; border-top: 1px solid rgba(255,255,255,.1); padding-top: 22px; }
+  .land-hero-stats > div { padding-right: 28px; margin-right: 28px; border-right: 1px solid rgba(255,255,255,.1); }
+  .land-hero-stats > div:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+  .land-stat-num { font-size: 32px; line-height: 1; }
+  .land-stat-label { font-size: 12.5px; margin-top: 6px; }
+  @media (max-width: 900px) {
+    /* Tres columnas compactas: antes se apilaban una por línea y ocupaban
+       media pantalla de móvil. */
+    .land-hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; justify-items: center; text-align: center; margin-top: 34px; }
+    .land-hero-stats > div { padding: 0; margin: 0; border: none; align-items: center; }
+    .land-stat-num { font-size: 24px; }
+    .land-stat-label { font-size: 11px; line-height: 1.3; }
+    .land-hero::before, .land-hero::after { display: none; }
+  }
+  .land-phone { box-shadow: 0 50px 100px -30px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07), 0 0 80px -20px rgba(240,162,2,.25); }
+
+  /* --- Barra superior: cristal oscuro con línea --- */
+  .land-nav {
+    background: rgba(28,33,38,.86);
+    -webkit-backdrop-filter: saturate(140%) blur(10px); backdrop-filter: saturate(140%) blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,.07);
+  }
+  .land-nav-links a { position: relative; padding: 4px 0; }
+  .land-nav-links a::after { content: ''; position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; background: var(--amber); transform: scaleX(0); transform-origin: left; transition: transform .2s ease; }
+  .land-nav-links a:hover::after { transform: scaleX(1); }
+
+  /* --- Tarjetas: acabado uniforme y con relieve --- */
+  .land-problem-card, .land-feature-card, .land-legal-card, .land-price-card, .land-demo-box {
+    border-radius: var(--l-radio);
+  }
+  .land-problem-card, .land-feature-card {
+    box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -22px rgba(28,33,38,.35);
+  }
+  .land-problem-card:hover, .land-feature-card:hover { box-shadow: var(--l-sombra); }
+  .land-problem-card { border-left: 3px solid var(--danger); padding-left: 18px; }
+  .land-problem-card b { font-family: 'Oswald', sans-serif; font-size: 16px; letter-spacing: .01em; }
+  .land-problem-grid { max-width: 900px; gap: 18px; margin-top: 44px; }
+
+  /* --- Banda legal: watermark del artículo y tarjetas con filete ámbar --- */
+  #land-legal { overflow: hidden; }
+  #land-legal::before {
+    content: '34.9'; position: absolute; right: 2vw; top: 6px;
+    font-family: 'Oswald', sans-serif; font-size: clamp(120px, 22vw, 260px); line-height: 1;
+    color: rgba(255,255,255,.035); pointer-events: none; z-index: 0; letter-spacing: -0.02em;
+  }
+  .land-legal-grid { position: relative; z-index: 1; gap: 18px; margin-top: 44px; }
+  .land-legal-card { border-left: 3px solid var(--amber); padding: 22px; background: rgba(255,255,255,.05); }
+  .land-legal-card b { font-family: 'Oswald', sans-serif; font-size: 16px; letter-spacing: .01em; }
+  .land-legal-fuente { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; letter-spacing: .04em; }
+
+  /* --- Funciones: rejilla "bento" (una grande + cinco) --- */
+  .land-feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); gap: 18px; margin-top: 44px; max-width: 1160px; margin-left: auto; margin-right: auto; }
+  .land-feature-card { max-width: none; flex: none; min-width: 0; padding: 26px; gap: 10px; }
+  .land-feature-card b { font-size: 18px; letter-spacing: .01em; }
+  .land-feature-card span { font-size: 14px; line-height: 1.55; }
+  .land-feature-card.grande {
+    grid-column: span 2; grid-row: span 2;
+    background: var(--graphite); color: #fff; border-color: rgba(255,255,255,.08);
+    background-image:
+      linear-gradient(rgba(240,162,2,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(240,162,2,.07) 1px, transparent 1px);
+    background-size: 42px 42px;
+    justify-content: flex-end; padding: 32px; position: relative; overflow: hidden;
+  }
+  .land-feature-card.grande b { color: #fff; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.1; max-width: 420px; }
+  .land-feature-card.grande span { color: #C7CBD0; font-size: 15px; max-width: 460px; }
+  .land-feature-card.grande i { background: var(--amber); color: var(--graphite); width: 52px; height: 52px; font-size: 22px; border-radius: 14px; margin-bottom: auto; }
+  .land-feature-card.grande .land-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .land-feature-card.grande .land-chips span {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .06em; color: var(--amber);
+    border: 1px solid rgba(240,162,2,.4); padding: 5px 10px; border-radius: 999px; max-width: none;
+  }
+  .land-feature-card.grande::after {
+    /* código QR estilizado, dibujado en CSS, como guiño a cómo se ficha */
+    content: ''; position: absolute; right: -18px; bottom: -18px; width: 160px; height: 160px; opacity: .12;
+    background:
+      linear-gradient(#fff, #fff) 0 0 / 46px 46px no-repeat,
+      linear-gradient(#fff, #fff) 100% 0 / 46px 46px no-repeat,
+      linear-gradient(#fff, #fff) 0 100% / 46px 46px no-repeat,
+      radial-gradient(#fff 35%, transparent 36%) 0 0 / 20px 20px;
+    -webkit-mask-image: radial-gradient(circle at 30% 30%, #000 40%, transparent 78%);
+            mask-image: radial-gradient(circle at 30% 30%, #000 40%, transparent 78%);
+  }
+  @media (max-width: 900px) {
+    .land-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .land-feature-card.grande { grid-column: span 2; grid-row: span 1; }
+  }
+  @media (max-width: 560px) {
+    .land-feature-grid { grid-template-columns: 1fr; }
+    .land-feature-card.grande { grid-column: span 1; }
+  }
+
+  /* --- Pasos: números grandes de plano detrás de cada paso --- */
+  /* Rejilla de 4 en pantalla ancha (nada de un paso huérfano en otra fila),
+     2x2 en tablet y 1 columna en móvil. */
+  .land-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-top: 48px; max-width: 1160px; margin-left: auto; margin-right: auto; }
+  @media (max-width: 1000px) { .land-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .land-steps { grid-template-columns: 1fr; } }
+  .land-step { text-align: left; max-width: none; flex: none; min-width: 0; padding: 22px 20px 22px 22px; border-radius: var(--l-radio); background: var(--card); border: 1px solid var(--border); position: relative; overflow: hidden; }
+  .land-step-num {
+    margin: 0 0 40px; width: 36px; height: 36px; font-size: 15px; box-shadow: none !important;
+    position: relative; z-index: 1;
+  }
+  .land-step::before {
+    content: attr(data-n); position: absolute; right: 12px; top: -8px;
+    font-family: 'Oswald', sans-serif; font-size: 96px; line-height: 1; color: var(--amber); opacity: .14; pointer-events: none;
+  }
+  .land-step b { font-family: 'Oswald', sans-serif; font-size: 17px; letter-spacing: .01em; }
+  .land-step span { font-size: 13.5px; }
+  .land-steps::before { display: none; }
+
+  /* --- Precios: el recomendado en oscuro, importes grandes --- */
+  .land-pricing-grid { gap: 22px; margin-top: 48px; }
+  .land-price-card { padding: 30px 26px; }
+  .land-price-name { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--steel); }
+  .land-price-amount { font-size: 44px; line-height: 1; margin: 10px 0 6px; }
+  .land-price-featured {
+    background: var(--graphite); color: #fff; border-color: var(--graphite);
+    background-image:
+      linear-gradient(rgba(240,162,2,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(240,162,2,.07) 1px, transparent 1px);
+    background-size: 42px 42px;
+  }
+  .land-price-featured .land-price-name { color: var(--amber); }
+  .land-price-featured .land-price-desc { color: #C7CBD0; }
+  .land-price-featured .land-price-amount span { color: #C7CBD0; }
+  .land-price-featured .land-price-list li { color: #fff; }
+  .land-price-featured .land-price-list i { color: var(--amber); }
+  .land-price-featured { box-shadow: 0 30px 60px -24px rgba(28,33,38,.6), 0 0 0 1px rgba(240,162,2,.35); }
+  .land-price-list li { font-size: 14px; }
+
+  /* --- Demo: formulario como tarjeta de plano --- */
+  .land-demo-box { border-top: 3px solid var(--amber); box-shadow: var(--l-sombra); }
+  .land-demo-lista b { font-family: 'Oswald', sans-serif; font-size: 15.5px; letter-spacing: .01em; }
+
+  /* --- Cierre --- */
+  .land-cta-final { padding: var(--l-espacio) 6vw; }
+  .land-cta-final h2 { font-size: clamp(30px, 4.2vw, 48px); line-height: 1.08; }
+  .land-cta-final p { font-size: 16px; }
+
+  /* --- Pie corporativo en columnas --- */
+  .land-footer { padding: 56px 6vw 28px; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 32px; align-items: start; }
+  .land-footer-brand { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .land-footer-brand p { margin: 0; color: #9AA1A8; font-size: 13.5px; line-height: 1.6; max-width: 340px; }
+  .land-footer-col b { display: block; color: #fff; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .14em; margin-bottom: 14px; opacity: .8; }
+  .land-footer-col .land-footer-links { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .land-footer-copy { grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,.08); padding-top: 18px; margin-top: 8px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; text-align: left; }
+  .land-footer-copy span { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .06em; }
+  @media (max-width: 760px) {
+    .land-footer { grid-template-columns: 1fr; text-align: left; }
+    .land-footer-brand { align-items: flex-start; }
+    .land-footer-copy { justify-content: center; text-align: center; }
+  }
+
+  /* --- Móvil: proporciones --- */
+  @media (max-width: 700px) {
+    .land-h1 { font-size: clamp(30px, 9vw, 40px); }
+    .land-h2 { font-size: clamp(26px, 7.4vw, 34px); }
+    .land-eyebrow-sec::before, .land-eyebrow-sec::after { width: 18px; }
+    .land-step::before { font-size: 72px; }
+  }
+
   /* ============ LOGIN ============ */
   /* padding-top con el hueco del notch sumado: en un iPhone con Dynamic
      Island ese hueco (~59px) es mayor que los 40px fijos que había, así
@@ -2054,9 +2317,11 @@
   <!-- El argumento más fuerte que tiene el producto en España: el registro
        de jornada es una obligación legal, no una mejora opcional. Va justo
        después del hero a propósito. -->
+  <div class="land-cinta" aria-hidden="true"></div>
+
   <div class="land-band oscura">
-    <section class="land-section" id="land-legal">
-      <span class="land-eyebrow-sec reveal">Obligatorio en España desde 2019</span>
+    <section class="land-section" id="land-legal" data-hoja="HOJA 01 / 06">
+      <span class="land-eyebrow-sec reveal"><em>01</em> Obligatorio en España desde 2019</span>
       <h2 class="land-h2 reveal">El registro de jornada no es opcional</h2>
       <p class="land-h2-sub reveal" style="max-width:640px;">
         Toda empresa está obligada a registrar cada día la jornada de sus trabajadores y a
@@ -2086,8 +2351,8 @@
   </div>
 
   <div class="land-band">
-  <section class="land-section" id="land-problem">
-    <span class="land-eyebrow-sec reveal">El día a día</span>
+  <section class="land-section" id="land-problem" data-hoja="HOJA 02 / 06">
+    <span class="land-eyebrow-sec reveal"><em>02</em> El día a día</span>
     <h2 class="land-h2 reveal">El problema de siempre en obra</h2>
     <div class="land-problem-grid">
       <div class="land-problem-card reveal"><i class="fa-solid fa-file-circle-question"></i><div><b>Fichajes en papel o WhatsApp</b><span>Nadie sabe con certeza quién ha trabajado, cuántas horas, ni en qué obra.</span></div></div>
@@ -2099,14 +2364,19 @@
   </div>
 
   <div class="land-band clara">
-  <section class="land-section" id="land-features">
-    <span class="land-eyebrow-sec reveal">La app</span>
+  <section class="land-section" id="land-features" data-hoja="HOJA 03 / 06">
+    <span class="land-eyebrow-sec reveal"><em>03</em> La app</span>
     <h2 class="land-h2 reveal">Todo lo que necesitas, conectado de verdad</h2>
     <p class="land-h2-sub reveal">No son módulos sueltos: cada trabajo conecta solo con sus máquinas, su gente, sus incidencias y lo que queda por cobrar.</p>
     <div class="land-feature-grid">
+      <div class="land-feature-card grande reveal">
+        <i class="fa-solid fa-qrcode"></i>
+        <b>Fichaje con QR, sin geolocalizar a las personas</b>
+        <span>El trabajador escanea el código pegado en su máquina y ficha en tres segundos. Funciona en cualquier móvil y también sin cobertura: el fichaje se guarda y se envía solo cuando vuelve la señal.</span>
+        <div class="land-chips"><span>SIN APP QUE INSTALAR</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO A LA HORA DE SALIR</span></div>
+      </div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y cobros de cada trabajo en una ficha.</span></div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-truck"></i><b>Maquinaria con GPS</b><span>Ubicación de cada máquina en el mapa, en tiempo real. Documentación e ITV con avisos antes de que caduquen. Nosotros instalamos los dispositivos.</span></div>
-      <div class="land-feature-card reveal"><i class="fa-solid fa-tower-broadcast"></i><b>Fichaje con QR</b><span>El trabajador escanea el código pegado en su máquina y ficha. Funciona en cualquier móvil, sin geolocalizar a las personas.</span></div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-bullhorn"></i><b>Incidencias con foto</b><span>Cualquier trabajador reporta una avería en segundos, con prioridad y foto.</span></div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-umbrella-beach"></i><b>Vacaciones</b><span>Vacaciones del equipo de un vistazo, para no solapar bajas en la misma obra.</span></div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-file-invoice-dollar"></i><b>Facturación</b><span>Facturas ligadas a la obra y al cliente, con pendientes y vencidas siempre a la vista.</span></div>
@@ -2115,22 +2385,22 @@
   </div>
 
   <div class="land-band">
-  <section class="land-section" id="land-how">
-    <span class="land-eyebrow-sec reveal">Puesta en marcha</span>
+  <section class="land-section" id="land-how" data-hoja="HOJA 04 / 06">
+    <span class="land-eyebrow-sec reveal"><em>04</em> Puesta en marcha</span>
     <h2 class="land-h2 reveal">De cero a fichando, en una tarde</h2>
     <p class="land-h2-sub reveal">Sin instalar nada y sin formación: tus trabajadores solo tienen que escanear.</p>
     <div class="land-steps">
-      <div class="land-step reveal"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
-      <div class="land-step reveal"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina lleva su etiqueta única. El trabajador la escanea para fichar.</span></div>
-      <div class="land-step reveal"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Sin formación: tocar el código y ya está fichado.</span></div>
-      <div class="land-step reveal"><span class="land-step-num">4</span><b>Tú ves todo desde el panel</b><span>Quién trabaja, dónde está cada máquina, qué incidencias hay abiertas.</span></div>
+      <div class="land-step reveal" data-n="01"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
+      <div class="land-step reveal" data-n="02"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina lleva su etiqueta única. El trabajador la escanea para fichar.</span></div>
+      <div class="land-step reveal" data-n="03"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Sin formación: tocar el código y ya está fichado.</span></div>
+      <div class="land-step reveal" data-n="04"><span class="land-step-num">4</span><b>Tú ves todo desde el panel</b><span>Quién trabaja, dónde está cada máquina, qué incidencias hay abiertas.</span></div>
     </div>
   </section>
   </div>
 
   <div class="land-band clara">
-  <section class="land-section" id="land-pricing">
-    <span class="land-eyebrow-sec reveal">Precios</span>
+  <section class="land-section" id="land-pricing" data-hoja="HOJA 05 / 06">
+    <span class="land-eyebrow-sec reveal"><em>05</em> Precios</span>
     <h2 class="land-h2 reveal">Precios pensados para pymes de construcción</h2>
     <p class="land-h2-sub">Sin permanencia. El precio depende del número de máquinas y trabajadores.</p>
     <p style="font-size:12.5px;color:var(--steel);max-width:580px;margin:10px auto 0;line-height:1.55;text-align:center;">
@@ -2183,10 +2453,10 @@
   </div>
 
   <div class="land-band">
-  <section class="land-section" id="land-demo">
+  <section class="land-section" id="land-demo" data-hoja="HOJA 06 / 06">
     <div class="land-demo-cols">
       <div class="land-demo-valor reveal">
-        <span class="land-eyebrow-sec" style="text-align:left;">Demo gratuita</span>
+        <span class="land-eyebrow-sec" style="justify-content:flex-start;"><em>06</em> Demo gratuita</span>
         <h2 class="land-h2">Te la enseñamos con tus propios datos</h2>
         <p style="color:var(--steel);font-size:14px;line-height:1.6;margin-top:10px;">
           Una llamada corta, sin compromiso y sin comerciales pesados. Nos cuentas cómo lleváis
@@ -2244,18 +2514,33 @@
   </section>
 
   <footer class="land-footer">
-    <div class="land-footer-brand" role="button" tabindex="0" style="cursor:pointer;"
-         title="Volver arriba" onclick="irAlInicio()"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();irAlInicio();}"><div class="brand-icon" role="img" aria-label="Opertra"></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
-    <div class="land-footer-links">
-      <button onclick="openLegal('aviso')">Aviso legal</button>
-      <button onclick="openLegal('privacidad')">Privacidad</button>
-      <button onclick="openLegal('cookies')">Cookies</button>
-      <button onclick="openLegal('terminos')">Términos de uso</button>
-      <button onclick="openLegal('encargado')">Encargado del tratamiento</button>
-      <button onclick="showLogin()">Iniciar sesión</button>
+    <div class="land-footer-brand">
+      <div role="button" tabindex="0" style="cursor:pointer;display:flex;align-items:center;gap:10px;"
+           title="Volver arriba" onclick="irAlInicio()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();irAlInicio();}"><div class="brand-icon" role="img" aria-label="Opertra"></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
+      <p>Fichaje, maquinaria y obras para constructoras, excavaciones y flotas. Hecho en España, datos en la Unión Europea.</p>
     </div>
-    <span class="land-footer-copy">© 2026 Opertra. Todos los derechos reservados.</span>
+    <div class="land-footer-col">
+      <b>PRODUCTO</b>
+      <div class="land-footer-links">
+        <button onclick="scrollLanding('land-features')">Funciones</button>
+        <button onclick="scrollLanding('land-how')">Cómo funciona</button>
+        <button onclick="scrollLanding('land-pricing')">Precios</button>
+        <button onclick="scrollLanding('land-demo')">Solicitar demo</button>
+        <button onclick="showLogin()">Iniciar sesión</button>
+      </div>
+    </div>
+    <div class="land-footer-col">
+      <b>LEGAL</b>
+      <div class="land-footer-links">
+        <button onclick="openLegal('aviso')">Aviso legal</button>
+        <button onclick="openLegal('privacidad')">Privacidad</button>
+        <button onclick="openLegal('cookies')">Cookies</button>
+        <button onclick="openLegal('terminos')">Términos de uso</button>
+        <button onclick="openLegal('encargado')">Encargado del tratamiento</button>
+      </div>
+    </div>
+    <div class="land-footer-copy"><span>© 2026 OPERTRA · TODOS LOS DERECHOS RESERVADOS</span><span>REGISTRO DE JORNADA · ART. 34.9 ET</span></div>
   </footer>
 </div>
 
