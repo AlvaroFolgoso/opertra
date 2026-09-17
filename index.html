@@ -1358,16 +1358,7 @@
     content: ''; width: 34px; height: 1px; background: currentColor; opacity: .45;
   }
   .land-eyebrow-sec em { font-style: normal; font-weight: 700; opacity: .75; }
-
-  /* Hoja de plano: cada sección lleva su número en la esquina, como un plano */
   .land-section { position: relative; }
-  .land-section[data-hoja]::after {
-    content: attr(data-hoja); position: absolute; top: 28px; right: 6vw;
-    font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .16em;
-    color: var(--steel); opacity: .55;
-  }
-  .land-band.oscura .land-section[data-hoja]::after { color: #A8AEB4; }
-  @media (max-width: 700px) { .land-section[data-hoja]::after { display: none; } }
 
   /* --- Hero: más presencia --- */
   .land-hero { padding: clamp(56px, 8vw, 96px) 6vw clamp(64px, 8vw, 96px); }
@@ -1582,15 +1573,6 @@
   }
   @media (prefers-reduced-motion: reduce) { .land-cta-brillo { animation: none; } }
 
-  /* --- Ticker: diferenciadores en movimiento --- */
-  .land-ticker { background: #15181C; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 1px solid rgba(255,255,255,.06); overflow: hidden; padding: 14px 0; }
-  .land-ticker-pista { display: flex; width: max-content; animation: land-ticker 42s linear infinite; }
-  .land-ticker-pista:hover { animation-play-state: paused; }
-  .land-ticker span { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; letter-spacing: .16em; color: #C7CBD0; white-space: nowrap; padding: 0 28px; display: inline-flex; align-items: center; gap: 28px; }
-  .land-ticker span::after { content: ''; width: 7px; height: 7px; background: var(--amber); transform: rotate(45deg); flex-shrink: 0; }
-  @keyframes land-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-  @media (prefers-reduced-motion: reduce) { .land-ticker-pista { animation: none; flex-wrap: wrap; width: auto; justify-content: center; } }
-
   /* --- "Así se ficha": texto + móvil con el escáner abierto --- */
   .land-scan { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 48px; max-width: 1100px; margin-left: auto; margin-right: auto; }
   .land-scan-pasos { display: flex; flex-direction: column; gap: 14px; }
@@ -1756,19 +1738,6 @@
      integrada, no pegada */
   .land-hero { box-shadow: 0 30px 60px -30px rgba(0,0,0,.6); position: relative; z-index: 2; }
   .land-cinta { position: relative; z-index: 3; }
-
-  /* --- Franja de garantías (sustituye al ticker) --- */
-  .land-garantias { background: #15181C; padding: 18px 6vw; border-bottom: 1px solid rgba(255,255,255,.06); }
-  .land-garantias-fila { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 14px; max-width: 1200px; margin: 0 auto; }
-  .land-garantias span {
-    display: inline-flex; align-items: center; gap: 9px;
-    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
-    color: #D5D9DD; padding: 8px 14px; border-radius: 999px;
-    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
-  }
-  .land-garantias i { color: var(--amber); font-size: 12px; }
-  @media (max-width: 700px) { .land-garantias span { font-size: 10.5px; padding: 7px 11px; } }
-
   /* --- Cifras solapadas con la sección siguiente --- */
   .land-band.land-solape { padding-bottom: 0; box-shadow: none; }
   .land-band.land-solape::after { display: none; }
@@ -1881,6 +1850,164 @@
     #landing .land-scan-frame i::before, #landing .land-scan-frame i::after { border-color: var(--amber) !important; animation: land-marco 4.2s ease-in-out infinite !important; }
     #landing .land-cta-brillo { animation: land-latido 2.6s ease-in-out infinite !important; }
     #landing .land-problem-card:hover, #landing .land-feature-card:hover, #landing .land-price-card:hover, #landing .land-quien-card:hover { transform: translateY(-3px); }
+  }
+
+  /* ============ LANDING · CAPA 4: ACABADO ============
+     Cuarta pasada, a petición de Álvaro:
+     · Fuera la luz ámbar difusa del hero (en el móvil quedaba una mancha
+       amarilla). En su lugar: rejilla de dibujo neutra con línea maestra
+       cada cinco cuadros, viñeta suave y un punto de luz fría detrás de
+       los móviles. Profundidad sin manchas de color.
+     · "un solo sitio" en ámbar dentro del titular.
+     · Los tres avales bajo los botones (50 días gratis, sin permanencia,
+       listo en una tarde) pasan a pastillas con tick verde: ahora se ven.
+     · Etiquetas de sección: fuera la numeración y el "HOJA 01 / 10"; ahora
+       es una pastilla ámbar, más grande y legible. Titulares algo mayores.
+     · Cuatro sellos grandes bajo el hero con lo que solo hace Opertra.
+     · Precios sobre banda gris: las tarjetas blancas ya no se pierden en el
+       fondo, con borde y sombra más marcados.
+     · "Para quién es" en oscuro, con tarjetas de cristal.
+     ========================================================================== */
+
+  /* --- Hero: fondo limpio --- */
+  .land-hero {
+    background:
+      radial-gradient(ellipse 52% 68% at 76% 46%, rgba(255,255,255,.065), transparent 72%),
+      linear-gradient(180deg, #23282E 0%, var(--graphite) 42%, #171B1F 100%);
+  }
+  .land-hero-glow { display: none; }
+  .land-hero-bg {
+    /* Rejilla de dibujo: línea maestra cada 5 cuadros (210 px) y cuadrícula
+       fina de 42 px, en blanco muy tenue. Se difumina hacia los bordes. */
+    background-image:
+      linear-gradient(rgba(255,255,255,.075) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.075) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 210px 210px, 210px 210px, 42px 42px, 42px 42px;
+    -webkit-mask-image: radial-gradient(ellipse 92% 92% at 50% 46%, #000 18%, transparent 86%);
+            mask-image: radial-gradient(ellipse 92% 92% at 50% 46%, #000 18%, transparent 86%);
+    animation: land-grid-drift 180s linear infinite;
+  }
+  /* Las cuatro capas se mueven lo mismo (210 = 5 x 42): el bucle no salta */
+  @keyframes land-grid-drift { from { background-position: 0 0, 0 0, 0 0, 0 0; } to { background-position: 210px 210px, 210px 210px, 210px 210px, 210px 210px; } }
+  .land-cta-final .land-hero-bg { animation: none; }
+  .land-hero::before, .land-hero::after { border-color: rgba(240,162,2,.55); width: 30px; height: 30px; }
+
+  /* Etiqueta del hero: pastilla ámbar (misma familia que las de sección) */
+  .land-eyebrow {
+    font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 12.5px; letter-spacing: .1em;
+    color: var(--amber); background: rgba(240,162,2,.1); border: 1px solid rgba(240,162,2,.38);
+    padding: 8px 15px 8px 12px; border-radius: 999px; gap: 9px; flex-wrap: wrap; justify-content: center;
+  }
+  .land-eyebrow::before { width: 8px; height: 8px; border-radius: 2px; box-shadow: none; }
+  .land-h1 em { font-style: normal; color: var(--amber); }
+  /* Móvil: bajo los teléfonos quedaban ~100 px de fondo oscuro vacío antes
+     de los sellos (el "papel" del grupo lleva margen para el balanceo). */
+  @media (max-width: 900px) {
+    .land-hero { padding-bottom: 20px; }
+    .land-phone-wrap { margin-bottom: -24px; }
+  }
+
+  /* Avales bajo los botones: ahora sí se ven */
+  .land-trust { gap: 10px; margin-top: 22px; }
+  .land-trust span {
+    font-size: 14px; font-weight: 600; color: #fff; gap: 9px;
+    padding: 8px 15px 8px 9px; border-radius: 999px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14);
+  }
+  .land-trust i {
+    width: 22px; height: 22px; border-radius: 50%; font-size: 10.5px;
+    background: #3DD37A; color: var(--graphite);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .land-stat-num small { font-family: 'Oswald', sans-serif; font-size: .5em; color: #FFD277; margin-left: 3px; letter-spacing: .02em; }
+  .land-stat-label { color: #C7CBD0; font-size: 13px; }
+  /* Cartela de datos del hero: tres columnas fijas (con los textos nuevos
+     la fila flexible partía el tercero a otra línea) */
+  .land-hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; max-width: 560px; }
+  .land-hero-stats > div { padding-right: 16px; margin-right: 16px; min-width: 0; }
+  .land-hero-stats > div:last-child { padding-right: 0; margin-right: 0; }
+  .land-stat-label { font-size: 12.5px; line-height: 1.35; }
+  @media (max-width: 900px) { .land-hero-stats { max-width: none; gap: 10px; } .land-hero-stats > div { padding: 0; margin: 0; } }
+  @media (max-width: 700px) {
+    .land-trust span { font-size: 13px; padding: 7px 13px 7px 8px; }
+    .land-trust i { width: 20px; height: 20px; font-size: 9.5px; }
+    /* En móvil el texto cabe en dos líneas: sin el cuadradito (quedaba solo
+       arriba) y con las esquinas menos redondas para que no parezca un globo */
+    .land-eyebrow { font-size: 11.5px; letter-spacing: .08em; padding: 8px 14px; border-radius: 14px; line-height: 1.5; max-width: 100%; }
+    .land-eyebrow::before { display: none; }
+  }
+
+  /* --- Etiquetas de sección: pastilla, sin numeración --- */
+  .land-eyebrow-sec {
+    font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 12.5px; letter-spacing: .1em;
+    display: flex; width: max-content; max-width: 100%; margin: 0 auto 20px; gap: 9px;
+    padding: 8px 15px 8px 12px; border-radius: 999px; text-align: center;
+    color: var(--amber-deep); background: var(--amber-bg); border: 1px solid rgba(240,162,2,.42);
+  }
+  .land-eyebrow-sec::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--amber); opacity: 1; flex-shrink: 0; }
+  .land-eyebrow-sec::after { display: none; }
+  .land-band.oscura .land-eyebrow-sec { color: var(--amber); background: rgba(240,162,2,.12); border-color: rgba(240,162,2,.42); }
+  .land-h2 { font-size: clamp(32px, 4.4vw, 52px); text-wrap: balance; }
+  .land-h1, .land-cta-final h2 { text-wrap: balance; }
+  @media (max-width: 700px) {
+    .land-h2 { font-size: clamp(28px, 7.8vw, 36px); }
+    .land-eyebrow-sec { font-size: 11.5px; letter-spacing: .08em; padding: 7px 13px 7px 11px; }
+  }
+
+  /* --- Sellos bajo el hero: lo que solo hace Opertra, en grande --- */
+  .land-dif { background: #15181C; padding: 0 6vw; position: relative; z-index: 2; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .land-dif-fila { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1200px; margin: 0 auto; }
+  .land-dif-item { display: flex; align-items: center; gap: 14px; padding: 22px 18px; border-left: 1px solid rgba(255,255,255,.07); min-width: 0; }
+  .land-dif-item:first-child { border-left: none; }
+  .land-dif-item i {
+    width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0;
+    background: var(--amber); color: var(--graphite); font-size: 19px;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 22px -10px rgba(240,162,2,.7);
+  }
+  .land-dif-item b { display: block; font-family: 'Oswald', sans-serif; font-size: 16.5px; letter-spacing: .01em; color: #fff; line-height: 1.2; }
+  .land-dif-item span { display: block; font-size: 12.5px; color: #A8AEB4; margin-top: 3px; line-height: 1.35; }
+  @media (max-width: 1000px) {
+    .land-dif-fila { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .land-dif-item:nth-child(3) { border-left: none; }
+    .land-dif-item:nth-child(n+3) { border-top: 1px solid rgba(255,255,255,.07); }
+  }
+  @media (max-width: 560px) {
+    .land-dif-fila { grid-template-columns: 1fr; }
+    .land-dif-item { border-left: none; border-top: 1px solid rgba(255,255,255,.07); padding: 14px 4px; gap: 13px; }
+    .land-dif-item:first-child { border-top: none; }
+    .land-dif-item i { width: 40px; height: 40px; font-size: 16px; border-radius: 11px; }
+    .land-dif-item b { font-size: 15px; }
+    .land-dif-item span { font-size: 12px; }
+  }
+
+  /* --- Precios: tarjetas que se ven sobre el fondo --- */
+  .land-price-card { border: 1px solid rgba(28,33,38,.13); box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 20px 44px -24px rgba(28,33,38,.4); }
+  .land-price-card:hover { box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, var(--l-sombra); }
+  .land-price-card .land-price-name { color: var(--graphite); }
+  .land-price-featured { border-color: var(--graphite); box-shadow: 0 34px 64px -26px rgba(28,33,38,.65), 0 0 0 1px rgba(240,162,2,.4); }
+  .land-price-featured .land-price-name { color: var(--amber); }
+
+  /* --- Para quién es: en oscuro, tarjetas de cristal --- */
+  .land-band.oscura .land-quien-card { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); box-shadow: none; }
+  .land-band.oscura .land-quien-card:hover { background: rgba(255,255,255,.075); box-shadow: 0 30px 60px -28px rgba(0,0,0,.6); }
+  .land-band.oscura .land-quien-card i { background: var(--amber); color: var(--graphite); }
+  .land-band.oscura .land-quien-card b { color: #fff; }
+  .land-band.oscura .land-quien-card span { color: #C7CBD0; }
+
+  /* --- Preguntas: sobre banda blanca, filas grises --- */
+  #land-faq .land-faq details { background: var(--surface); border-color: transparent; }
+  #land-faq .land-faq summary::after { background: #fff; }
+  #land-faq .land-faq details[open] summary::after { background: var(--amber); }
+  #land-faq .land-faq details[open] summary { border-bottom-color: rgba(28,33,38,.08); }
+
+  /* La rejilla del hero mantiene su ritmo lento también con la preferencia
+     de movimiento reducido (la regla anterior la forzaba a 44 s). */
+  @media (prefers-reduced-motion: reduce) {
+    #landing .land-hero-bg { animation: land-grid-drift 180s linear infinite !important; }
+    #landing .land-cta-final .land-hero-bg { animation: none !important; }
   }
 
   /* ============ LOGIN ============ */
@@ -2528,26 +2655,24 @@
 
   <section class="land-hero">
     <div class="land-hero-bg" aria-hidden="true"></div>
-    <div class="land-hero-glow a" aria-hidden="true"></div>
-    <div class="land-hero-glow b" aria-hidden="true"></div>
 
     <div class="land-hero-copy">
-      <span class="land-eyebrow">Software para constructoras, excavaciones y flotas de maquinaria</span>
-      <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde un solo sitio</h1>
+      <span class="land-eyebrow">Constructoras · Excavaciones · Flotas de maquinaria</span>
+      <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde <em>un solo sitio</em></h1>
       <p class="land-sub">Fichaje escaneando el código de la máquina, localización GPS de tu flota, incidencias al momento y control de cobros por trabajo. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
       <div class="land-cta-row">
         <button class="btn btn-amber land-cta-brillo" style="padding:15px 26px;font-size:15.5px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
         <button class="btn btn-outline" style="padding:15px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
       </div>
       <div class="land-trust">
-        <span><i class="fa-solid fa-check"></i> 50 días gratis</span>
-        <span><i class="fa-solid fa-check"></i> Sin permanencia</span>
-        <span><i class="fa-solid fa-check"></i> Listo en una tarde</span>
+        <span><i class="fa-solid fa-check"></i>50 días gratis</span>
+        <span><i class="fa-solid fa-check"></i>Sin permanencia</span>
+        <span><i class="fa-solid fa-check"></i>Listo en una tarde</span>
       </div>
       <div class="land-hero-stats">
-        <div><span class="land-stat-num">100%</span><span class="land-stat-label">trazabilidad de flota</span></div>
-        <div><span class="land-stat-num">0</span><span class="land-stat-label">partes de fichaje en papel</span></div>
-        <div><span class="land-stat-num">&lt;1min</span><span class="land-stat-label">para reportar una incidencia</span></div>
+        <div><span class="land-stat-num">3<small>s</small></span><span class="land-stat-label">para fichar escaneando</span></div>
+        <div><span class="land-stat-num">1<small>tarde</small></span><span class="land-stat-label">para estar en marcha</span></div>
+        <div><span class="land-stat-num">0</span><span class="land-stat-label">papeles, Excel ni llamadas</span></div>
       </div>
     </div>
 
@@ -2637,28 +2762,38 @@
     </div>
   </section>
 
-  <!-- El argumento más fuerte que tiene el producto en España: el registro
-       de jornada es una obligación legal, no una mejora opcional. Va justo
-       después del hero a propósito. -->
-  <div class="land-cinta" aria-hidden="true"></div>
-
-  <!-- Franja de garantías: lo que nos diferencia, de un vistazo. Fija (sin
-       ticker): se ve igual de bien con las animaciones del sistema apagadas. -->
-  <div class="land-garantias" aria-label="Lo que nos diferencia">
-    <div class="land-garantias-fila">
-      <span><i class="fa-solid fa-qrcode"></i>Fichaje escaneando la máquina</span>
-      <span><i class="fa-solid fa-signal"></i>Funciona sin cobertura</span>
-      <span><i class="fa-solid fa-bell"></i>Aviso al móvil al salir</span>
-      <span><i class="fa-solid fa-location-crosshairs"></i>GPS en la máquina, no en la persona</span>
-      <span><i class="fa-solid fa-scale-balanced"></i>Registro legal 4 años</span>
-      <span><i class="fa-solid fa-mobile-screen-button"></i>Se instala en un toque</span>
-      <span><i class="fa-solid fa-shield-halved"></i>Datos en la Unión Europea</span>
+  <!-- Lo que nos diferencia, de un vistazo y EN GRANDE: cuatro sellos justo
+       bajo el hero. Fijo (sin ticker): se ve igual con las animaciones del
+       sistema apagadas. -->
+  <div class="land-dif" aria-label="Lo que nos diferencia">
+    <div class="land-dif-fila">
+      <div class="land-dif-item"><i class="fa-solid fa-qrcode"></i><div><b>Ficha escaneando la máquina</b><span>Tres segundos. Sin formación.</span></div></div>
+      <div class="land-dif-item"><i class="fa-solid fa-signal"></i><div><b>Funciona sin cobertura</b><span>Se guarda y se envía solo después.</span></div></div>
+      <div class="land-dif-item"><i class="fa-solid fa-bell"></i><div><b>Aviso al salir, con la app cerrada</b><span>Al móvil, a la hora prevista.</span></div></div>
+      <div class="land-dif-item"><i class="fa-solid fa-scale-balanced"></i><div><b>Registro legal, 4 años guardados</b><span>Listo para una inspección.</span></div></div>
     </div>
   </div>
+  <div class="land-cinta" aria-hidden="true"></div>
 
+  <div class="land-band">
+  <section class="land-section" id="land-problem">
+    <span class="land-eyebrow-sec reveal">El día a día</span>
+    <h2 class="land-h2 reveal">El problema de siempre en obra</h2>
+    <div class="land-problem-grid">
+      <div class="land-problem-card reveal"><i class="fa-solid fa-file-circle-question"></i><div><b>Fichajes en papel o WhatsApp</b><span>Nadie sabe con certeza quién ha trabajado, cuántas horas, ni en qué obra.</span></div></div>
+      <div class="land-problem-card reveal"><i class="fa-solid fa-truck-fast"></i><div><b>Maquinaria sin localizar</b><span>Llamadas y más llamadas para saber dónde está cada máquina y quién la lleva.</span></div></div>
+      <div class="land-problem-card reveal"><i class="fa-solid fa-triangle-exclamation"></i><div><b>Incidencias que se pierden</b><span>Una avería se comenta de palabra y se olvida hasta que ya es un problema grande.</span></div></div>
+      <div class="land-problem-card reveal"><i class="fa-solid fa-file-invoice"></i><div><b>No sabes si lo facturado cuadra</b><span>Nadie comprueba si lo que se cobra por un trabajo se corresponde con las horas y máquinas realmente usadas.</span></div></div>
+    </div>
+  </section>
+  </div>
+
+  <!-- El argumento más fuerte que tiene el producto en España: el registro
+       de jornada es una obligación legal, no una mejora opcional. Va justo
+       después del problema a propósito: primero el dolor, luego la obligación. -->
   <div class="land-band oscura">
-    <section class="land-section" id="land-legal" data-hoja="HOJA 01 / 10">
-      <span class="land-eyebrow-sec reveal"><em>01</em> Obligatorio en España desde 2019</span>
+    <section class="land-section" id="land-legal">
+      <span class="land-eyebrow-sec reveal">Obligatorio en España desde 2019</span>
       <h2 class="land-h2 reveal">El registro de jornada no es opcional</h2>
       <p class="land-h2-sub reveal" style="max-width:640px;">
         Toda empresa está obligada a registrar cada día la jornada de sus trabajadores y a
@@ -2687,25 +2822,12 @@
     </section>
   </div>
 
-  <div class="land-band">
-  <section class="land-section" id="land-problem" data-hoja="HOJA 02 / 10">
-    <span class="land-eyebrow-sec reveal"><em>02</em> El día a día</span>
-    <h2 class="land-h2 reveal">El problema de siempre en obra</h2>
-    <div class="land-problem-grid">
-      <div class="land-problem-card reveal"><i class="fa-solid fa-file-circle-question"></i><div><b>Fichajes en papel o WhatsApp</b><span>Nadie sabe con certeza quién ha trabajado, cuántas horas, ni en qué obra.</span></div></div>
-      <div class="land-problem-card reveal"><i class="fa-solid fa-truck-fast"></i><div><b>Maquinaria sin localizar</b><span>Llamadas y más llamadas para saber dónde está cada máquina y quién la lleva.</span></div></div>
-      <div class="land-problem-card reveal"><i class="fa-solid fa-triangle-exclamation"></i><div><b>Incidencias que se pierden</b><span>Una avería se comenta de palabra y se olvida hasta que ya es un problema grande.</span></div></div>
-      <div class="land-problem-card reveal"><i class="fa-solid fa-file-invoice"></i><div><b>No sabes si lo facturado cuadra</b><span>Nadie comprueba si lo que se cobra por un trabajo se corresponde con las horas y máquinas realmente usadas.</span></div></div>
-    </div>
-  </section>
-  </div>
-
   <!-- ASÍ SE FICHA: el móvil con el escáner abierto, escaneando en directo.
        Hecho en CSS/SVG (visor, marco, QR, línea de barrido y aviso), sin
        imágenes: nunca se desincroniza del diseño real. -->
   <div class="land-band clara">
-  <section class="land-section" id="land-scan" data-hoja="HOJA 03 / 10">
-    <span class="land-eyebrow-sec reveal"><em>03</em> Así se ficha</span>
+  <section class="land-section" id="land-scan">
+    <span class="land-eyebrow-sec reveal">Así se ficha</span>
     <h2 class="land-h2 reveal">Escanea la máquina. Ya está.</h2>
     <p class="land-h2-sub reveal">Tres segundos, desde cualquier móvil: funciona sin descargar nada, y se instala en un toque para abrirla al instante. El fichaje queda ligado a la máquina y a la obra; las personas no se geolocalizan nunca.</p>
     <div class="land-scan">
@@ -2749,8 +2871,8 @@
   </div>
 
   <div class="land-band">
-  <section class="land-section" id="land-features" data-hoja="HOJA 04 / 10">
-    <span class="land-eyebrow-sec reveal"><em>04</em> La app</span>
+  <section class="land-section" id="land-features">
+    <span class="land-eyebrow-sec reveal">La app</span>
     <h2 class="land-h2 reveal">Todo lo que necesitas, conectado de verdad</h2>
     <p class="land-h2-sub reveal">No son módulos sueltos: cada trabajo conecta solo con sus máquinas, su gente, sus incidencias y lo que queda por cobrar.</p>
     <div class="land-feature-grid">
@@ -2772,8 +2894,8 @@
   <!-- POR QUÉ OPERTRA Y NO OTRA COSA: la comparativa. Es la forma más
        directa de dejar claro en qué nos diferenciamos. -->
   <div class="land-band clara">
-  <section class="land-section" id="land-porque" data-hoja="HOJA 05 / 10">
-    <span class="land-eyebrow-sec reveal"><em>05</em> Por qué Opertra</span>
+  <section class="land-section" id="land-porque">
+    <span class="land-eyebrow-sec reveal">Por qué Opertra</span>
     <h2 class="land-h2 reveal">Lo que hace Opertra que el papel y las apps genéricas no hacen</h2>
     <p class="land-h2-sub reveal">Las apps de fichaje sirven para oficinas. La obra es otra cosa: máquinas, cuadrillas que rotan y sitios sin cobertura.</p>
     <div class="land-comp-wrap reveal">
@@ -2812,17 +2934,17 @@
   <div class="land-band oscura land-solape">
     <section class="land-section" style="padding-top:calc(var(--l-espacio) * .7);padding-bottom:0;">
       <div class="land-cifras">
-        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="3">0</span><small>s</small></b><span>para fichar: escanear y listo</span></div>
-        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="0">0</span></b><span>papeles, Excel y llamadas para saber quién trabaja</span></div>
         <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="4">0</span><small>años</small></b><span>de registro guardados solos, listos para inspección</span></div>
-        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="100">0</span><small>%</small></b><span>de la flota localizada en el mapa</span></div>
+        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="100">0</span><small>%</small></b><span>de la flota localizada en el mapa, en tiempo real</span></div>
+        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="0">0</span></b><span>personas geolocalizadas: el GPS va en la máquina</span></div>
+        <div class="land-cifra reveal"><b>&lt;<span class="land-contador" data-hasta="1">0</span><small>min</small></b><span>para reportar una avería con foto desde la obra</span></div>
       </div>
     </section>
   </div>
 
   <div class="land-band land-tras-solape">
-  <section class="land-section" id="land-how" data-hoja="HOJA 06 / 10">
-    <span class="land-eyebrow-sec reveal"><em>06</em> Puesta en marcha</span>
+  <section class="land-section" id="land-how">
+    <span class="land-eyebrow-sec reveal">Puesta en marcha</span>
     <h2 class="land-h2 reveal">De cero a fichando, en una tarde</h2>
     <p class="land-h2-sub reveal">Sin formación y sin descargas obligatorias: tus trabajadores solo tienen que escanear. Y si la instalan en un toque, aún más rápido.</p>
     <div class="land-steps">
@@ -2835,10 +2957,10 @@
   </div>
 
   <!-- PARA QUIÉN ES -->
-  <div class="land-band clara">
-  <section class="land-section" id="land-quien" data-hoja="HOJA 07 / 10">
-    <span class="land-eyebrow-sec reveal"><em>07</em> Para quién es</span>
-    <h2 class="land-h2 reveal">Hecha para empresas que viven en la obra</h2>
+  <div class="land-band oscura">
+  <section class="land-section" id="land-quien">
+    <span class="land-eyebrow-sec reveal">Para quién es</span>
+    <h2 class="land-h2 reveal">Hecha para quien vive en la obra</h2>
     <p class="land-h2-sub reveal">Si tienes máquinas, cuadrillas y varias obras a la vez, esto es para ti.</p>
     <div class="land-quien">
       <div class="land-quien-card reveal"><i class="fa-solid fa-helmet-safety"></i><b>Constructoras</b><span>Varias obras a la vez, cuadrillas que rotan y maquinaria repartida. Saber quién está en cada obra y con qué máquina, sin una sola llamada.</span></div>
@@ -2848,9 +2970,9 @@
   </section>
   </div>
 
-  <div class="land-band">
-  <section class="land-section" id="land-pricing" data-hoja="HOJA 08 / 10">
-    <span class="land-eyebrow-sec reveal"><em>08</em> Precios</span>
+  <div class="land-band clara">
+  <section class="land-section" id="land-pricing">
+    <span class="land-eyebrow-sec reveal">Precios</span>
     <h2 class="land-h2 reveal">Precios pensados para pymes de construcción</h2>
     <p class="land-h2-sub">Sin permanencia. El precio depende del número de máquinas y trabajadores.</p>
     <p style="font-size:12.5px;color:var(--steel);max-width:580px;margin:10px auto 0;line-height:1.55;text-align:center;">
@@ -2859,7 +2981,7 @@
       Para emitir facturas con validez fiscal sigue usando tu programa de facturación habitual.
     </p>
     <div class="land-pricing-grid">
-      <div class="land-price-card">
+      <div class="land-price-card reveal">
         <span class="land-price-name">Starter</span>
         <div class="land-price-amount">99€<span>/mes</span></div>
         <span class="land-price-desc">Hasta 5 máquinas y 10 trabajadores</span>
@@ -2872,7 +2994,7 @@
         </ul>
         <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
       </div>
-      <div class="land-price-card land-price-featured">
+      <div class="land-price-card land-price-featured reveal">
         <span class="land-price-badge">Más elegido</span>
         <span class="land-price-name">Profesional</span>
         <div class="land-price-amount">249€<span>/mes</span></div>
@@ -2885,7 +3007,7 @@
         </ul>
         <button class="btn btn-amber" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
       </div>
-      <div class="land-price-card">
+      <div class="land-price-card reveal">
         <span class="land-price-name">Empresas</span>
         <div class="land-price-amount">A medida</div>
         <span class="land-price-desc">Flotas grandes, varias delegaciones</span>
@@ -2903,9 +3025,9 @@
   </div>
 
   <!-- PREGUNTAS FRECUENTES: las objeciones de compra, respondidas -->
-  <div class="land-band clara">
-  <section class="land-section" id="land-faq" data-hoja="HOJA 09 / 10">
-    <span class="land-eyebrow-sec reveal"><em>09</em> Preguntas frecuentes</span>
+  <div class="land-band">
+  <section class="land-section" id="land-faq">
+    <span class="land-eyebrow-sec reveal">Preguntas frecuentes</span>
     <h2 class="land-h2 reveal">Lo que nos preguntan antes de empezar</h2>
     <div class="land-faq reveal">
       <details><summary>¿Hay que instalar algo en los móviles?</summary><p>No. Se abre desde el navegador del móvil y se puede añadir a la pantalla de inicio, como una app más. Recomendamos añadirla: así llegan los avisos aunque esté cerrada.</p></details>
@@ -2919,11 +3041,11 @@
   </section>
   </div>
 
-  <div class="land-band">
-  <section class="land-section" id="land-demo" data-hoja="HOJA 10 / 10">
+  <div class="land-band clara">
+  <section class="land-section" id="land-demo">
     <div class="land-demo-cols">
       <div class="land-demo-valor reveal">
-        <span class="land-eyebrow-sec"><em>10</em> Demo gratuita</span>
+        <span class="land-eyebrow-sec">Demo gratuita</span>
         <h2 class="land-h2">Te la enseñamos con tus propios datos</h2>
         <p style="color:var(--steel);font-size:14px;line-height:1.6;margin-top:10px;">
           Una llamada corta, sin compromiso y sin comerciales pesados. Nos cuentas cómo lleváis
