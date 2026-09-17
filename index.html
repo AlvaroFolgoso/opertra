@@ -220,6 +220,16 @@
      ventana y todo lo fijo se recoloca. De ahi el salto de la barra de
      abajo. 100dvh es la altura REAL en cada momento. */
   #app { display: flex; width: 100%; height: 100vh; height: 100dvh; }
+  /* Al entrar (desde la pantalla de arranque o desde la de entrar), la app
+     aparece con un fundido corto en vez de a golpe. Solo opacidad: nada de
+     transformar #app, que en el móvil va fijo y descolocaría lo de dentro. */
+  #app.entrando { animation: app-entra .32s ease-out both; }
+  @keyframes app-entra { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #app.entrando { animation: none; } }
+  /* Al cerrar sesión: capa oscura que aparece en un fundido y tapa la app
+     hasta que la página se recarga (la pantalla de arranque es del mismo
+     color, así que el cambio no se nota). */
+  body.saliendo::after { content: ''; position: fixed; inset: 0; z-index: 9999; background: var(--graphite); animation: app-entra .22s ease-out both; }
   /* Móviles antiguos (iPhone con iOS anterior a 15.4, Android viejo): ahí no
      existe 100dvh y 100vh vale MÁS que lo que se ve, porque no descuenta la
      barra del navegador. La barra de abajo se quedaría fuera de la pantalla.
@@ -8815,10 +8825,15 @@ function hayConexion() {
 
 /* Si la sesión caduca o alguien cierra sesión en otra pestaña, se reacciona
    al momento en vez de dejar la app en un estado inconsistente. */
+/* Mientras la propia app cierra la sesión (logout), el aviso SIGNED_OUT que
+   dispara Supabase se ignora: si no, un instante antes de la recarga se veía
+   la pantalla de entrar con "Tu sesión ha caducado", que ni era verdad ni
+   pintaba nada ahí. */
+let cerrandoSesion = false;
 function vigilarSesion() {
   try {
     getSupabase().auth.onAuthStateChange((evento, sesion) => {
-      if (evento === 'SIGNED_OUT' && !currentUser.isWorker) {
+      if (evento === 'SIGNED_OUT' && !currentUser.isWorker && !cerrandoSesion) {
         cortarSuscripcion();
         currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
         showScreen('login');
@@ -14653,23 +14668,30 @@ function enterAppOrShowTrialExpired() {
     // 4 s se destapa igual con su "Cargando…", que es honesto.
     limpiarVistas();
     switchTab(pestanaAlVolver());
-    const hayArranque = (() => { const a = document.getElementById('arranque'); return !!(a && !a.classList.contains('fuera')); })();
+    // UN SOLO CAMINO para todo el mundo (sesión restaurada, correo, Google o
+    // PIN): se cargan los datos con la app aún tapada — por la pantalla de
+    // arranque o por la de entrar, cuyo botón sigue en "Entrando…" porque
+    // quien llama espera a esta promesa — y se destapa YA PINTADA, con un
+    // fundido corto. Antes, viniendo del formulario, se destapaba vacía con
+    // "Cargando…" y luego se rellenaba: dos saltos en vez de uno. Si los
+    // datos tardan (mala cobertura), a los 4 s se destapa igual.
     let revelada = false;
-    const revelar = () => { if (revelada) return; revelada = true; showScreen('app'); desmontarPortada(); };
-    if (hayArranque) {
-      // Sesión restaurada al abrir la app: la pantalla de carga tapa todo
-      const tope = setTimeout(revelar, 4000);
-      loadCompanyData()
-        .then(() => comprobarTutorialTrabajador())
-        .finally(() => { clearTimeout(tope); revelar(); });
-    } else {
-      // Viene del formulario de entrar: se enseña ya (limpia, con "Cargando…")
-      revelar();
-      loadCompanyData().then(() => comprobarTutorialTrabajador());
-    }
+    const revelar = () => {
+      if (revelada) return; revelada = true;
+      const app = document.getElementById('app');
+      app.classList.add('entrando');
+      setTimeout(() => app.classList.remove('entrando'), 600);
+      showScreen('app');
+      desmontarPortada();
+    };
+    const tope = new Promise(r => setTimeout(r, 4000));
+    const datos = loadCompanyData().then(() => comprobarTutorialTrabajador()).catch(() => {});
+    const listo = Promise.race([datos, tope]).then(revelar);
     precargarLectorQR();
     ofrecerInstalacionEnIPhone();   // en iPhone, sin instalar no hay avisos
+    return listo;
   }
+  return Promise.resolve();
 }
 
 /* La portada (tres móviles, tabla comparativa, escáner animado, preguntas…)
@@ -14773,7 +14795,7 @@ async function handleWorkerLogin() {
       accessCode: code, sesionDesde: Date.now(),
     };
     try { localStorage.setItem('opertra_worker_session', JSON.stringify(currentUser)); } catch(e) {}
-    enterAppOrShowTrialExpired();
+    await enterAppOrShowTrialExpired();
   } catch (err) {
     document.getElementById('pin-error-text').textContent = mensajeError(err);
     errBox.style.display = 'flex';
@@ -14801,7 +14823,7 @@ async function handleLogin() {
     const { data, error } = await getSupabase().auth.signInWithPassword({ email, password: pass });
     if (error) throw error;
     await loadCurrentUserProfile(data.user);
-    enterAppOrShowTrialExpired();
+    await enterAppOrShowTrialExpired();
   } catch (err) {
     if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
     document.getElementById('login-error-text').textContent = authErrorMessage(err);
@@ -14910,7 +14932,7 @@ async function onCredencialGoogle(respuesta) {
     // Mismo post-login que el correo. Si es la primera vez y aún no tiene
     // empresa, loadCurrentUserProfile lanza sinEmpresa y se le piden los datos.
     await loadCurrentUserProfile(data.user);
-    enterAppOrShowTrialExpired();
+    await enterAppOrShowTrialExpired();
   } catch (err) {
     if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
     // Si el método nuevo falló, se recupera el botón de respaldo (método viejo).
@@ -15004,7 +15026,7 @@ async function crearEmpresaDesdeGoogle() {
     await loadCurrentUserProfile(data.user);
     const panel = document.getElementById('auth-panel-empresa');
     if (panel) panel.classList.add('hidden');
-    enterAppOrShowTrialExpired();
+    await enterAppOrShowTrialExpired();
   } catch (e) {
     fallo('No se ha podido crear la empresa: ' + mensajeError(e));
     setButtonLoading('emp-submit', false, '', 'Empezar a usar Opertra');
@@ -15017,6 +15039,7 @@ async function salirSinEmpresa() {
   // llamada de red puede tardar o fallar. Cerrar sesión tiene que funcionar
   // sí o sí y al instante, haya conexión o no — lo de avisar al servidor es
   // secundario y no debe bloquear ni condicionar lo de aquí.
+  cerrandoSesion = true;
   try { await getSupabase().auth.signOut({ scope: 'local' }); } catch (e) {}
   location.reload();
 }
@@ -15081,7 +15104,7 @@ async function handleSignup() {
     const { data: sessionData } = await sb.auth.getSession();
     if (sessionData.session) {
       await loadCurrentUserProfile(user);
-      enterAppOrShowTrialExpired();
+      await enterAppOrShowTrialExpired();
     } else {
       document.getElementById('signup-error-text').textContent = '';
       errBox.style.display = 'none';
@@ -15211,6 +15234,10 @@ async function handleForgotPassword() {
 
 async function logout() {
   closeUserDropdown();
+  // Fundido a oscuro ANTES de vaciar nada: lo que se ve es app → oscuro →
+  // pantalla de arranque (oscura) → pantalla de entrar. Sin esto se veía la
+  // app quedarse en blanco un instante antes de recargar.
+  document.body.classList.add('saliendo');
   cortarSuscripcion();
   // Móvil compartido: al salir no dejamos en memoria los datos de la empresa
   // anterior ni los enlaces de fotos (que siguen válidos ~50 min). El siguiente
@@ -15228,6 +15255,7 @@ async function logout() {
     datosEmpresaCargados = false;
   } catch (e) {}
   const eraTrabajador = !!currentUser.isWorker;
+  cerrandoSesion = true;   // que el aviso SIGNED_OUT no enseñe la pantalla de entrar antes de tiempo
   try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
   try { sessionStorage.removeItem('opertra_worker_session'); } catch(e) {}
@@ -15394,8 +15422,8 @@ async function checkExistingSession() {
 
       if (w && w.id && w.companyId && !caducada) {
         currentUser = w;
-        enterAppOrShowTrialExpired();
-        revalidarTrabajador();
+        revalidarTrabajador();   // por detrás, mientras entra
+        await enterAppOrShowTrialExpired();
         return;
       }
       if (caducada) {
@@ -15432,7 +15460,7 @@ async function checkExistingSession() {
       }
       marcarActividadAdmin();
       await loadCurrentUserProfile(data.session.user);
-      enterAppOrShowTrialExpired();
+      await enterAppOrShowTrialExpired();
     } else {
       pantallaSinSesion();
     }
@@ -16270,7 +16298,7 @@ if ('serviceWorker' in navigator) {
     // cambia el propio sw.js: como no cambiaba nunca, el cartel de
     // "hay version nueva" no llegaba a aparecer jamas.
     navigator.serviceWorker.addEventListener('message', (ev) => {
-      if (ev.data && ev.data.tipo === 'opertra-version-nueva') avisarVersionNueva();
+      if (ev.data && ev.data.tipo === 'opertra-version-nueva') programarRecargaSilenciosa();
     });
 
     navigator.serviceWorker.register('/sw.js').then(reg => {
@@ -16279,7 +16307,7 @@ if ('serviceWorker' in navigator) {
         if (!nuevo) return;
         nuevo.addEventListener('statechange', () => {
           if (nuevo.state === 'installed' && navigator.serviceWorker.controller) {
-            avisarVersionNueva();
+            programarRecargaSilenciosa();
           }
         });
       });
@@ -16357,13 +16385,10 @@ async function comprobarVersionNueva(auto) {
     if (selloVersion === null) { selloVersion = huella; return; }
     if (huella === selloVersion) return;
 
-    // Hay versión nueva. Si se puede recargar sin molestar, se hace sola.
-    if (auto && sePuedeRecargarSinMolestar()) {
-      aviso('Actualizando Opertra...', 'bien');
-      setTimeout(() => location.reload(), 900);
-      return;
-    }
-    avisarVersionNueva();
+    // Hay versión nueva: se aplica en el siguiente momento en que nadie lo
+    // ve (ver programarRecargaSilenciosa). Nada de recargar delante de la
+    // persona nada más volver a la app.
+    programarRecargaSilenciosa();
   } catch (e) {
     /* sin conexión o servidor caído: se reintenta en la siguiente vuelta */
   } finally {
@@ -16371,9 +16396,36 @@ async function comprobarVersionNueva(auto) {
   }
 }
 
+/* ======================================================================
+   RECARGA SILENCIOSA
+   Cuando hay versión nueva (el service worker se ha renovado, o el servidor
+   tiene un archivo distinto), la app NO se recarga delante de la persona:
+   se apunta, y se recarga en el siguiente momento en que nadie lo ve — al
+   irse la app a segundo plano (bloquear el móvil, cambiar de app o de
+   pestaña). Al volver, ya está la versión nueva y el arranque es el normal.
+   Si en ese momento hay algo a medias (un formulario escrito, un fichaje en
+   curso), se deja para la siguiente vez. Mientras tanto la versión antigua
+   sigue funcionando: la página se sirve fresca desde la red en cada
+   apertura, así que nadie se queda atrás.
+   ====================================================================== */
+let actualizacionPendiente = false;
+function programarRecargaSilenciosa() {
+  actualizacionPendiente = true;
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden || !actualizacionPendiente) return;
+  if (!sePuedeRecargarSinMolestar()) return;
+  actualizacionPendiente = false;
+  location.reload();
+});
+
 /* Recargar en mitad de un formulario le borraría lo escrito, y en mitad
-   de un fichaje sería peor. En esos casos se pregunta en vez de hacerlo. */
+   de un fichaje sería peor. En esos casos se espera a otro momento. */
 function sePuedeRecargarSinMolestar() {
+  // Ni arrancando ni en la pantalla de entrar: alguien está a medio camino.
+  if (document.getElementById('arranque')) return false;
+  const login = document.getElementById('login-screen');
+  if (login && !login.classList.contains('hidden')) return false;
   const modal = document.getElementById('modal-overlay');
   const cajon = document.getElementById('overlay');
   if (modal && modal.classList.contains('active')) return false;
@@ -16450,19 +16502,15 @@ function arrancarVigilanciaDeVersion() {
     if (currentUser && currentUser.id && !currentUser.isWorker) marcarActividadAdmin();
   });
 
-  // Cuando el service worker nuevo toma el mando, la página se recarga sola
+  // Cuando el service worker nuevo toma el mando, se apunta la recarga para
+  // el siguiente momento invisible. ANTES recargaba en el acto, y como el
+  // service worker se renueva justo al abrir la app tras cada despliegue,
+  // la recarga caía en mitad de la entrada: la persona iniciaba sesión, veía
+  // la app, y de pronto todo volvía a cargar (pantalla de arranque otra vez,
+  // o la de entrar). Parecía roto. La página ya se sirve fresca desde la red
+  // en cada apertura (ver sw.js), así que recargar YA no aporta nada.
   if (navigator.serviceWorker) {
-    let yaRecargando = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (yaRecargando) return;
-      yaRecargando = true;
-      if (sePuedeRecargarSinMolestar()) {
-        location.reload();
-      } else {
-        avisarVersionNueva();
-        yaRecargando = false;
-      }
-    });
+    navigator.serviceWorker.addEventListener('controllerchange', programarRecargaSilenciosa);
   }
 
   /* Había un SEGUNDO visibilitychange aquí que llamaba a comprobarVersionNueva()
