@@ -319,6 +319,7 @@
     width: 132px; height: 3px; border-radius: 99px; overflow: hidden;
     background: rgba(255,255,255,.14); margin-top: 4px;
   }
+  .arranque-texto { font-size: 13px; color: #C7CBD0; letter-spacing: .02em; margin-top: 2px; animation: arranqueEntra .45s .16s cubic-bezier(.2,.9,.3,1.3) both; }
   .arranque-barra span {
     display: block; width: 40%; height: 100%; border-radius: 99px;
     background: var(--amber); animation: arranqueCarga 1.05s ease-in-out infinite;
@@ -2711,6 +2712,75 @@
   .obra-progress-fill { height: 100%; background: var(--amber); border-radius: 99px; }
   .obra-stats-row { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--steel); }
   .obra-stats-row span { display: flex; align-items: center; gap: 5px; }
+
+  /* ============ APP · CAPA DE LECTURA Y ACABADO ============
+     Va la ÚLTIMA del CSS para ganar por orden. Solo afecta a la app (no a
+     la portada). Dos cosas, a petición de Álvaro:
+     · LECTURA: nada por debajo de 12,5 px salvo insignias; los textos
+       secundarios (metadatos, notas, etiquetas de formulario, cabeceras de
+       tabla) suben medio punto o uno; gris de texto algo más oscuro;
+       interlineado 1,5 en lo que se lee de corrido.
+     · ACABADO: tarjetas con esquinas de 12 px y sombra suave en vez de solo
+       raya; botones y campos de 8 px de radio; anillo ámbar al enfocar un
+       campo; cabeceras de tabla con más aire; separadores más finos.
+     Nada cambia de sitio: solo tamaños de letra, radios, sombras y colores.
+     La barra de abajo del móvil NO se toca (tiene medidas calculadas).
+     ========================================================================== */
+  :root { --steel: #55606A; }
+
+  /* --- Lectura --- */
+  #app { line-height: 1.5; }
+  .form-label { font-size: 12.5px; letter-spacing: .05em; }
+  .form-hint, .aj-nota, .add-doc-btn, .doc-expiry, .vac-days, .avisos-tab-sub,
+  .alert-sub, .stat-sub, .worker-meta, .machine-meta, .machine-id, .machine-loc-row,
+  .obra-stats-row, .incident-meta, .machine-footer, .critical-text, .critical-empty,
+  .privacy-note, .doc-name { font-size: 13px; }
+  .fich-card .horas, .report-value, .resolve-btn, .btn-ghost, .mode-btn, .maps-btn,
+  .chip, .permit-tag, .login-error { font-size: 13px; }
+  .dato-copiable .etiq, .stat-label, th { font-size: 12px; letter-spacing: .06em; }
+  .user-company, .brand-sub, .fich-card .dia span, .gps-age,
+  .machine-photo.no-photo, .sidebar-legal button, .login-legal, .vac-days { font-size: 11.5px; }
+  .priority-badge, .nav-badge { font-size: 10.5px; letter-spacing: .04em; }
+  .incident-desc, .form-hint, .aj-nota, .privacy-note, .alert-sub, .empty-state { line-height: 1.55; }
+  .worker-name, .doc-name, .alert-title { font-weight: 600; }
+  .alert-title { font-size: 13.5px; }
+  .panel-header { font-family: 'Oswald', sans-serif; font-size: 16.5px; letter-spacing: .01em; }
+  #topbar h1 { letter-spacing: .01em; }
+  #topbar p { font-size: 13.5px; }
+  table { font-size: 14px; }
+  th { padding: 13px 20px; background: var(--surface); font-weight: 700; }
+  td { padding: 13px 20px; }
+  tbody tr:last-child td { border-bottom: none; }
+  @media (max-width: 768px) { table { font-size: 13.5px; } }
+
+  /* --- Acabado --- */
+  .plate { border-radius: 12px; border-color: #E3E6E5; box-shadow: 0 1px 2px rgba(28,33,38,.03), 0 10px 28px -22px rgba(28,33,38,.25); }
+  .plate .rivet { background: #E6E9E8; }
+  .fich-card, .cob-card, .avisos-tab-btn, .doc-row, .device-box, .dato-copiable { border-radius: 12px; }
+  .btn { border-radius: 8px; font-weight: 600; }
+  .btn-amber { padding: 10px 16px; }
+  .btn-dark { padding: 10px 16px; }
+  .btn-ghost, .resolve-btn, .mode-btn { border-radius: 8px; }
+  .form-input, .form-select, .textarea { border-radius: 8px; padding: 11px 12px; transition: border-color .12s ease, box-shadow .12s ease; }
+  .form-input:focus, .form-select:focus, .textarea:focus {
+    outline: none; border-color: var(--amber); box-shadow: 0 0 0 3px rgba(240,162,2,.18);
+  }
+  .form-input::placeholder, .textarea::placeholder { color: #9AA1A8; }
+  #add-machine-modal { border-radius: 14px; }
+  .modal-actions .btn { padding: 12px; }
+  .stat-icon { border-radius: 10px; }
+  .avisos-tab-icon { border-radius: 10px; }
+  .user-block { border-color: #E3E6E5; }
+  .alert-box { border-radius: 10px; }
+  .success-banner { border-radius: 10px; }
+  .search-input { font-size: 14px; }
+  .empty-state { padding: 56px 20px; }
+  .empty-state i { font-size: 30px; opacity: .35; }
+  /* Enlaces de lista y filas: separadores más suaves */
+  .worker-row, .drawer-row, .activity-feed-row { border-bottom-color: #E8EBEA; }
+  #topbar { box-shadow: 0 6px 20px rgba(0,0,0,.04); }
+  /* Selección de texto con el ámbar de la marca */
+  #app ::selection { background: rgba(240,162,2,.35); }
 </style>
 </head>
 <body>
@@ -14195,6 +14265,24 @@ function renderTopbarUser() {
    usuario. Con un pequeño retraso: si tarda 80 ms, verlo aparecer y
    desaparecer de golpe queda peor que no ponerlo. */
 let arranqueDesde = Date.now();
+/* Vuelve a poner la pantalla de arranque, con un texto debajo, mientras se
+   entra desde Google: al cerrarse la ventana de Google la app tarda un
+   segundo en validar la cuenta y cargar los datos, y ese segundo se veía la
+   pantalla de entrar quieta, como si no hubiera pasado nada. El botón de
+   Google lo pinta Google y no se le puede poner "Entrando…", así que se tapa
+   todo con el arranque: la misma pantalla que al abrir la app. showScreen()
+   la quita sola al destapar la app; si la entrada falla, se quita a mano. */
+function mostrarEntrando(texto) {
+  if (document.getElementById('arranque')) return;
+  const el = document.createElement('div');
+  el.id = 'arranque';
+  el.innerHTML = '<div class="brand-icon" role="img" aria-label="Opertra"></div>'
+    + '<div class="arranque-nombre">OPERTRA</div>'
+    + '<div class="arranque-barra"><span></span></div>'
+    + (texto ? '<div class="arranque-texto">' + esc(texto) + '</div>' : '');
+  document.body.appendChild(el);
+  arranqueDesde = Date.now();
+}
 function quitarArranque() {
   const el = document.getElementById('arranque');
   if (!el || el.classList.contains('fuera')) return;
@@ -14917,6 +15005,7 @@ function iniciarBotonGoogle() {
 
 async function onCredencialGoogle(respuesta) {
   if (!respuesta || !respuesta.credential) return;
+  mostrarEntrando('Entrando con Google…');   // respuesta inmediata al elegir la cuenta
   // La casilla "recordar" se fija ANTES de entrar, igual que en el correo.
   const recordarEl = document.getElementById('login-recordar');
   ponerPreferenciaSesion(!recordarEl || recordarEl.checked);
@@ -14934,6 +15023,7 @@ async function onCredencialGoogle(respuesta) {
     await loadCurrentUserProfile(data.user);
     await enterAppOrShowTrialExpired();
   } catch (err) {
+    quitarArranque();   // la pantalla de entrar vuelve a verse, con el aviso
     if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
     // Si el método nuevo falló, se recupera el botón de respaldo (método viejo).
     const fb = document.getElementById('google-btn-fallback');
