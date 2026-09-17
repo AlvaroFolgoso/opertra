@@ -2059,6 +2059,35 @@
     .land-comp-cta-movil { display: flex; width: 100%; justify-content: center; margin-top: 14px; padding: 13px; font-size: 15px; }
   }
 
+  /* --- "Así se ficha": cuatro pasos y la tarjeta de quien trabaja a pie --- */
+  .land-scan-pasos { display: flex; flex-direction: column; gap: 0; }
+  .land-scan-paso { padding-bottom: 20px; }
+  .land-scan-paso:nth-child(4) { padding-bottom: 8px; }
+  /* La línea la lleva cada paso (de su número al siguiente), no el bloque
+     entero: así termina en el 4 y no sigue por la tarjeta ni las pastillas. */
+  .land-scan-pasos::before { display: none; }
+  .land-scan-paso { position: relative; }
+  .land-scan-paso::before {
+    content: ''; position: absolute; left: 19px; top: 48px; bottom: 2px; width: 2px;
+    background: repeating-linear-gradient(180deg, var(--amber) 0 6px, transparent 6px 12px); opacity: .55;
+  }
+  .land-scan-paso:nth-child(4)::before { display: none; }
+  .land-scan-apie {
+    position: relative; z-index: 1; display: flex; gap: 14px; align-items: center;
+    margin: 12px 0 14px 0; padding: 16px 18px; border-radius: 14px;
+    background: var(--graphite); color: #fff; box-shadow: 0 20px 40px -22px rgba(28,33,38,.55);
+  }
+  .land-scan-apie i {
+    flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px;
+    background: var(--amber); color: var(--graphite); font-size: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .land-scan-apie b { display: block; font-family: 'Oswald', sans-serif; font-size: 17px; letter-spacing: .01em; margin-bottom: 3px; }
+  .land-scan-apie span { font-size: 13.5px; color: #C7CBD0; line-height: 1.5; }
+  .land-scan-apie em { font-style: normal; color: var(--amber); font-weight: 700; }
+  .land-scan-dif { padding-left: 0; justify-content: flex-start; }
+  @media (max-width: 900px) { .land-scan-dif { justify-content: center; } }
+
   /* ============ LOGIN ============ */
   /* padding-top con el hueco del notch sumado: en un iPhone con Dynamic
      Island ese hueco (~59px) es mayor que los 40px fijos que había, así
@@ -2860,7 +2889,7 @@
           <p>«La empresa garantizará el <strong>registro diario de jornada</strong>, que deberá incluir el horario concreto de inicio y finalización de la jornada de trabajo de cada persona trabajadora. […] La empresa <strong>conservará los registros durante cuatro años</strong> y permanecerán a disposición de las personas trabajadoras, de sus representantes legales y de la Inspección de Trabajo y Seguridad Social.»</p>
           <div class="land-ley-meta">
             <span><i class="fa-solid fa-gavel"></i>Real Decreto-ley 8/2019 · en vigor desde el 12 de mayo de 2019</span>
-            <span><i class="fa-solid fa-triangle-exclamation"></i>Infracción grave: multas de 751 € a 7.500 €</span>
+            <span><i class="fa-solid fa-triangle-exclamation"></i>No llevarlo es infracción grave</span>
           </div>
         </div>
       </div>
@@ -2891,13 +2920,15 @@
   <section class="land-section" id="land-scan">
     <span class="land-eyebrow-sec reveal">Así se ficha</span>
     <h2 class="land-h2 reveal">Escanea la máquina. Ya está.</h2>
-    <p class="land-h2-sub reveal">Tres segundos, desde cualquier móvil: funciona sin descargar nada, y se instala en un toque para abrirla al instante. El fichaje queda ligado a la máquina y a la obra; las personas no se geolocalizan nunca.</p>
+    <p class="land-h2-sub reveal">Quien lleva máquina, camión o tráiler escanea su código y la jornada queda ligada a esa máquina y a esa obra. Quien trabaja a pie ficha entrada y salida sin escanear nada. Las personas no se geolocalizan nunca.</p>
     <div class="land-scan">
       <div class="land-scan-pasos reveal">
-        <div class="land-scan-paso"><span class="n">1</span><div><b>Apunta al código de la máquina</b><span>Cada máquina lleva su etiqueta QR pegada. El trabajador abre Opertra y enfoca.</span></div></div>
-        <div class="land-scan-paso"><span class="n">2</span><div><b>Opertra la reconoce al instante</b><span>Identifica la máquina y la obra. Si no hay cobertura, guarda el fichaje con la hora real y lo envía solo después.</span></div></div>
-        <div class="land-scan-paso"><span class="n">3</span><div><b>Entrada fichada. A trabajar.</b><span>A la hora prevista de salir le llega un aviso al móvil, aunque tenga la app cerrada. Y si se le olvida, el responsable lo ve.</span></div></div>
-        <div class="land-scan-dif"><span>FUNCIONA SIN COBERTURA</span><span>SIN DESCARGA OBLIGATORIA</span><span>SE INSTALA EN UN TOQUE</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
+        <div class="land-scan-paso"><span class="n">1</span><div><b>Apunta al código de la máquina</b><span>Cada máquina, camión o tráiler lleva su etiqueta QR pegada. El trabajador abre Opertra, enfoca y queda fichado en tres segundos.</span></div></div>
+        <div class="land-scan-paso"><span class="n">2</span><div><b>Apunta horómetro o kilómetros</b><span>Al entrar y al salir, la app pide la lectura del horómetro o del cuentakilómetros. Horas y kilómetros reales de cada máquina, por jornada y por operario.</span></div></div>
+        <div class="land-scan-paso"><span class="n">3</span><div><b>Al salir, el gasoil repostado</b><span>Los litros echados en la máquina o el camión quedan apuntados con quién, cuándo y en qué obra. El consumo se controla solo, sin discusiones.</span></div></div>
+        <div class="land-scan-paso"><span class="n">4</span><div><b>Aviso a la hora de salir</b><span>Le llega al móvil aunque tenga la app cerrada. Y sin cobertura, todo se guarda con la hora real y se envía solo después.</span></div></div>
+        <div class="land-scan-apie"><i class="fa-solid fa-person-walking"></i><div><b>¿Trabaja a pie, sin máquina?</b><span>Ficha igual de fácil: toca <em>Entrada</em> al llegar y <em>Salida</em> al irse. Sin QR, sin escanear nada.</span></div></div>
+        <div class="land-scan-dif"><span>FUNCIONA SIN COBERTURA</span><span>HORÓMETRO Y KM</span><span>CONTROL DEL GASOIL</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
       </div>
       <div class="land-scan-wrap reveal" aria-hidden="true">
         <div class="land-scan-phone">
@@ -2917,7 +2948,7 @@
               <div class="land-scan-line"></div>
             </div>
             <div class="land-scan-hint">Apunta al código pegado en la máquina</div>
-            <div class="land-scan-toast"><div class="ok"><i class="fa-solid fa-check"></i></div><div><b>EX-114 · Excavadora reconocida</b><span>Entrada fichada · 07:58 · Obra Casa La Zubia</span></div></div>
+            <div class="land-scan-toast"><div class="ok"><i class="fa-solid fa-check"></i></div><div><b>EX-114 · Excavadora reconocida</b><span>Entrada 07:58 · Obra Casa La Zubia · Horómetro 4.312 h</span></div></div>
             <div class="land-scan-bar">
               <div><i class="fa-solid fa-gauge-high"></i></div>
               <div class="on"><i class="fa-solid fa-clock"></i></div>
@@ -2941,8 +2972,8 @@
       <div class="land-feature-card grande reveal">
         <i class="fa-solid fa-qrcode"></i>
         <b>Fichaje con QR, sin geolocalizar a las personas</b>
-        <span>El trabajador escanea el código pegado en su máquina y ficha en tres segundos. Funciona en cualquier móvil sin descargar nada — y se instala en un toque en la pantalla de inicio para abrirla al instante. Sin cobertura, el fichaje se guarda y se envía solo cuando vuelve la señal.</span>
-        <div class="land-chips"><span>SIN DESCARGA OBLIGATORIA</span><span>SE INSTALA EN UN TOQUE</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO A LA HORA DE SALIR</span></div>
+        <span>Quien lleva máquina, camión o tráiler escanea su código y ficha en tres segundos, apuntando horómetro o kilómetros y el gasoil repostado. Quien trabaja a pie ficha entrada y salida sin escanear nada. Funciona en cualquier móvil sin descargar nada — y se instala en un toque. Sin cobertura, se guarda y se envía solo cuando vuelve la señal.</span>
+        <div class="land-chips"><span>HORÓMETRO · KM · GASOIL</span><span>SIN DESCARGA OBLIGATORIA</span><span>SE INSTALA EN UN TOQUE</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO A LA HORA DE SALIR</span></div>
       </div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y cobros de cada trabajo en una ficha.</span></div>
       <div class="land-feature-card reveal"><i class="fa-solid fa-truck"></i><b>Maquinaria con GPS</b><span>Ubicación de cada máquina en el mapa, en tiempo real. Documentación e ITV con avisos antes de que caduquen. Nosotros instalamos los dispositivos.</span></div>
@@ -2972,6 +3003,7 @@
         </thead>
         <tbody>
           <tr><td><i class="fa-solid fa-qrcode"></i>Fichaje escaneando el QR de la máquina</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-gauge-high"></i>Horómetro, kilómetros y gasoil apuntados en cada jornada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-signal"></i>Funciona sin cobertura y se envía solo después</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-bell"></i>Aviso al móvil a la hora de salir, con la app cerrada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-scale-balanced"></i>Registro legal 4 años, con rastro de cada corrección</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
@@ -3012,8 +3044,8 @@
     <p class="land-h2-sub reveal">Sin formación y sin descargas obligatorias: tus trabajadores solo tienen que escanear. Y si la instalan en un toque, aún más rápido.</p>
     <div class="land-steps">
       <div class="land-step reveal" data-n="01"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
-      <div class="land-step reveal" data-n="02"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Cada máquina lleva su etiqueta única. El trabajador la escanea para fichar.</span></div>
-      <div class="land-step reveal" data-n="03"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Sin formación: tocar el código y ya está fichado.</span></div>
+      <div class="land-step reveal" data-n="02"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Máquinas, camiones y tráilers: cada uno con su etiqueta única. Quien la lleva, la escanea para fichar.</span></div>
+      <div class="land-step reveal" data-n="03"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Con máquina, escanean su código; a pie, tocan Entrada y Salida. Sin formación.</span></div>
       <div class="land-step reveal" data-n="04"><span class="land-step-num">4</span><b>Tú ves todo desde el panel</b><span>Quién trabaja, dónde está cada máquina, qué incidencias hay abiertas.</span></div>
     </div>
   </section>
@@ -3095,6 +3127,8 @@
     <div class="land-faq reveal">
       <details><summary>¿Hay que instalar algo en los móviles?</summary><p>No. Se abre desde el navegador del móvil y se puede añadir a la pantalla de inicio, como una app más. Recomendamos añadirla: así llegan los avisos aunque esté cerrada.</p></details>
       <details><summary>¿Funciona en la obra sin cobertura?</summary><p>Sí. El fichaje se guarda en el móvil con la hora real y se envía solo en cuanto vuelve la señal. Cada fichaje lleva un código único, así que aunque se reintente nunca se duplica ni se pierde.</p></details>
+      <details><summary>¿Y los trabajadores que no llevan máquina?</summary><p>Fichan igual, sin QR: tocan Entrada al llegar y Salida al irse. El código solo lo escanea quien lleva máquina, camión o tráiler, porque es lo que liga la jornada a esa máquina y permite apuntar su horómetro, sus kilómetros y su gasoil.</p></details>
+      <details><summary>¿Cómo se controla el gasoil?</summary><p>Al fichar con una máquina o un camión, el trabajador apunta el horómetro o los kilómetros al entrar y al salir, y al salir los litros repostados. Cada repostaje queda con quién, qué máquina, qué obra y cuántas horas o kilómetros se hicieron ese día: si un consumo no cuadra, se ve al momento.</p></details>
       <details><summary>¿Geolocaliza a los trabajadores?</summary><p>No, nunca. Las personas no se rastrean. El GPS va en la máquina (un dispositivo que instalamos nosotros), que es lo que interesa localizar. El fichaje solo guarda hora, obra y máquina.</p></details>
       <details><summary>¿Cumple con la ley del registro de jornada?</summary><p>Sí. Cada jornada queda con su hora de entrada y de salida, se conserva cuatro años y cualquier corrección deja rastro de quién la hizo, cuándo y por qué, conservando los valores originales. El registro se exporta en un clic para una inspección.</p></details>
       <details><summary>¿Y si alguien se equivoca al fichar?</summary><p>El responsable lo corrige desde el panel indicando el motivo, y queda registrado. Además, la app evita los errores más comunes: no deja fichar la salida en los dos primeros minutos ni que dos personas fichen con la misma máquina a la vez.</p></details>
