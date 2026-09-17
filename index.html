@@ -1839,11 +1839,48 @@
   .land-comp tfoot td { border: none; background: transparent; padding: 0; }
   .land-comp tfoot td.op { background: #23282E; padding: 16px; border-radius: 0 0 14px 14px; box-shadow: inset 3px 0 0 rgba(240,162,2,.35), inset -3px 0 0 rgba(240,162,2,.35), 0 26px 50px -24px rgba(0,0,0,.55); }
   .land-comp tbody tr:first-child td:first-child { }
-  .land-comp-wrap { filter: drop-shadow(0 22px 40px rgba(28,33,38,.18)); }
-  @media (max-width: 640px) {
+  /* Sombra con box-shadow, no con filter: el filtro sobre un contenedor con
+     scroll se pintaba raro en Windows y recortaba la sombra. */
+  .land-comp { box-shadow: 0 24px 46px -26px rgba(28,33,38,.4); border-radius: 14px; }
+  .land-comp thead th:first-child { border-radius: 14px 0 0 0; }
+  .land-comp tbody tr:last-child td:first-child { border-radius: 0 0 0 14px; }
+  /* La tabla ENCAJA a cualquier ancho: nunca hay que desplazar para ver la
+     columna Opertra. De 900 px para abajo se compacta (iconos, texto menor). */
+  .land-comp { min-width: 0; }
+  .land-comp-wrap { overflow-x: visible; }
+  @media (max-width: 900px) {
+    .land-comp th, .land-comp td { padding: 12px 6px; font-size: 13px; }
+    .land-comp th { font-size: 12px; letter-spacing: .02em; line-height: 1.2; }
+    .land-comp th.op { font-size: 14px; }
+    .land-comp th:first-child, .land-comp td:first-child { width: 42%; padding-left: 12px; font-size: 13px; line-height: 1.35; }
+    .land-comp small { display: none; }
+    .land-comp .si, .land-comp .no, .land-comp .med { width: 26px; height: 26px; font-size: 11px; }
     .land-comp td:first-child i { display: none; }
     .land-comp tfoot td.op { padding: 10px 6px; }
     .land-comp tfoot .btn { font-size: 12px; padding: 9px 6px; }
+  }
+
+  /* --- LA PORTADA ANIMA SIEMPRE ---
+     Windows con los "efectos de animación" apagados manda a la web la
+     preferencia de movimiento reducido y, por accesibilidad, la web dejaba
+     la portada quieta. Pero es la portada de ventas y se enseña desde el PC:
+     aquí se anima igual (movimientos suaves, nada brusco). Dentro de la app
+     la preferencia sí se sigue respetando. Va con !important porque las
+     reglas que lo apagaban también lo llevan. */
+  @media (prefers-reduced-motion: reduce) {
+    #landing .land-hero-bg { animation: land-grid-drift 44s linear infinite !important; }
+    #landing .land-hero-glow.a { animation: land-float 17s ease-in-out infinite !important; }
+    #landing .land-hero-glow.b { animation: land-float 21s ease-in-out infinite reverse !important; }
+    #landing .land-phone { animation: land-phone-float 6.5s ease-in-out infinite !important; }
+    #landing .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+    #landing .reveal.visible { opacity: 1; transform: none; }
+    #landing .land-scan-line { display: block; animation: land-barrido 4.2s ease-in-out infinite !important; }
+    #landing .land-scan-hint { display: block; animation: land-hint 4.2s ease-in-out infinite !important; }
+    #landing .land-scan-toast { transform: translateY(24px); opacity: 0; animation: land-toast 4.2s ease-in-out infinite !important; }
+    #landing .land-scan-frame::before, #landing .land-scan-frame::after,
+    #landing .land-scan-frame i::before, #landing .land-scan-frame i::after { border-color: var(--amber) !important; animation: land-marco 4.2s ease-in-out infinite !important; }
+    #landing .land-cta-brillo { animation: land-latido 2.6s ease-in-out infinite !important; }
+    #landing .land-problem-card:hover, #landing .land-feature-card:hover, #landing .land-price-card:hover, #landing .land-quien-card:hover { transform: translateY(-3px); }
   }
 
   /* ============ LOGIN ============ */
@@ -3396,11 +3433,10 @@
   const elementos = document.querySelectorAll('#landing .reveal');
   if (!elementos.length) return;
 
-  // Sin IntersectionObserver (o con las animaciones desactivadas en el
-  // sistema) se enseña todo directamente: nunca se queda nada invisible.
-  let sinAnimacion = false;
-  try { sinAnimacion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
-  if (!('IntersectionObserver' in window) || sinAnimacion) {
+  // Sin IntersectionObserver se enseña todo directamente: nunca se queda
+  // nada invisible. (La portada anima siempre, también con los efectos del
+  // sistema apagados: es la portada de ventas y se enseña desde el PC.)
+  if (!('IntersectionObserver' in window)) {
     elementos.forEach(el => el.classList.add('visible'));
     return;
   }
@@ -3419,18 +3455,17 @@
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
 
   elementos.forEach(el => observador.observe(el));
+  // Registrado para poder apagarlo al desmontar la portada (desmontarPortada)
+  window.__obsPortada = (window.__obsPortada || []).concat(observador);
 })();
 
 /* Cifras de la portada: el número sube de 0 a su valor cuando entra en
-   pantalla, con frenada suave al final. Solo en la portada; con las
-   animaciones desactivadas se pone el valor directamente. */
+   pantalla, con frenada suave al final. Solo en la portada. */
 (function contadoresPortada() {
   const nums = document.querySelectorAll('#landing .land-contador');
   if (!nums.length) return;
   const poner = (el) => { el.textContent = el.dataset.hasta; };
-  let sinAnimacion = false;
-  try { sinAnimacion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
-  if (!('IntersectionObserver' in window) || sinAnimacion) { nums.forEach(poner); return; }
+  if (!('IntersectionObserver' in window)) { nums.forEach(poner); return; }
   const animar = (el) => {
     const hasta = parseFloat(el.dataset.hasta) || 0;
     const dur = 1100, t0 = performance.now();
@@ -3446,6 +3481,7 @@
     es.forEach(en => { if (!en.isIntersecting) return; animar(en.target); obs.unobserve(en.target); });
   }, { threshold: 0.4 });
   nums.forEach(el => obs.observe(el));
+  window.__obsPortada = (window.__obsPortada || []).concat(obs);
 })();
 
 /* ======================================================================
@@ -13937,7 +13973,11 @@ function quitarArranque() {
 }
 
 function showScreen(which) {
-  document.getElementById('landing').classList.toggle('hidden', which !== 'landing');
+  // La portada se DESMONTA al entrar en la app (ver desmontarPortada): si
+  // alguien pide volver a ella y ya no está, se recarga la página limpia.
+  const portada = document.getElementById('landing');
+  if (which === 'landing' && !portada) { location.replace(location.origin + '/'); return; }
+  if (portada) portada.classList.toggle('hidden', which !== 'landing');
   document.getElementById('login-screen').classList.toggle('hidden', which !== 'login');
   document.getElementById('app').classList.toggle('hidden', which !== 'app');
   document.getElementById('trial-expired-screen').classList.toggle('hidden', which !== 'trial-expired');
@@ -14396,7 +14436,7 @@ function enterAppOrShowTrialExpired() {
     switchTab(pestanaAlVolver());
     const hayArranque = (() => { const a = document.getElementById('arranque'); return !!(a && !a.classList.contains('fuera')); })();
     let revelada = false;
-    const revelar = () => { if (revelada) return; revelada = true; showScreen('app'); };
+    const revelar = () => { if (revelada) return; revelada = true; showScreen('app'); desmontarPortada(); };
     if (hayArranque) {
       // Sesión restaurada al abrir la app: la pantalla de carga tapa todo
       const tope = setTimeout(revelar, 4000);
@@ -14411,6 +14451,19 @@ function enterAppOrShowTrialExpired() {
     precargarLectorQR();
     ofrecerInstalacionEnIPhone();   // en iPhone, sin instalar no hay avisos
   }
+}
+
+/* La portada (tres móviles, tabla comparativa, escáner animado, preguntas…)
+   no pinta nada dentro de la app. En vez de dejarla oculta ocupando memoria
+   y con sus vigilantes de scroll vivos, se quita del documento al entrar.
+   Al cerrar sesión la página se recarga limpia y vuelve a estar. */
+function desmontarPortada() {
+  try {
+    (window.__obsPortada || []).forEach(o => { try { o.disconnect(); } catch (e) {} });
+    window.__obsPortada = [];
+    const portada = document.getElementById('landing');
+    if (portada) portada.remove();
+  } catch (e) {}
 }
 
 /* Vacía las nueve pantallas y olvida con qué datos se pintaron. Se usa al
@@ -14434,6 +14487,9 @@ function limpiarVistas() {
    worker para cuando haga falta. El mapa y el generador de etiquetas no
    entran aquí: son cosas de oficina, con cobertura. */
 function precargarLectorQR() {
+  // Solo a quien va a escanear: el trabajador, o quien esté en un móvil. Un
+  // administrador en el ordenador no descarga el lector para nada.
+  if (!(currentUser && currentUser.isWorker) && !(typeof esMovil === 'function' && esMovil())) return;
   const pedir = () => { asegurarLectorQR().catch(() => {}); };
   try {
     if (window.requestIdleCallback) requestIdleCallback(pedir, { timeout: 8000 });
@@ -14952,13 +15008,17 @@ async function logout() {
     try { if (window.caches) caches.delete('opertra-fotos-v1'); } catch (e) {}   // ni sus fotos guardadas
     datosEmpresaCargados = false;
   } catch (e) {}
+  const eraTrabajador = !!currentUser.isWorker;
   try { await getSupabase().auth.signOut({ scope: 'local' }); } catch(e) {}
   try { localStorage.removeItem('opertra_worker_session'); } catch(e) {}
+  try { sessionStorage.removeItem('opertra_worker_session'); } catch(e) {}
+  try { localStorage.removeItem(PESTANA_KEY); } catch(e) {}
   currentUser = { id: null, name: '', role: '', accessLevel: 'trabajador', company: '', initials: '', hasPhoto: false, email: '' };
-  showScreen('login');
-  showAuthPanel('login');
-  document.getElementById('login-email').value = '';
-  document.getElementById('login-password').value = '';
+  // RECARGA LIMPIA. Es la forma más segura de no dejar NADA del usuario
+  // anterior en memoria (datos, pantallas pintadas, vigilantes, conexiones
+  // en tiempo real) y de recuperar la portada, que se desmonta al entrar.
+  // El parámetro lleva directo a la pantalla de entrada que toca.
+  location.replace(location.origin + '/?salir=' + (eraTrabajador ? 'pin' : 'correo'));
 }
 
 /* Al cargar la página, comprueba si ya había una sesión iniciada (Supabase la
@@ -15155,14 +15215,29 @@ async function checkExistingSession() {
       await loadCurrentUserProfile(data.session.user);
       enterAppOrShowTrialExpired();
     } else {
-      showScreen('landing');
+      pantallaSinSesion();
     }
   } catch (err) {
     // Vuelve de Google y todavía no tiene empresa: se le pide, no se le
     // devuelve a la portada como si no hubiera entrado.
     if (err && err.sinEmpresa) return pedirDatosDeEmpresa(err.nombre);
-    showScreen('landing');
+    pantallaSinSesion();
   }
+}
+
+/* Sin sesión: portada. Salvo que se venga de cerrar sesión (?salir=pin o
+   ?salir=correo): entonces, directo a la pantalla de entrada que toca, como
+   antes de que el cierre recargara la página. Y se limpia la URL. */
+function pantallaSinSesion() {
+  let salir = null;
+  try { salir = new URL(location.href).searchParams.get('salir'); } catch (e) {}
+  if (salir === 'pin' || salir === 'correo') {
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    showScreen('login');
+    showAuthPanel(salir === 'pin' ? 'pin' : 'login');
+    return;
+  }
+  showScreen('landing');
 }
 
 /* ============ DROPDOWN DE USUARIO ============ */
@@ -16463,15 +16538,10 @@ function closeLegal() { document.getElementById('legal-overlay').classList.remov
 
 /* ============ INIT ============ */
 loadState();  // limpia restos de versiones antiguas
-renderDashboard();
-renderObras();
-renderFichaje();
-renderMaquinaria();
-renderTrabajadores();
-renderAvisos();
-renderClientes();
-renderFacturacion();
-renderInformes();
+/* Antes aquí se pintaban las NUEVE pantallas de la app con datos vacíos,
+   antes de saber siquiera si alguien iba a entrar: trabajo y memoria tirados
+   en cada visita a la portada, y el origen del "parpadeo" al entrar. Ahora
+   cada pantalla se pinta cuando toca (switchTab / prepintarPantallas). */
 comprobarCookies();
 comprobarInstalacion();
 vigilarSesion();
