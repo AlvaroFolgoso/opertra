@@ -2842,6 +2842,12 @@
   #topbar { box-shadow: 0 6px 20px rgba(0,0,0,.04); }
   /* Selección de texto con el ámbar de la marca */
   #app ::selection { background: rgba(240,162,2,.35); }
+  /* Máquina y lecturas dentro de un fichaje (tarjeta y tabla) */
+  .fich-maq { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--steel); }
+  .fich-maq > span { white-space: nowrap; }
+  .fich-maq .sep { color: var(--border); }
+  .fich-card .fich-maq { margin-top: 4px; }
+  .fich-maq b { color: var(--amber-deep); font-weight: 600; }
 
   /* --- Números y nombres que crecen: nada se parte por la mitad ---
      Se vio en el móvil: "36,4 h este mes" partido en tres líneas, la
@@ -9725,14 +9731,18 @@ function bloqueLecturas(esSalida) {
     : maquinaDeHoy();
   if (!maq) return '';
 
-  // Si esta máquina no lleva contador, no se pregunta por él. Pero el
-  // gasoil sí: un generador no cuenta horas y gasta igual.
+  // Si esta máquina no lleva contador, no se pregunta por él.
+  // Al ENTRAR solo se pide el contador. Al SALIR, el contador y los litros
+  // repostados durante el turno. Se quitó "gasoil en el depósito": nadie
+  // sabe cuántos litros quedan en el tanque (el indicador va en cuartos), y
+  // el control de verdad sale de lo repostado frente a las horas o los
+  // kilómetros hechos — eso sí lo ve el trabajador en el surtidor.
   const clase = medidorDe(maq);
   const med = MEDIDORES[clase];
   const pideContador = clase !== 'ninguno';
+  if (!pideContador && !esSalida) return '';   // sin contador y entrando: nada que apuntar
 
   const propuesto = (!esSalida && ultimaLectura) ? ultimaLectura.horometro : null;
-  const gasoilProp = (!esSalida && ultimaLectura) ? ultimaLectura.gasoil : null;
   const entradaH = esSalida && fichajeAbierto ? fichajeAbierto.horometroInicio : null;
 
   // De dónde vienen los datos propuestos: quién los dejó y cuándo. Sin
@@ -9764,14 +9774,9 @@ function bloqueLecturas(esSalida) {
             esSalida
               ? (entradaH != null ? `Al entrar marcaba ${entradaH} ${med.unidad}` : '')
               : (propuesto != null ? 'Última lectura conocida' : '')) : ''}
-        ${campoLectura('lec-gasoil', 'Gasoil en el depósito', 'L', gasoilProp,
-            esSalida ? 'Lo que queda ahora' : (gasoilProp != null ? 'Lo que quedó la última vez' : ''))}
+        ${esSalida ? campoLectura('lec-repostado', '¿Has repostado en tu turno?', 'L', null,
+            'Litros echados. Déjalo vacío si no has repostado.') : ''}
       </div>
-      ${esSalida ? `
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-          ${campoLectura('lec-repostado', 'Gasoil repostado hoy', 'L', null,
-              'Déjalo vacío si no has repostado')}
-        </div>` : ''}
     </div>`;
 }
 
@@ -9791,7 +9796,7 @@ function leerLecturasDeLaPantalla(esSalida) {
   };
   return {
     horometro: num('lec-horometro'),
-    gasoil: num('lec-gasoil'),
+    gasoil: null,   // ya no se pregunta el nivel del depósito (ver bloqueLecturas)
     repostado: esSalida ? num('lec-repostado') : null,
   };
 }
@@ -9873,6 +9878,20 @@ function apuntarFichajeEnLocal(accion, fila, projectId, machineId) {
   } else if (accion === 'salida') {
     const l = _fichajesDelTrabajador.find(x => x && x.id === fila.log_id);
     if (l) l.check_out = fila.hora;
+  }
+}
+
+/* Las lecturas recién apuntadas, en la copia local del registro y en la
+   jornada abierta. Sin esto, hasta la siguiente recarga el registro salía
+   sin horómetro ni gasoil y la salida no sabía qué marcaba al entrar. */
+function apuntarLecturasEnLocal(logId, esSalida, lecturas) {
+  if (!logId || !lecturas) return;
+  const l = Array.isArray(_fichajesDelTrabajador) ? _fichajesDelTrabajador.find(x => x && x.id === logId) : null;
+  if (esSalida) {
+    if (l) { if (lecturas.horometro != null) l.horometro_fin = lecturas.horometro; if (lecturas.repostado != null) l.gasoil_repostado = lecturas.repostado; }
+  } else {
+    if (l && lecturas.horometro != null) l.horometro_inicio = lecturas.horometro;
+    if (fichajeAbierto && fichajeAbierto.logId === logId && lecturas.horometro != null) fichajeAbierto.horometroInicio = lecturas.horometro;
   }
 }
 
@@ -10014,6 +10033,8 @@ async function ficharAhora(opciones) {
 
     // El registro del trabajador se pone al día EN LOCAL, sin otro viaje.
     if (currentUser.isWorker) apuntarFichajeEnLocal(accion, data[0], projectId, machine ? machine.dbId : null);
+    // Y sus lecturas, en local también (tras crear la fila y fijar la jornada abierta)
+    if (accion === 'entrada' || accion === 'salida') apuntarLecturasEnLocal(idFichaje, accion === 'salida', lecturasApuntadas);
 
     await cargarFichajes();
     renderFichaje();
@@ -10417,6 +10438,15 @@ function openEditFichajeModal(dbId) {
         ${projects.map(p => `<option value="${p.dbId}" ${l.projectDbId===p.dbId?'selected':''}>${esc(p.name)}</option>`).join('')}
       </select>
     </div>
+    ${l.machine && l.machine !== '—' ? `
+    <div class="form-group">
+      <label class="form-label">Lecturas de ${esc(l.machine)} <span style="font-weight:400;text-transform:none;letter-spacing:0;">(opcional)</span></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${campoLectura('ef-h-in', 'Al entrar', l.machineUnidad || '', l.horometroInicio, '')}
+        ${campoLectura('ef-h-out', 'Al salir', l.machineUnidad || '', l.horometroFin, '')}
+        ${campoLectura('ef-rep', 'Repostado', 'L', l.gasoilRepostado, '')}
+      </div>
+    </div>` : ''}
     <div class="form-group">
       <label class="form-label">Motivo de la corrección</label>
       <input class="form-input" id="ef-reason" maxlength="200" list="motivos-correccion" placeholder="Ej. Olvidó fichar salida">
@@ -10469,6 +10499,25 @@ async function guardarCorreccionFichaje(dbId) {
   }
   if (new Date(entrada) > new Date()) return fallo('La entrada no puede estar en el futuro.');
 
+  // Lecturas de la máquina (solo si el fichaje se hizo con una): el
+  // responsable puede corregir el contador o los litros repostados.
+  let lecturasCorr = null;
+  if (l.machine && l.machine !== '—') {
+    const num = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const t = String(el.value || '').trim().replace(',', '.');
+      if (!t) return null;
+      const v = Number(t);
+      return Number.isFinite(v) && v >= 0 ? v : null;
+    };
+    lecturasCorr = { horometro_inicio: num('ef-h-in'), horometro_fin: num('ef-h-out'), gasoil_repostado: num('ef-rep') };
+    if (lecturasCorr.horometro_inicio != null && lecturasCorr.horometro_fin != null
+        && lecturasCorr.horometro_fin < lecturasCorr.horometro_inicio) {
+      return fallo('La lectura al salir no puede ser menor que la de entrar.');
+    }
+  }
+
   setButtonLoading('ef-submit', true, 'Guardando...', 'Guardar corrección');
   if (!empezarOperacion('corregir-fichaje')) return;
   try {
@@ -10486,6 +10535,7 @@ async function guardarCorreccionFichaje(dbId) {
       cambios.original_check_in = l.checkInISO;
       cambios.original_check_out = l.checkOutISO;
     }
+    if (lecturasCorr) Object.assign(cambios, lecturasCorr);
 
     const { error } = await getSupabase().from('time_logs').update(cambios).eq('id', dbId);
     if (error) throw error;
@@ -10635,7 +10685,7 @@ function mapearFichaje(l) {
     // vacia en todas las filas.
     workerCode: w ? w.id : '',
     projectDbId: l.project_id, project: p ? p.name : '—', projectCode: p ? p.id : '—',
-    machine: m ? m.id : '—',
+    machine: m ? m.id : '—', machineDbId: l.machine_id, machineUnidad: m ? MEDIDORES[medidorDe(m)].unidad : '',
     checkInISO: l.check_in, checkOutISO: l.check_out,
     // La jornada pertenece al día en que empezó, contado en hora de aquí.
     // Antes se usaba la hora universal y un fichaje de las 00:30 se
@@ -10751,7 +10801,7 @@ function renderRegistroHoras() {
       <div class="table-scroll fich-tabla">
         <table>
           <thead><tr>
-            ${esAdmin ? '<th>Trabajador</th>' : ''}<th>Fecha</th><th>${t('S')}</th><th>Entrada</th><th>Salida</th><th>Horas</th>${esAdmin ? '<th></th>' : ''}
+            ${esAdmin ? '<th>Trabajador</th>' : ''}<th>Fecha</th><th>${t('S')}</th><th>${tm('S')}</th><th>Entrada</th><th>Salida</th><th>Horas</th>${esAdmin ? '<th></th>' : ''}
           </tr></thead>
           <tbody>
             ${visible.map(l => `
@@ -10759,6 +10809,7 @@ function renderRegistroHoras() {
                 ${esAdmin ? `<td style="font-weight:500;">${esc(l.worker)}</td>` : ''}
                 <td class="f-mono" style="font-size:12.5px;color:var(--steel);">${fmtDate(l.date)}</td>
                 <td style="font-size:12.5px;">${esc(l.project)}</td>
+                <td style="font-size:12.5px;">${lecturasFichajeHTML(l) || '<span style="color:var(--idle);">a pie</span>'}</td>
                 <td class="f-mono" style="font-size:12.5px;color:var(--success);">${l.checkIn}</td>
                 <td class="f-mono" style="font-size:12.5px;color:${l.checkOut === '—' ? 'var(--idle)' : 'var(--ink)'};">
                   ${l.checkOut}${l.cruzaMedianoche ? '<span style="font-size:10px;color:var(--steel);margin-left:3px;" title="Terminó al día siguiente">+1</span>' : ''}
@@ -10805,8 +10856,7 @@ function exportarFichajes() {
   const num = (v) => (v == null || v === '') ? '' : String(v).replace('.', ',');
   const cab = ['Código', 'Trabajador', t('S'), tm('S'), 'Fecha', 'Entrada', 'Salida', 'Horas',
                'Termina día siguiente', 'Cerrada por el sistema', 'Código escaneado',
-               'Horómetro inicio', 'Horómetro fin', 'Gasoil inicio (L)', 'Gasoil fin (L)',
-               'Gasoil repostado (L)', 'Corregido por', 'Motivo'];
+               'Lectura inicio', 'Lectura fin', 'Gasoil repostado (L)', 'Corregido por', 'Motivo'];
   const filas = lista.map(l => [
     l.workerCode || '', l.worker, l.project, l.machine, l.date, l.checkIn, l.checkOut,
     l.checkOut === '—' ? '' : l.hours.toFixed(2).replace('.', ','),
@@ -10814,7 +10864,7 @@ function exportarFichajes() {
     l.autoClosed ? 'Sí' : '',
     l.verificado === false ? 'No' : 'Sí',
     num(l.horometroInicio), num(l.horometroFin),
-    num(l.gasoilInicio), num(l.gasoilFin), num(l.gasoilRepostado),
+    num(l.gasoilRepostado),
     l.editedBy || '', l.editReason || '',
   ]);
   const csv = armarCSV(cab, filas);
@@ -12216,6 +12266,20 @@ function cobroCardHTML(i) {
     </div>`;
 }
 
+/* Máquina y lecturas de un fichaje, en una línea corta: "EX-001 · 1.240 → 1.248 h · 40 L".
+   Vacío si se fichó a pie. Sirve para la tarjeta del móvil y para la tabla. */
+function lecturasFichajeHTML(l) {
+  if (!l.machine || l.machine === '—') return '';
+  const n = (v) => v.toLocaleString('es-ES', { maximumFractionDigits: 1 });
+  const u = l.machineUnidad || '';
+  const partes = [`<b>${esc(l.machine)}</b>`];
+  if (l.horometroInicio != null && l.horometroFin != null) partes.push(`${n(l.horometroInicio)} → ${n(l.horometroFin)} ${esc(u)}`);
+  else if (l.horometroInicio != null) partes.push(`${n(l.horometroInicio)} ${esc(u)} al entrar`);
+  else if (l.horometroFin != null) partes.push(`${n(l.horometroFin)} ${esc(u)} al salir`);
+  if (l.gasoilRepostado != null && l.gasoilRepostado > 0) partes.push(`<i class="fa-solid fa-gas-pump" style="font-size:10px;"></i> ${n(l.gasoilRepostado)} L`);
+  return `<span class="fich-maq">${partes.map(p => '<span>' + p + '</span>').join('<span class="sep">·</span>')}</span>`;
+}
+
 function fichajeCardHTML(l, esAdmin) {
   const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const p = String(l.date || '').split('-');
@@ -12237,6 +12301,7 @@ function fichajeCardHTML(l, esAdmin) {
           ${l.autoClosed ? ' <i class="fa-solid fa-robot" style="color:var(--danger);font-size:10px;" title="La cerró el sistema"></i>' : ''}
           ${l.editedBy ? ' <i class="fa-solid fa-pen" style="color:var(--amber-deep);font-size:10px;" title="Corregido"></i>' : ''}
         </div>
+        ${lecturasFichajeHTML(l)}
       </div>
       <div class="total">${total}</div>
       ${esAdmin ? `<button class="btn-ghost" style="flex-shrink:0;"
