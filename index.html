@@ -2872,6 +2872,21 @@
     .mode-toggle { flex-shrink: 0; }
     .toolbar .btn-amber { flex: 1 1 100%; justify-content: center; }
   }
+  /* --- Fichaje en el móvil: el botón de fichar se ve SIN desplazar ---
+     En un iPhone normal el botón "Fichar entrada" quedaba 90 px por debajo
+     de la barra de abajo: había que deslizar para verlo (y en la captura de
+     la portada salía cortado). Las dos pestañas de arriba pasan a una fila
+     compacta (sin subtítulo) y las horas previstas caben en una sola fila. */
+  @media (max-width: 768px) {
+    #view-fichaje .avisos-tabs { flex-direction: row; gap: 8px; margin-bottom: 14px; }
+    #view-fichaje .avisos-tab-btn { padding: 9px 10px; gap: 9px; min-width: 0; }
+    #view-fichaje .avisos-tab-sub { display: none; }
+    #view-fichaje .avisos-tab-icon { width: 30px; height: 30px; }
+    #view-fichaje .avisos-tab-title { font-size: 13.5px; white-space: nowrap; }
+    #view-fichaje .fichaje-card { padding: 16px 14px; }
+    #view-fichaje .fichaje-card .form-label + div { flex-wrap: nowrap !important; }
+    #view-fichaje .fichaje-card .mode-btn { min-width: 0 !important; padding: 10px 6px !important; font-size: 13px; }
+  }
 </style>
 </head>
 <body>
