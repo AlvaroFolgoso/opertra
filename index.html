@@ -2842,6 +2842,36 @@
   #topbar { box-shadow: 0 6px 20px rgba(0,0,0,.04); }
   /* Selección de texto con el ámbar de la marca */
   #app ::selection { background: rgba(240,162,2,.35); }
+
+  /* --- Números y nombres que crecen: nada se parte por la mitad ---
+     Se vio en el móvil: "36,4 h este mes" partido en tres líneas, la
+     pastilla "Trabajando" en dos ("Trabaj / ando"), y "Lista / Mapa" en la
+     barra de Maquinaria. Regla general: pastillas, cifras y datos cortos no
+     se parten NUNCA; si no caben, pasa a la línea siguiente el bloque entero. */
+  .chip, .permit-tag, .priority-badge, .nav-badge, .plate-badge, .mode-btn,
+  .stat-value, .kpi-value, .fich-card .total, .fich-card .dia { white-space: nowrap; }
+  .chip { flex-shrink: 0; }
+  /* Actividad en tiempo real: nombre a la izquierda (puede partirse en dos
+     líneas), hora y pastilla a la derecha siempre enteras */
+  .worker-row { gap: 10px; }
+  .worker-row > div:last-child { flex-shrink: 0; }
+  .worker-row .f-mono { white-space: nowrap; }
+  .worker-left { min-width: 0; flex: 1; }
+  .worker-left > div:last-child { min-width: 0; }
+  .worker-name { overflow-wrap: anywhere; }
+  /* Tarjeta de obra: datos en fila que se reparten en dos si hace falta */
+  .obra-stats-row { flex-wrap: wrap; gap: 6px 16px; }
+  .obra-stats-row span { white-space: nowrap; }
+  .obra-progress-track + div { flex-wrap: wrap; gap: 2px 10px; }
+  .obra-progress-track + div span { white-space: nowrap; }
+  .obra-card .chip { margin-left: 8px; }
+  /* Barra de herramientas en el móvil: Lista/Mapa y el QR en una fila, el
+     botón principal a ancho completo debajo */
+  @media (max-width: 768px) {
+    .toolbar > div:not(.search-box) { display: flex; flex-wrap: wrap; gap: 8px; }
+    .mode-toggle { flex-shrink: 0; }
+    .toolbar .btn-amber { flex: 1 1 100%; justify-content: center; }
+  }
 </style>
 </head>
 <body>
@@ -5429,7 +5459,7 @@ async function volcarDatosEmpresa(projRes, machRes, docRes, workRes, vacRes, cli
       location: m.project_id && codeByProjectDbId[m.project_id] ? (nameByProjectDbId[m.project_id] || 'Sin ubicación') : 'Almacén / sin asignar',
       fuel: m.fuel || 0, since: '—',
       gpsAge: m.gps_updated_at ? timeAgo(new Date(m.gps_updated_at).getTime()) : 'sin datos',
-      updatedAt: m.updated_at,
+      updatedAt: m.updated_at, medidor: m.medidor,
       hasPhoto: m.has_photo, photoUrl: m.photo_url, lat: m.lat, lng: m.lng,
       device: { id: m.device_id, model: m.device_model, linked: m.device_linked },
       documents: docsByMachine[m.id] || [],
@@ -5623,7 +5653,7 @@ function selectorMedidor(id, valor) {
   return `
     <div class="form-group">
       <label class="form-label">¿Qué cuenta esta ${tm('s')}?</label>
-      <select class="form-select" id="${id}">
+      <select class="form-select" id="${id}" onchange="this.dataset.tocado='si'">
         <option value="horas"${valor === 'horas' ? ' selected' : ''}>Horas de trabajo (horómetro)</option>
         <option value="km"${valor === 'km' ? ' selected' : ''}>Kilómetros (cuentakilómetros)</option>
         <option value="ninguno"${valor === 'ninguno' ? ' selected' : ''}>Nada — no lleva contador</option>
@@ -7651,6 +7681,7 @@ function openEditMachineModal(code) {
       <label class="form-label">Modelo</label>
       <input class="form-input" id="em-model" value="${(m.model||'').replace(/"/g,'&quot;')}">
     </div>
+    ${selectorMedidor('em-medidor', medidorDe(m))}
     <div class="form-group">
       <label class="form-label">Matrícula / nº de serie</label>
       <input class="form-input" id="em-plate" value="${esc(m.plate === '—' ? '' : (m.plate||''))}">
@@ -7736,6 +7767,10 @@ async function guardarMaquina(code) {
   const projectId = document.getElementById('em-project').value || null;
   if (projectId && !projects.some(p => p.dbId === projectId)) return yaNoExiste('La ' + t('s') + ' que habías elegido');
   const fuel = Math.max(0, Math.min(100, parseInt(document.getElementById('em-fuel').value) || 0));
+  // Qué cuenta la máquina (horómetro / kilómetros / nada). ANTES no se leía
+  // aquí y la variable no existía: guardar fallaba SIEMPRE justo después de
+  // escribir en la base (por eso el cambio aparecía al recargar).
+  const medidor = (document.getElementById('em-medidor') || { value: medidorDe(m) }).value;
   const errBox = document.getElementById('em-error');
   errBox.style.display = 'none';
 
@@ -7781,7 +7816,7 @@ async function guardarMaquina(code) {
     }
 
     const { data: guardada, error } = await getSupabase().from('machines').update({
-      type, model, plate: plate || null, status, project_id: projectId, fuel,
+      type, model, plate: plate || null, status, project_id: projectId, fuel, medidor,
       ...cambioFoto,
     }).eq('id', m.dbId).select('updated_at').maybeSingle();
     if (error) throw error;
@@ -11420,7 +11455,7 @@ async function submitAddMachine() {
       dbId: data.id, id: data.code, qrCode: data.qr_code, type: data.type, model: data.model, plate: data.plate,
       status: data.status, operator: '—', project: null, location: 'Sin ubicación aún', fuel: data.fuel, since: '—',
       lat: data.lat, lng: data.lng, gpsAge: deviceId ? 'esperando señal' : 'sin dispositivo',
-      hasPhoto: !!data.photo_url, photoUrl: data.photo_url,
+      hasPhoto: !!data.photo_url, photoUrl: data.photo_url, medidor: data.medidor, updatedAt: data.updated_at,
       device: { id: data.device_id, model: data.device_model, linked: data.device_linked }, documents: [],
     });
     closeAddMachineModal();
