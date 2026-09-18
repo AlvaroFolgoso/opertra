@@ -6902,6 +6902,9 @@ function textoResumenFallido(e) {
    Quién cambió qué y cuándo. En una empresa de 200 personas, esto es lo
    que evita el "yo no fui" cuando aparece un plazo movido o un PIN nuevo.
    ====================================================================== */
+const HISTORIAL_PAGINA = 100;
+let historialCargados = 0;
+
 async function openHistorialModal() {
   closeUserDropdown();
   document.getElementById('add-machine-modal').innerHTML = `
@@ -6910,36 +6913,53 @@ async function openHistorialModal() {
       <button class="drawer-close" onclick="closeAddMachineModal()"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div style="font-size:13px;color:var(--steel);margin-top:4px;line-height:1.5;">
-      Cambios importantes hechos en ${esc(currentUser.company)}: plazos, correcciones de fichaje, altas y bajas.
+      Quién cambió qué y cuándo en ${esc(currentUser.company)}: altas, bajas, modificaciones, plazos,
+      correcciones de fichaje, cobros. Se conserva un año.
     </div>
     <div id="lista-historial" style="margin-top:14px;">
       <div style="font-size:13px;color:var(--steel);padding:8px 0;"><i class="fa-solid fa-circle-notch fa-spin"></i> Cargando...</div>
     </div>
+    <div id="historial-mas" style="margin-top:12px;"></div>
   `;
   document.getElementById('modal-overlay').classList.add('active');
   marcarNavegacion();
+  historialCargados = 0;
+  await cargarHistorial(false);
+}
 
+/* Carga una página del historial. Con "masDe" = true añade la siguiente
+   página debajo de lo que ya hay (botón "Ver más"). */
+async function cargarHistorial(masDe) {
+  const el = document.getElementById('lista-historial');
+  const mas = document.getElementById('historial-mas');
+  if (!el) return;
   try {
+    const desde = masDe ? historialCargados : 0;
     const { data, error } = await getSupabase()
-      .from('audit_log').select('*').order('created_at', { ascending: false }).limit(100);
+      .from('audit_log').select('*')
+      .order('created_at', { ascending: false })
+      .range(desde, desde + HISTORIAL_PAGINA - 1);
     if (error) throw error;
-    const el = document.getElementById('lista-historial');
-    if (!el) return;
-    if (!data || data.length === 0) {
+    const filas = data || [];
+    if (!masDe && filas.length === 0) {
       el.innerHTML = `<div class="empty-state" style="padding:30px 12px;">
         <i class="fa-solid fa-clock-rotate-left"></i>
         <div style="font-size:13.5px;font-weight:600;color:var(--ink);">Sin cambios registrados</div>
         <div style="font-size:12.5px;margin-top:3px;">Aquí aparecerán los cambios importantes que se hagan.</div>
       </div>`;
+      if (mas) mas.innerHTML = '';
       return;
     }
     const iconos = {
-      'plazo': 'fa-calendar-days', 'estado': 'fa-toggle-on', 'eliminación': 'fa-trash-can',
-      'corrección de fichaje': 'fa-pen-to-square', 'cierre automático': 'fa-robot',
-      'alta de usuario': 'fa-user-plus', 'revocación de acceso': 'fa-user-slash',
-      'cambio de PIN': 'fa-key', 'baja': 'fa-user-minus', 'exportación': 'fa-download',
+      'alta': 'fa-plus', 'modificación': 'fa-pen', 'plazo': 'fa-calendar-days', 'estado': 'fa-toggle-on',
+      'eliminación': 'fa-trash-can', 'baja': 'fa-user-minus', 'corrección de fichaje': 'fa-pen-to-square',
+      'cierre automático': 'fa-robot', 'alta de usuario': 'fa-user-plus', 'revocación de acceso': 'fa-user-slash',
+      'cambio de PIN': 'fa-key', 'exportación': 'fa-download', 'resuelta': 'fa-check',
+      'cobrado': 'fa-euro-sign', 'pendiente otra vez': 'fa-rotate-left', 'vacaciones': 'fa-umbrella-beach',
+      'vacaciones borradas': 'fa-umbrella-beach', 'documento': 'fa-file', 'documento borrado': 'fa-file-circle-xmark',
+      'código QR nuevo': 'fa-qrcode', 'desasignación': 'fa-link-slash', 'cambio de nombre': 'fa-pen',
     };
-    el.innerHTML = `<div class="doc-list">${data.map(a => `
+    const html = filas.map(a => `
       <div class="doc-row" style="align-items:flex-start;">
         <div style="display:flex;gap:10px;min-width:0;">
           <i class="fa-solid ${iconos[a.action] || 'fa-circle-info'}" style="color:var(--steel);margin-top:3px;width:14px;"></i>
@@ -6949,14 +6969,26 @@ async function openHistorialModal() {
               ${esc(a.action)}${a.detail ? ' · ' + esc(a.detail) : ''}
             </div>
             <div class="doc-expiry f-mono" style="margin-top:2px;">
-              ${esc(a.actor_name) || 'alguien'} · ${new Date(a.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+              ${esc(a.actor_name) || 'alguien'} · ${new Date(a.created_at).toLocaleString('es-ES',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
             </div>
           </div>
         </div>
-      </div>`).join('')}</div>`;
+      </div>`).join('');
+    if (masDe) {
+      const lista = el.querySelector('.doc-list');
+      if (lista) lista.insertAdjacentHTML('beforeend', html);
+    } else {
+      el.innerHTML = `<div class="doc-list">${html}</div>`;
+    }
+    historialCargados += filas.length;
+    if (mas) {
+      mas.innerHTML = filas.length === HISTORIAL_PAGINA
+        ? `<button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="cargarHistorial(true)">Ver ${HISTORIAL_PAGINA} más</button>`
+        : `<div style="text-align:center;font-size:12px;color:var(--steel);">${historialCargados} cambio${historialCargados === 1 ? '' : 's'} · no hay más</div>`;
+    }
   } catch (e) {
-    const el = document.getElementById('lista-historial');
-    if (el) el.innerHTML = `<div style="font-size:13px;color:var(--steel);padding:8px 0;">No se pudo cargar el historial.</div>`;
+    if (!masDe) el.innerHTML = `<div style="font-size:13px;color:var(--steel);padding:8px 0;">No se pudo cargar el historial.</div>`;
+    else if (mas) mas.innerHTML = `<div style="text-align:center;font-size:12px;color:var(--danger);">No se pudieron cargar más.</div>`;
   }
 }
 
@@ -7850,6 +7882,20 @@ async function guardarMaquina(code) {
       registrarEnHistorial('estado', tm('S'), m.id, `${statusLabel[m.status]} → ${statusLabel[status]}`);
     }
     const proj = projects.find(p => p.dbId === projectId);
+    // Y el resto de cambios (tipo, modelo, matrícula, obra, contador, foto),
+    // en una sola línea del historial. Antes solo se apuntaba el estado.
+    {
+      const nombreMedidor = (c) => (MEDIDORES[c] && MEDIDORES[c].etiqueta) || 'sin contador';
+      let detalle = resumenCambios([
+        ['Tipo', m.type, type], ['Modelo', m.model, model],
+        ['Matrícula', m.plate === '—' ? '' : m.plate, plate],
+        [t('S'), m.location, proj ? proj.name : 'Almacén / sin asignar'],
+        ['Contador', nombreMedidor(medidorDe(m)), nombreMedidor(medidor)],
+        ['Combustible', (m.fuel || 0) + '%', fuel + '%'],
+      ]);
+      if (cambioFoto.photo_url !== undefined) detalle += (detalle ? ' · ' : '') + (cambioFoto.photo_url ? 'Foto nueva' : 'Foto quitada');
+      if (detalle) registrarEnHistorial('modificación', tm('S'), m.id, detalle);
+    }
     Object.assign(m, {
       type, model, plate: plate || '—', status, fuel, medidor,
       projectDbId: projectId, project: proj ? proj.id : null,
@@ -7992,6 +8038,14 @@ async function guardarTrabajador(code) {
 
     if (w.pin !== pin) registrarEnHistorial('cambio de PIN', 'Trabajador', name, '');
     const proj = projects.find(p => p.dbId === projectId);
+    {
+      const obraAntes = projects.find(p => p.dbId === w.projectDbId);
+      const detalle = resumenCambios([
+        ['Nombre', w.name, name], ['Puesto', w.role, role],
+        [t('S'), obraAntes ? obraAntes.name : 'Sin asignar', proj ? proj.name : 'Sin asignar'],
+      ]);
+      if (detalle) registrarEnHistorial('modificación', 'Trabajador', w.name, detalle);
+    }
     Object.assign(w, { name, role, pin, projectDbId: projectId, project: proj ? proj.id : null });
     closeAddMachineModal();
     openWorkerDrawer(code);
@@ -8151,6 +8205,16 @@ async function guardarObra(code) {
     if (p.status !== status) {
       registrarEnHistorial('estado', t('S'), name, `${obraStatusLabel[p.status]} → ${obraStatusLabel[status]}`);
     }
+    {
+      const clienteAntes = nombreClienteDe(p);
+      const clienteDespues = elegido.valor === '__legacy__' ? clienteAntes
+        : (elegido.valor ? ((clienteDe(elegido.valor) || {}).name || clienteAntes) : '');
+      const detalle = resumenCambios([
+        ['Nombre', p.name, name], ['Inicio', fmtDate(p.start), fmtDate(start)],
+        ['Cliente', clienteAntes, clienteDespues], ['Notas', p.notes, notes],
+      ]);
+      if (detalle) registrarEnHistorial('modificación', t('S'), p.name, detalle);
+    }
 
     Object.assign(p, { name, status, start, end, notes });
     if (elegido.valor !== '__legacy__') { p.clientId = elegido.valor || null; p.client = null; }
@@ -8195,6 +8259,15 @@ async function borrarObra(code) {
 
 /* Registro de cambios importantes: quién, qué y cuándo.
    En empresas grandes esto no es un extra, es lo que evita discusiones. */
+/* "Modelo: A → B · Matrícula: X → Y". Solo lo que ha cambiado de verdad;
+   vacío si no cambió nada (y entonces no se apunta nada). */
+function resumenCambios(pares) {
+  return pares
+    .filter(([, antes, despues]) => String(antes ?? '').trim() !== String(despues ?? '').trim())
+    .map(([etiqueta, antes, despues]) => `${etiqueta}: ${String(antes ?? '').trim() || '—'} → ${String(despues ?? '').trim() || '—'}`)
+    .join(' · ');
+}
+
 async function registrarEnHistorial(accion, entidad, nombre, detalle) {
   try {
     await getSupabase().from('audit_log').insert({
@@ -8512,6 +8585,7 @@ async function submitAddObra() {
     }).select('id,code,name,client,client_id,status,start_date,end_date,notes,updated_at').single();
     if (error) throw error;
     projects.push(mapearObra(data));
+    registrarEnHistorial('alta', t('S'), data.name, data.code || '');
     _totalesObra = null; _resumenClientes = null;
     closeAddMachineModal();
     pintarPestanaActual();
@@ -9026,11 +9100,14 @@ async function refrescarAntesDeFichar() {
 function suscribirCambios() {
   if (canalTiempoReal || !currentUser.companyId) return;
 
-  // El personal de obra NO necesita conexión permanente: entra, ficha y cierra.
-  // Mantenerles una conexión abierta consumiría el límite de la cuenta sin
-  // aportar nada. Con 40 empresas y 80 trabajadores, la diferencia es entre
-  // 800 conexiones y unas 120.
-  if (currentUser.isWorker) return;
+  // El personal de obra también va en tiempo real (petición de Álvaro: si el
+  // responsable cambia un nombre o una foto, el trabajador lo ve al momento),
+  // pero por un camino más barato: un canal de AVISOS por empresa, sin datos
+  // dentro. La base de datos manda "ha cambiado la tabla X" (disparadores
+  // avisar_cambio_empresa) y el móvil vuelve a pedir su paquete. Solo con la
+  // app a la vista: al ocultarla, la conexión se suelta a los 5 minutos como
+  // la del responsable (soltarConexionSiOculta) y se recupera al volver.
+  if (currentUser.isWorker) { suscribirAvisosEmpresa(); return; }
   arrancarLatidoJornadas();
   const filtro = `company_id=eq.${currentUser.companyId}`;
   canalTiempoReal = getSupabase()
@@ -9130,7 +9207,8 @@ function recargarEnBreve() {
      avisar de "otra persona" sería mentira. Esto es lo que hacía que, al
      cambiar un operario estando solo, saliera un aviso de cambio ajeno y la
      app se recargara entera tirando la ficha abierta. */
-  if (esEcoDeLoNuestro()) return;
+  // (El trabajador no: todas sus llamadas son RPC y contarían como "eco".)
+  if (!currentUser.isWorker && esEcoDeLoNuestro()) return;
 
   clearTimeout(recargaPendiente);
   const espera = Math.max(800, 15000 - (Date.now() - ultimaRecarga));
@@ -9148,6 +9226,11 @@ function recargarEnBreve() {
 
        Ahora se apunta la recarga pendiente y se hace en cuanto suelta el
        campo, sin dejar ningún temporizador girando de fondo. */
+    // En mitad de un fichaje o de un escaneo tampoco: se vuelve a mirar en 3 s.
+    if ((typeof fichajeCargando !== 'undefined' && fichajeCargando) || (typeof escaneando !== 'undefined' && escaneando)) {
+      recargaPendiente = setTimeout(recargarEnBreve, 3000);
+      return;
+    }
     if (estaEscribiendo()) {
       recargaEsperandoAlCampo = true;
       /* Reintento ACOTADO, por si soltar el campo no llega a avisar (o
@@ -9223,6 +9306,28 @@ function cortarSuscripcion() {
   if (canalTiempoReal) { getSupabase().removeChannel(canalTiempoReal); canalTiempoReal = null; }
   clearTimeout(recargaPendiente);
   pararLatidoJornadas();
+}
+
+/* ======================================================================
+   TIEMPO REAL PARA EL PERSONAL DE OBRA
+   El trabajador entra con PIN y no tiene sesión de navegador, así que no
+   puede escuchar cambios de las tablas (las reglas de acceso se lo
+   impiden, y está bien que así sea). En su lugar escucha un canal de
+   avisos de su empresa ("empresa-<id>") por el que la base de datos
+   emite "cambio" cada vez que se toca una obra, una máquina, un
+   trabajador o una incidencia. No viaja ningún dato: solo el aviso. Al
+   recibirlo, el móvil vuelve a pedir su paquete (una sola llamada) y
+   repinta, con los mismos frenos que el responsable (recargarEnBreve): no
+   en mitad de un fichaje, ni de un escaneo, ni de algo a medio escribir.
+   ====================================================================== */
+function suscribirAvisosEmpresa() {
+  if (canalTiempoReal || !currentUser.isWorker || !currentUser.companyId) return;
+  try {
+    canalTiempoReal = getSupabase()
+      .channel('empresa-' + currentUser.companyId, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'cambio' }, () => recargarEnBreve())
+      .subscribe();
+  } catch (e) { canalTiempoReal = null; }
 }
 
 /* Solo se traen los fichajes de los últimos 60 días, y como mucho 300.
@@ -11529,6 +11634,7 @@ async function submitAddMachine() {
     // haga falta ahora, que es cuando tiene los papeles delante.
     switchTab('maquinaria');
     openDrawer(data.code);
+    registrarEnHistorial('alta', tm('S'), data.code, `${data.type}${data.model ? ' · ' + data.model : ''}`);
     aviso('Guardad' + tm('g') + '. Añade ahora sus documentos (ITV, seguro...) si los tienes a mano.', 'bien');
   } catch (err) {
     aviso('No se pudo guardar ' + tm('el') + ' ' + tm('s') + ': ' + mensajeError(err));
@@ -11911,6 +12017,7 @@ async function submitAddDoc(tipo, ownerDbId, ownerCode) {
 
     const { error } = await getSupabase().from('documents').insert(fila);
     if (error) throw error;
+    registrarEnHistorial('documento', tipo === 'machine' ? tm('S') : 'Trabajador', ownerCode, name + (expiry ? ' · caduca ' + fmtDate(expiry) : ''));
 
     closeAddMachineModal();
     await recargarDocumentos();
@@ -12196,6 +12303,7 @@ async function submitAddWorker() {
       projectDbId: data.project_id, photoPath: rutaFoto,
       status: 'off', since: '—', documents: [], vacations: [],
     });
+    registrarEnHistorial('alta', 'Trabajador', data.name, data.role || '');
     if (machineId) {
       const m = machines.find(x => x.dbId === machineId);
       if (m) m.operator = data.name;
@@ -12796,6 +12904,7 @@ async function addVacation(workerId) {
     }).select().single();
     if (error) throw error;
     w.vacations.push({ dbId: data.id, id: data.id, start, end, days });
+    registrarEnHistorial('vacaciones', 'Trabajador', w.name, `${fmtDate(start)} → ${fmtDate(end)}`);
     document.getElementById('vac-list').innerHTML = renderVacList(w);
     document.getElementById('vac-start').value = '';
     document.getElementById('vac-end').value = '';
@@ -12825,6 +12934,7 @@ async function deleteVacation(workerId, vacId) {
   try {
     const { error } = await getSupabase().from('vacations').delete().eq('id', vacId);
     if (error) throw error;
+    registrarEnHistorial('vacaciones borradas', 'Trabajador', w.name, '');
   } catch (err) {
     w.vacations = antes;
     repintar();
@@ -13103,6 +13213,7 @@ async function resolveIncident(dbId) {
       resolved_by_worker: ficha ? ficha.dbId : null,
     }).eq('id', dbId);
     if (error) throw error;
+    { const inc = incidents.find(i => i.dbId === dbId); if (inc) registrarEnHistorial('resuelta', 'Incidencia', inc.title, ''); }
     closeAddMachineModal();
     await cargarIncidencias();
     pintarPestanaActual(); renderNav();
@@ -14036,6 +14147,7 @@ async function markInvoicePaid(dbId) {
     const { error } = await getSupabase().from('invoices')
       .update({ status: 'paid', paid_at: ahora }).eq('id', dbId);
     if (error) throw error;
+    registrarEnHistorial('cobrado', 'Cobro', inv.reference || inv.concept || (nombreClienteDe(inv) || 'Cobro'), inv.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }));
   } catch (err) {
     inv.status = antes.status; inv.paidAt = antes.paidAt;
     datosCambiaron(); pintarPestanaActual();
@@ -14056,6 +14168,7 @@ async function markInvoicePending(dbId) {
     const { error } = await getSupabase().from('invoices')
       .update({ status: 'pending', paid_at: null }).eq('id', dbId);
     if (error) throw error;
+    registrarEnHistorial('pendiente otra vez', 'Cobro', inv.reference || inv.concept || (nombreClienteDe(inv) || 'Cobro'), inv.amount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }));
   } catch (err) {
     inv.status = antes.status; inv.paidAt = antes.paidAt;
     datosCambiaron(); pintarPestanaActual();
