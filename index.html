@@ -1909,6 +1909,7 @@
   }
   .land-eyebrow::before { width: 8px; height: 8px; border-radius: 2px; box-shadow: none; }
   .land-h1 em { font-style: normal; color: var(--amber); }
+  @media (min-width: 701px) { .land-eyebrow { white-space: nowrap; } }
   /* Móvil: bajo los teléfonos quedaban ~100 px de fondo oscuro vacío antes
      de los sellos (el "papel" del grupo lleva margen para el balanceo). */
   @media (max-width: 900px) {
@@ -2098,6 +2099,66 @@
   .land-scan-apie em { font-style: normal; color: var(--amber); font-weight: 700; }
   .land-scan-dif { padding-left: 0; justify-content: flex-start; }
   @media (max-width: 900px) { .land-scan-dif { justify-content: center; } }
+
+  /* ============ LANDING · CAPA 5: A LO ESENCIAL ============
+     Portada recortada para leerse en un minuto (petición de Álvaro): hero
+     centrado en lo core (maquinaria, personal, obras), tres tarjetas "Lo
+     esencial", escáner, placa legal, comparativa corta, tres pasos, precios,
+     preguntas y demo. Los móviles del hero enseñan CAPTURAS REALES de la app
+     (vendor/images/portada-*.jpg) y, si falta alguna, la recreación en CSS.
+     ========================================================================== */
+
+  /* --- Lo esencial: tres tarjetas --- */
+  .land-core { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 44px auto 0; max-width: 1160px; }
+  .land-core-card {
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
+    padding: 28px 26px; border-radius: var(--l-radio); background: var(--card); border: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -22px rgba(28,33,38,.35);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .land-core-card:hover { transform: translateY(-3px); box-shadow: var(--l-sombra); }
+  .land-core-card > i {
+    width: 54px; height: 54px; border-radius: 14px; flex-shrink: 0;
+    background: var(--graphite); color: var(--amber); font-size: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .land-core-card b { font-family: 'Oswald', sans-serif; font-size: 26px; line-height: 1.1; letter-spacing: .01em; margin-top: 4px; }
+  .land-core-card p { margin: 0; font-size: 14.5px; color: var(--steel); line-height: 1.55; }
+  .land-core-card ul { list-style: none; padding: 14px 0 0; margin: 4px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  .land-core-card li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.45; color: var(--ink); }
+  .land-core-card li i {
+    flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; margin-top: 1px;
+    background: #E7F7EE; color: #2F8F5B; font-size: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  @media (max-width: 900px) { .land-core { grid-template-columns: 1fr; max-width: 560px; } }
+
+  /* --- Capturas reales en los móviles del hero ---
+     El <img> va escondido hasta que carga; al cargar, la pantalla pasa a
+     proporción de iPhone y tapa la recreación. Si no existe el archivo, el
+     onerror lo quita y se ve la recreación de siempre. */
+  .land-cap { display: none; }
+  .land-phone-screen.con-captura { padding: 0; aspect-ratio: 9 / 19.5; background: #0B0D10; }
+  .land-phone-screen.con-captura > :not(.land-cap):not(.land-phone-island) { display: none; }
+  .land-phone-screen.con-captura .land-phone-island { z-index: 2; }
+  .land-phone-screen.con-captura .land-cap {
+    display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: top center; border-radius: 26px;
+  }
+  /* Con captura, el móvil delantero es más alto (proporción de iPhone): sube
+     para no salirse del hueco de 650 px del grupo. */
+  .land-phone.principal:has(.con-captura) { top: 118px; }
+  .land-phone.secundario:has(.con-captura) { top: 0; }
+  @media (max-width: 900px) { .land-phone-wrap:has(.con-captura) { margin-bottom: 4px; } }
+
+  /* --- Puesta en marcha en tres pasos --- */
+  .land-steps.tres { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 1000px; }
+  @media (max-width: 900px) { .land-steps.tres { grid-template-columns: 1fr; max-width: 560px; } }
+  .land-steps.tres .land-step b { font-size: 18px; }
+  .land-steps.tres .land-step span { font-size: 14px; }
+
+  /* --- Comparativa más corta: cabe sin compactar hasta 900 px --- */
+  .land-comp-wrap { max-width: 1000px; margin-left: auto; margin-right: auto; }
 
   /* ============ LOGIN ============ */
   /* padding-top con el hueco del notch sumado: en un iPhone con Dynamic
@@ -2804,7 +2865,7 @@
       <span class="login-brand-name" style="color:white;">OPERTRA</span>
     </div>
     <div class="land-nav-links">
-      <a onclick="scrollLanding('land-features')">Funciones</a>
+      <a onclick="scrollLanding('land-features')">Lo esencial</a>
       <a onclick="scrollLanding('land-how')">Cómo funciona</a>
       <a onclick="scrollLanding('land-pricing')">Precios</a>
     </div>
@@ -2815,9 +2876,9 @@
     <div class="land-hero-bg" aria-hidden="true"></div>
 
     <div class="land-hero-copy">
-      <span class="land-eyebrow">Constructoras · Excavaciones · Flotas de maquinaria</span>
+      <span class="land-eyebrow">Constructoras · Excavaciones · Flotas</span>
       <h1 class="land-h1">Controla tu maquinaria, tu personal y tus obras desde <em>un solo sitio</em></h1>
-      <p class="land-sub">Fichaje escaneando el código de la máquina, localización GPS de tu flota, incidencias al momento y control de cobros por trabajo. Sin papeles, sin Excel, sin llamadas para saber dónde está cada cosa.</p>
+      <p class="land-sub">Quién trabaja, con qué máquina y en qué obra. Las horas, el gasoil y la ubicación de cada máquina, sin papeles ni llamadas.</p>
       <div class="land-cta-row">
         <button class="btn btn-amber land-cta-brillo" style="padding:15px 26px;font-size:15.5px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
         <button class="btn btn-outline" style="padding:15px 24px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
@@ -2830,7 +2891,7 @@
       <div class="land-hero-stats">
         <div><span class="land-stat-num">3<small>s</small></span><span class="land-stat-label">para fichar escaneando</span></div>
         <div><span class="land-stat-num">1<small>tarde</small></span><span class="land-stat-label">para estar en marcha</span></div>
-        <div><span class="land-stat-num">0</span><span class="land-stat-label">papeles, Excel ni llamadas</span></div>
+        <div><span class="land-stat-num">0</span><span class="land-stat-label">papeles ni llamadas</span></div>
       </div>
     </div>
 
@@ -2838,6 +2899,7 @@
      <div class="land-phone-grupo">
       <div class="land-phone secundario izq">
         <div class="land-phone-screen">
+          <img class="land-cap" src="/vendor/images/portada-maquinaria.jpg" alt="" onload="this.parentNode.classList.add('con-captura')" onerror="this.remove()">
           <div class="land-phone-island"></div>
           <div class="land-phone-top">
             <div><b>Maquinaria</b><span>8 máquinas registradas</span></div>
@@ -2862,6 +2924,7 @@
 
       <div class="land-phone secundario dcha">
         <div class="land-phone-screen">
+          <img class="land-cap" src="/vendor/images/portada-trabajadores.jpg" alt="" onload="this.parentNode.classList.add('con-captura')" onerror="this.remove()">
           <div class="land-phone-island"></div>
           <div class="land-phone-top">
             <div><b>Trabajadores</b><span>12 en plantilla</span></div>
@@ -2890,6 +2953,7 @@
 
       <div class="land-phone principal">
         <div class="land-phone-screen">
+          <img class="land-cap" src="/vendor/images/portada-fichaje.jpg" alt="" onload="this.parentNode.classList.add('con-captura')" onerror="this.remove()">
           <div class="land-phone-island"></div>
           <div class="land-phone-top">
             <div><b>Fichaje</b><span>Escanea el código de tu máquina</span></div>
@@ -2920,95 +2984,75 @@
     </div>
   </section>
 
-  <!-- Lo que nos diferencia, de un vistazo y EN GRANDE: cuatro sellos justo
-       bajo el hero. Fijo (sin ticker): se ve igual con las animaciones del
-       sistema apagadas. -->
+  <!-- Lo que nos diferencia, de un vistazo: cuatro sellos bajo el hero. -->
   <div class="land-dif" aria-label="Lo que nos diferencia">
     <div class="land-dif-fila">
       <div class="land-dif-item"><i class="fa-solid fa-qrcode"></i><div><b>Ficha escaneando la máquina</b><span>Tres segundos. Sin formación.</span></div></div>
+      <div class="land-dif-item"><i class="fa-solid fa-gauge-high"></i><div><b>Horómetro, kilómetros y gasoil</b><span>Apuntados en cada jornada.</span></div></div>
       <div class="land-dif-item"><i class="fa-solid fa-signal"></i><div><b>Funciona sin cobertura</b><span>Se guarda y se envía solo después.</span></div></div>
-      <div class="land-dif-item"><i class="fa-solid fa-bell"></i><div><b>Aviso al salir, con la app cerrada</b><span>Al móvil, a la hora prevista.</span></div></div>
-      <div class="land-dif-item"><i class="fa-solid fa-scale-balanced"></i><div><b>Registro legal, 4 años guardados</b><span>Listo para una inspección.</span></div></div>
+      <div class="land-dif-item"><i class="fa-solid fa-scale-balanced"></i><div><b>Registro legal de jornada</b><span>Cuatro años guardados solos.</span></div></div>
     </div>
   </div>
   <div class="land-cinta" aria-hidden="true"></div>
 
+  <!-- LO ESENCIAL: tres bloques, tres cosas. Es la sección que resume el
+       producto; el resto de la portada solo la apoya. -->
   <div class="land-band">
-  <section class="land-section" id="land-problem">
-    <span class="land-eyebrow-sec reveal">El día a día</span>
-    <h2 class="land-h2 reveal">El problema de siempre en obra</h2>
-    <div class="land-problem-grid">
-      <div class="land-problem-card reveal"><i class="fa-solid fa-file-circle-question"></i><div><b>Fichajes en papel o WhatsApp</b><span>Nadie sabe con certeza quién ha trabajado, cuántas horas, ni en qué obra.</span></div></div>
-      <div class="land-problem-card reveal"><i class="fa-solid fa-truck-fast"></i><div><b>Maquinaria sin localizar</b><span>Llamadas y más llamadas para saber dónde está cada máquina y quién la lleva.</span></div></div>
-      <div class="land-problem-card reveal"><i class="fa-solid fa-triangle-exclamation"></i><div><b>Incidencias que se pierden</b><span>Una avería se comenta de palabra y se olvida hasta que ya es un problema grande.</span></div></div>
-      <div class="land-problem-card reveal"><i class="fa-solid fa-file-invoice"></i><div><b>No sabes si lo facturado cuadra</b><span>Nadie comprueba si lo que se cobra por un trabajo se corresponde con las horas y máquinas realmente usadas.</span></div></div>
+  <section class="land-section" id="land-features">
+    <span class="land-eyebrow-sec reveal">Lo esencial</span>
+    <h2 class="land-h2 reveal">Maquinaria, personal y obras, bajo control</h2>
+    <p class="land-h2-sub reveal">Tres cosas, bien resueltas. Sin módulos que no vas a usar.</p>
+    <div class="land-core">
+      <div class="land-core-card reveal">
+        <i class="fa-solid fa-truck-fast"></i>
+        <b>Maquinaria</b>
+        <p>Cada máquina, camión o tráiler con su historial: quién la lleva, cuántas horas y qué consume.</p>
+        <ul>
+          <li><i class="fa-solid fa-check"></i>Ubicación GPS en el mapa, en tiempo real</li>
+          <li><i class="fa-solid fa-check"></i>Horómetro o kilómetros por jornada y operario</li>
+          <li><i class="fa-solid fa-check"></i>Gasoil repostado, apuntado al salir</li>
+          <li><i class="fa-solid fa-check"></i>Documentación e ITV con aviso antes de caducar</li>
+        </ul>
+      </div>
+      <div class="land-core-card reveal">
+        <i class="fa-solid fa-users"></i>
+        <b>Personal</b>
+        <p>Quién ha trabajado, cuántas horas y en qué obra, cada día y sin perseguir a nadie.</p>
+        <ul>
+          <li><i class="fa-solid fa-check"></i>Fichaje escaneando la máquina, o a pie sin QR</li>
+          <li><i class="fa-solid fa-check"></i>Registro legal, cuatro años con rastro de cada corrección</li>
+          <li><i class="fa-solid fa-check"></i>Aviso al móvil a la hora de salir, con la app cerrada</li>
+          <li><i class="fa-solid fa-check"></i>Vacaciones del equipo de un vistazo</li>
+        </ul>
+      </div>
+      <div class="land-core-card reveal">
+        <i class="fa-solid fa-diagram-project"></i>
+        <b>Obras</b>
+        <p>Cada obra con lo suyo: sus horas, sus máquinas, sus averías y lo que queda por cobrar.</p>
+        <ul>
+          <li><i class="fa-solid fa-check"></i>Horas y máquinas ligadas a cada obra</li>
+          <li><i class="fa-solid fa-check"></i>Incidencias con foto desde la obra</li>
+          <li><i class="fa-solid fa-check"></i>Cobros pendientes y vencidos a la vista</li>
+          <li><i class="fa-solid fa-check"></i>Informes que se abren en Excel</li>
+        </ul>
+      </div>
     </div>
   </section>
   </div>
 
-  <!-- El argumento más fuerte que tiene el producto en España: el registro
-       de jornada es una obligación legal, no una mejora opcional. Va justo
-       después del problema a propósito: primero el dolor, luego la obligación. -->
-  <div class="land-band oscura">
-    <section class="land-section" id="land-legal">
-      <span class="land-eyebrow-sec reveal">Obligatorio en España desde 2019</span>
-      <h2 class="land-h2 reveal">El registro de jornada no es opcional</h2>
-      <p class="land-h2-sub reveal" style="max-width:640px;">
-        No es una recomendación: es ley. Y con partes de papel o mensajes sueltos
-        no se sostiene delante de un inspector.
-      </p>
-      <!-- La placa del artículo: es lo que tiene que llamar la atención de
-           esta parte (petición de Álvaro). Texto literal del artículo. -->
-      <div class="land-ley reveal">
-        <div class="land-ley-art">
-          <span>Artículo</span>
-          <b>34.9</b>
-          <span>Estatuto de los Trabajadores</span>
-        </div>
-        <div class="land-ley-texto">
-          <p>«La empresa garantizará el <strong>registro diario de jornada</strong>, que deberá incluir el horario concreto de inicio y finalización de la jornada de trabajo de cada persona trabajadora. […] La empresa <strong>conservará los registros durante cuatro años</strong> y permanecerán a disposición de las personas trabajadoras, de sus representantes legales y de la Inspección de Trabajo y Seguridad Social.»</p>
-          <div class="land-ley-meta">
-            <span><i class="fa-solid fa-gavel"></i>Real Decreto-ley 8/2019 · en vigor desde el 12 de mayo de 2019</span>
-            <span><i class="fa-solid fa-triangle-exclamation"></i>No llevarlo es infracción grave</span>
-          </div>
-        </div>
-      </div>
-      <div class="land-legal-grid">
-        <div class="land-legal-card reveal">
-          <i class="fa-solid fa-box-archive"></i>
-          <b>Cuatro años guardados solos</b>
-          <span>Cada fichaje queda con su hora, su obra y su máquina. No hay que archivar nada a mano ni acordarse de guardarlo.</span>
-        </div>
-        <div class="land-legal-card reveal">
-          <i class="fa-solid fa-pen-to-square"></i>
-          <b>Correcciones con rastro</b>
-          <span>Si hay que corregir un fichaje, queda registrado quién lo cambió, cuándo y por qué — y se conservan los valores originales.</span>
-        </div>
-        <div class="land-legal-card reveal">
-          <i class="fa-solid fa-file-arrow-down"></i>
-          <b>Listo para una inspección</b>
-          <span>El registro completo del periodo que te pidan se exporta en un clic, en un archivo que se abre en Excel.</span>
-        </div>
-      </div>
-    </section>
-  </div>
-
-  <!-- ASÍ SE FICHA: el móvil con el escáner abierto, escaneando en directo.
-       Hecho en CSS/SVG (visor, marco, QR, línea de barrido y aviso), sin
-       imágenes: nunca se desincroniza del diseño real. -->
+  <!-- ASÍ SE FICHA: el móvil con el escáner abierto (CSS/SVG, animado). -->
   <div class="land-band clara">
   <section class="land-section" id="land-scan">
     <span class="land-eyebrow-sec reveal">Así se ficha</span>
     <h2 class="land-h2 reveal">Escanea la máquina. Ya está.</h2>
-    <p class="land-h2-sub reveal">Quien lleva máquina, camión o tráiler escanea su código y la jornada queda ligada a esa máquina y a esa obra. Quien trabaja a pie ficha entrada y salida sin escanear nada. Las personas no se geolocalizan nunca.</p>
+    <p class="land-h2-sub reveal">Quien lleva máquina, camión o tráiler escanea su código. Quien trabaja a pie ficha entrada y salida sin escanear nada. Las personas no se geolocalizan nunca.</p>
     <div class="land-scan">
       <div class="land-scan-pasos reveal">
-        <div class="land-scan-paso"><span class="n">1</span><div><b>Apunta al código de la máquina</b><span>Cada máquina, camión o tráiler lleva su etiqueta QR pegada. El trabajador abre Opertra, enfoca y queda fichado en tres segundos.</span></div></div>
-        <div class="land-scan-paso"><span class="n">2</span><div><b>Apunta horómetro o kilómetros</b><span>Al entrar y al salir, la app pide la lectura del horómetro o del cuentakilómetros. Horas y kilómetros reales de cada máquina, por jornada y por operario.</span></div></div>
-        <div class="land-scan-paso"><span class="n">3</span><div><b>Al salir, el gasoil repostado</b><span>Los litros echados en la máquina o el camión quedan apuntados con quién, cuándo y en qué obra. El consumo se controla solo, sin discusiones.</span></div></div>
-        <div class="land-scan-paso"><span class="n">4</span><div><b>Aviso a la hora de salir</b><span>Le llega al móvil aunque tenga la app cerrada. Y sin cobertura, todo se guarda con la hora real y se envía solo después.</span></div></div>
-        <div class="land-scan-apie"><i class="fa-solid fa-person-walking"></i><div><b>¿Trabaja a pie, sin máquina?</b><span>Ficha igual de fácil: toca <em>Entrada</em> al llegar y <em>Salida</em> al irse. Sin QR, sin escanear nada.</span></div></div>
-        <div class="land-scan-dif"><span>FUNCIONA SIN COBERTURA</span><span>HORÓMETRO Y KM</span><span>CONTROL DEL GASOIL</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
+        <div class="land-scan-paso"><span class="n">1</span><div><b>Apunta al código de la máquina</b><span>Cada máquina lleva su etiqueta QR pegada. El trabajador enfoca y queda fichado en tres segundos.</span></div></div>
+        <div class="land-scan-paso"><span class="n">2</span><div><b>Apunta horómetro o kilómetros</b><span>Al entrar y al salir. Y al salir, los litros de gasoil repostados. Todo ligado a esa máquina, ese día y esa persona.</span></div></div>
+        <div class="land-scan-paso"><span class="n">3</span><div><b>Aviso a la hora de salir</b><span>Le llega al móvil aunque tenga la app cerrada. Sin cobertura, el fichaje se guarda con la hora real y se envía solo después.</span></div></div>
+        <div class="land-scan-apie"><i class="fa-solid fa-person-walking"></i><div><b>¿Trabaja a pie, sin máquina?</b><span>Ficha igual de fácil: toca <em>Entrada</em> al llegar y <em>Salida</em> al irse. Sin QR.</span></div></div>
+        <div class="land-scan-dif"><span>FUNCIONA SIN COBERTURA</span><span>SE INSTALA EN UN TOQUE</span><span>SIN GEOLOCALIZAR PERSONAS</span><span>2 MIN ANTI-ERRORES</span></div>
       </div>
       <div class="land-scan-wrap reveal" aria-hidden="true">
         <div class="land-scan-phone">
@@ -3043,34 +3087,35 @@
   </section>
   </div>
 
-  <div class="land-band">
-  <section class="land-section" id="land-features">
-    <span class="land-eyebrow-sec reveal">La app</span>
-    <h2 class="land-h2 reveal">Todo lo que necesitas, conectado de verdad</h2>
-    <p class="land-h2-sub reveal">No son módulos sueltos: cada trabajo conecta solo con sus máquinas, su gente, sus incidencias y lo que queda por cobrar.</p>
-    <div class="land-feature-grid">
-      <div class="land-feature-card grande reveal">
-        <i class="fa-solid fa-qrcode"></i>
-        <b>Fichaje con QR, sin geolocalizar a las personas</b>
-        <span>Quien lleva máquina, camión o tráiler escanea su código y ficha en tres segundos, apuntando horómetro o kilómetros y el gasoil repostado. Quien trabaja a pie ficha entrada y salida sin escanear nada. Funciona en cualquier móvil sin descargar nada — y se instala en un toque. Sin cobertura, se guarda y se envía solo cuando vuelve la señal.</span>
-        <div class="land-chips"><span>HORÓMETRO · KM · GASOIL</span><span>SIN DESCARGA OBLIGATORIA</span><span>SE INSTALA EN UN TOQUE</span><span>FUNCIONA SIN COBERTURA</span><span>AVISO A LA HORA DE SALIR</span></div>
+  <!-- REGISTRO LEGAL: la placa del artículo, y nada más. -->
+  <div class="land-band oscura">
+    <section class="land-section" id="land-legal">
+      <span class="land-eyebrow-sec reveal">Obligatorio en España desde 2019</span>
+      <h2 class="land-h2 reveal">El registro de jornada es ley</h2>
+      <p class="land-h2-sub reveal">Con Opertra queda hecho solo: cada fichaje con su hora, su obra y su máquina, cuatro años guardados y listo para exportar si viene una inspección.</p>
+      <div class="land-ley reveal">
+        <div class="land-ley-art">
+          <span>Artículo</span>
+          <b>34.9</b>
+          <span>Estatuto de los Trabajadores</span>
+        </div>
+        <div class="land-ley-texto">
+          <p>«La empresa garantizará el <strong>registro diario de jornada</strong>, que deberá incluir el horario concreto de inicio y finalización de la jornada de trabajo de cada persona trabajadora. […] La empresa <strong>conservará los registros durante cuatro años</strong> y permanecerán a disposición de las personas trabajadoras, de sus representantes legales y de la Inspección de Trabajo y Seguridad Social.»</p>
+          <div class="land-ley-meta">
+            <span><i class="fa-solid fa-gavel"></i>Real Decreto-ley 8/2019 · en vigor desde el 12 de mayo de 2019</span>
+            <span><i class="fa-solid fa-triangle-exclamation"></i>No llevarlo es infracción grave</span>
+          </div>
+        </div>
       </div>
-      <div class="land-feature-card reveal"><i class="fa-solid fa-diagram-project"></i><b>Obras</b><span>Plazos, trabajadores, máquinas, incidencias y cobros de cada trabajo en una ficha.</span></div>
-      <div class="land-feature-card reveal"><i class="fa-solid fa-truck"></i><b>Maquinaria con GPS</b><span>Ubicación de cada máquina en el mapa, en tiempo real. Documentación e ITV con avisos antes de que caduquen. Nosotros instalamos los dispositivos.</span></div>
-      <div class="land-feature-card reveal"><i class="fa-solid fa-bullhorn"></i><b>Incidencias con foto</b><span>Cualquier trabajador reporta una avería en segundos, con prioridad y foto.</span></div>
-      <div class="land-feature-card reveal"><i class="fa-solid fa-umbrella-beach"></i><b>Vacaciones</b><span>Vacaciones del equipo de un vistazo, para no solapar bajas en la misma obra.</span></div>
-      <div class="land-feature-card reveal"><i class="fa-solid fa-file-invoice-dollar"></i><b>Facturación</b><span>Facturas ligadas a la obra y al cliente, con pendientes y vencidas siempre a la vista.</span></div>
-    </div>
-  </section>
+    </section>
   </div>
 
-  <!-- POR QUÉ OPERTRA Y NO OTRA COSA: la comparativa. Es la forma más
-       directa de dejar claro en qué nos diferenciamos. -->
+  <!-- POR QUÉ OPERTRA: comparativa corta, solo lo que de verdad nos diferencia. -->
   <div class="land-band clara">
   <section class="land-section" id="land-porque">
     <span class="land-eyebrow-sec reveal">Por qué Opertra</span>
-    <h2 class="land-h2 reveal">Lo que hace Opertra que el papel y las apps genéricas no hacen</h2>
-    <p class="land-h2-sub reveal">Las apps de fichaje sirven para oficinas. La obra es otra cosa: máquinas, cuadrillas que rotan y sitios sin cobertura.</p>
+    <h2 class="land-h2 reveal">Lo que el papel y las apps de oficina no hacen</h2>
+    <p class="land-h2-sub reveal">La obra no es una oficina: hay máquinas, cuadrillas que rotan y sitios sin cobertura.</p>
     <div class="land-comp-wrap reveal">
       <table class="land-comp">
         <thead>
@@ -3083,15 +3128,11 @@
         </thead>
         <tbody>
           <tr><td><i class="fa-solid fa-qrcode"></i>Fichaje escaneando el QR de la máquina</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td><i class="fa-solid fa-gauge-high"></i>Horómetro, kilómetros y gasoil apuntados en cada jornada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-gauge-high"></i>Horómetro, kilómetros y gasoil de cada jornada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-signal"></i>Funciona sin cobertura y se envía solo después</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-bell"></i>Aviso al móvil a la hora de salir, con la app cerrada</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td><i class="fa-solid fa-scale-balanced"></i>Registro legal 4 años, con rastro de cada corrección</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
+          <tr><td><i class="fa-solid fa-scale-balanced"></i>Registro legal de 4 años, con rastro de cada corrección</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-user-shield"></i>No rastrea a las personas: el GPS va en la máquina</td><td><span class="si"><i class="fa-solid fa-check"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td><i class="fa-solid fa-map-location-dot"></i>Maquinaria localizada en el mapa, documentación e ITV</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td><i class="fa-solid fa-camera"></i>Incidencias con foto desde la obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td><i class="fa-solid fa-diagram-project"></i>Horas, máquinas y cobros ligados a cada obra</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
-          <tr><td><i class="fa-solid fa-mobile-screen-button"></i>Sin pasar por la tienda de apps: se usa al momento y se instala en un toque</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="med">~</span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
           <tr><td><i class="fa-solid fa-handshake"></i>Te lo montamos nosotros, en una tarde</td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td><span class="no"><i class="fa-solid fa-xmark"></i></span></td><td class="op"><span class="si"><i class="fa-solid fa-check"></i></span></td></tr>
         </tbody>
         <tfoot>
@@ -3104,43 +3145,16 @@
   </section>
   </div>
 
-  <!-- CIFRAS: grandes, centradas, con contador. Las tarjetas se solapan con
-       la sección siguiente para romper la sensación de bloque tras bloque. -->
-  <div class="land-band oscura land-solape">
-    <section class="land-section" style="padding-top:calc(var(--l-espacio) * .7);padding-bottom:0;">
-      <div class="land-cifras">
-        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="4">0</span><small>años</small></b><span>de registro guardados solos, listos para inspección</span></div>
-        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="100">0</span><small>%</small></b><span>de la flota localizada en el mapa, en tiempo real</span></div>
-        <div class="land-cifra reveal"><b><span class="land-contador" data-hasta="0">0</span></b><span>personas geolocalizadas: el GPS va en la máquina</span></div>
-        <div class="land-cifra reveal"><b>&lt;<span class="land-contador" data-hasta="1">0</span><small>min</small></b><span>para reportar una avería con foto desde la obra</span></div>
-      </div>
-    </section>
-  </div>
-
-  <div class="land-band land-tras-solape">
+  <!-- PUESTA EN MARCHA: tres pasos. -->
+  <div class="land-band">
   <section class="land-section" id="land-how">
     <span class="land-eyebrow-sec reveal">Puesta en marcha</span>
-    <h2 class="land-h2 reveal">De cero a fichando, en una tarde</h2>
-    <p class="land-h2-sub reveal">Sin formación y sin descargas obligatorias: tus trabajadores solo tienen que escanear. Y si la instalan en un toque, aún más rápido.</p>
-    <div class="land-steps">
-      <div class="land-step reveal" data-n="01"><span class="land-step-num">1</span><b>Da de alta tu empresa</b><span>Trabajadores, máquinas y obras — en una tarde tienes todo cargado.</span></div>
-      <div class="land-step reveal" data-n="02"><span class="land-step-num">2</span><b>Pega el QR en cada máquina</b><span>Máquinas, camiones y tráilers: cada uno con su etiqueta única. Quien la lleva, la escanea para fichar.</span></div>
-      <div class="land-step reveal" data-n="03"><span class="land-step-num">3</span><b>Tu equipo empieza a fichar</b><span>Con máquina, escanean su código; a pie, tocan Entrada y Salida. Sin formación.</span></div>
-      <div class="land-step reveal" data-n="04"><span class="land-step-num">4</span><b>Tú ves todo desde el panel</b><span>Quién trabaja, dónde está cada máquina, qué incidencias hay abiertas.</span></div>
-    </div>
-  </section>
-  </div>
-
-  <!-- PARA QUIÉN ES -->
-  <div class="land-band oscura">
-  <section class="land-section" id="land-quien">
-    <span class="land-eyebrow-sec reveal">Para quién es</span>
-    <h2 class="land-h2 reveal">Hecha para quien vive en la obra</h2>
-    <p class="land-h2-sub reveal">Si tienes máquinas, cuadrillas y varias obras a la vez, esto es para ti.</p>
-    <div class="land-quien">
-      <div class="land-quien-card reveal"><i class="fa-solid fa-helmet-safety"></i><b>Constructoras</b><span>Varias obras a la vez, cuadrillas que rotan y maquinaria repartida. Saber quién está en cada obra y con qué máquina, sin una sola llamada.</span></div>
-      <div class="land-quien-card reveal"><i class="fa-solid fa-mountain"></i><b>Excavaciones y movimiento de tierras</b><span>Máquinas caras que no pueden estar paradas ni perdidas. GPS, horómetro y gasoil apuntados en cada jornada, con cada operario.</span></div>
-      <div class="land-quien-card reveal"><i class="fa-solid fa-truck-ramp-box"></i><b>Alquiler y flotas de maquinaria</b><span>Cada máquina con su historial: quién la llevó, cuántas horas, qué averías. Documentación e ITV con aviso antes de caducar.</span></div>
+    <h2 class="land-h2 reveal">En una tarde estás fichando</h2>
+    <p class="land-h2-sub reveal">Sin formación: tus trabajadores solo tienen que escanear.</p>
+    <div class="land-steps tres">
+      <div class="land-step reveal" data-n="01"><span class="land-step-num">1</span><b>Damos de alta tu empresa contigo</b><span>Trabajadores con su PIN, máquinas y obras. En una tarde está todo cargado.</span></div>
+      <div class="land-step reveal" data-n="02"><span class="land-step-num">2</span><b>Pegas el QR en cada máquina</b><span>Máquinas, camiones y tráileres, cada uno con su etiqueta. Quien la lleva la escanea para fichar.</span></div>
+      <div class="land-step reveal" data-n="03"><span class="land-step-num">3</span><b>Tu equipo ficha y tú lo ves todo</b><span>Quién trabaja, dónde está cada máquina y qué averías hay abiertas, desde el panel.</span></div>
     </div>
   </section>
   </div>
@@ -3149,12 +3163,7 @@
   <section class="land-section" id="land-pricing">
     <span class="land-eyebrow-sec reveal">Precios</span>
     <h2 class="land-h2 reveal">Precios pensados para pymes de construcción</h2>
-    <p class="land-h2-sub">Sin permanencia. El precio depende del número de máquinas y trabajadores.</p>
-    <p style="font-size:12.5px;color:var(--steel);max-width:580px;margin:10px auto 0;line-height:1.55;text-align:center;">
-      Opertra gestiona tus trabajos, tu personal y tu maquinaria. Los dispositivos GPS los instalamos
-      nosotros en tus máquinas —consúltanos el presupuesto según el tamaño de tu flota—.
-      Para emitir facturas con validez fiscal sigue usando tu programa de facturación habitual.
-    </p>
+    <p class="land-h2-sub reveal">Sin permanencia. El precio depende del número de máquinas y trabajadores. Los dispositivos GPS los instalamos nosotros, con presupuesto según tu flota.</p>
     <div class="land-pricing-grid">
       <div class="land-price-card reveal">
         <span class="land-price-name">Starter</span>
@@ -3163,9 +3172,9 @@
         <ul class="land-price-list">
           <li><i class="fa-solid fa-check"></i> Fichaje con QR</li>
           <li><i class="fa-solid fa-check"></i> Maquinaria y documentación</li>
-            <li><i class="fa-solid fa-check"></i> GPS instalado (opcional)</li>
+          <li><i class="fa-solid fa-check"></i> GPS instalado (opcional)</li>
           <li><i class="fa-solid fa-check"></i> Incidencias</li>
-          <li><i class="fa-solid fa-check"></i> 1 trabajo activo</li>
+          <li><i class="fa-solid fa-check"></i> 1 obra activa</li>
         </ul>
         <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="scrollLanding('land-demo')">Solicitar demo</button>
       </div>
@@ -3176,7 +3185,7 @@
         <span class="land-price-desc">Hasta 25 máquinas y 50 trabajadores</span>
         <ul class="land-price-list">
           <li><i class="fa-solid fa-check"></i> Todo lo de Starter</li>
-          <li><i class="fa-solid fa-check"></i> Trabajos ilimitados</li>
+          <li><i class="fa-solid fa-check"></i> Obras ilimitadas</li>
           <li><i class="fa-solid fa-check"></i> Control de cobros y clientes</li>
           <li><i class="fa-solid fa-check"></i> Informes</li>
         </ul>
@@ -3199,21 +3208,18 @@
   </section>
   </div>
 
-  <!-- PREGUNTAS FRECUENTES: las objeciones de compra, respondidas -->
+  <!-- PREGUNTAS FRECUENTES: las objeciones de compra, en corto. -->
   <div class="land-band">
   <section class="land-section" id="land-faq">
     <span class="land-eyebrow-sec reveal">Preguntas frecuentes</span>
     <h2 class="land-h2 reveal">Lo que nos preguntan antes de empezar</h2>
     <div class="land-faq reveal">
-      <details><summary>¿Hay que instalar algo en los móviles?</summary><p>No. Se abre desde el navegador del móvil y se puede añadir a la pantalla de inicio, como una app más. Recomendamos añadirla: así llegan los avisos aunque esté cerrada.</p></details>
-      <details><summary>¿Funciona en la obra sin cobertura?</summary><p>Sí. El fichaje se guarda en el móvil con la hora real y se envía solo en cuanto vuelve la señal. Cada fichaje lleva un código único, así que aunque se reintente nunca se duplica ni se pierde.</p></details>
+      <details><summary>¿Hay que instalar algo en los móviles?</summary><p>No. Se abre desde el navegador del móvil y se puede añadir a la pantalla de inicio en un toque, como una app más. Recomendamos añadirla: así llegan los avisos aunque esté cerrada.</p></details>
+      <details><summary>¿Funciona en la obra sin cobertura?</summary><p>Sí. El fichaje se guarda en el móvil con la hora real y se envía solo en cuanto vuelve la señal. Nunca se duplica ni se pierde.</p></details>
       <details><summary>¿Y los trabajadores que no llevan máquina?</summary><p>Fichan igual, sin QR: tocan Entrada al llegar y Salida al irse. El código solo lo escanea quien lleva máquina, camión o tráiler, porque es lo que liga la jornada a esa máquina y permite apuntar su horómetro, sus kilómetros y su gasoil.</p></details>
-      <details><summary>¿Cómo se controla el gasoil?</summary><p>Al fichar con una máquina o un camión, el trabajador apunta el horómetro o los kilómetros al entrar y al salir, y al salir los litros repostados. Cada repostaje queda con quién, qué máquina, qué obra y cuántas horas o kilómetros se hicieron ese día: si un consumo no cuadra, se ve al momento.</p></details>
-      <details><summary>¿Geolocaliza a los trabajadores?</summary><p>No, nunca. Las personas no se rastrean. El GPS va en la máquina (un dispositivo que instalamos nosotros), que es lo que interesa localizar. El fichaje solo guarda hora, obra y máquina.</p></details>
-      <details><summary>¿Cumple con la ley del registro de jornada?</summary><p>Sí. Cada jornada queda con su hora de entrada y de salida, se conserva cuatro años y cualquier corrección deja rastro de quién la hizo, cuándo y por qué, conservando los valores originales. El registro se exporta en un clic para una inspección.</p></details>
-      <details><summary>¿Y si alguien se equivoca al fichar?</summary><p>El responsable lo corrige desde el panel indicando el motivo, y queda registrado. Además, la app evita los errores más comunes: no deja fichar la salida en los dos primeros minutos ni que dos personas fichen con la misma máquina a la vez.</p></details>
-      <details><summary>¿Cuánto se tarda en empezar?</summary><p>Una tarde. Damos de alta contigo la empresa, los trabajadores (con su PIN) y las máquinas, imprimes las etiquetas QR, las pegas y ya se ficha. Sin formación: el trabajador solo tiene que escanear.</p></details>
-      <details><summary>¿Dónde están mis datos?</summary><p>En servidores de la Unión Europea, separados por empresa. Cada trabajador solo ve lo suyo (sus horas, sus avisos); el administrador lo ve todo. Si algún día lo dejas, tus datos se borran conforme a la ley.</p></details>
+      <details><summary>¿Geolocaliza a los trabajadores?</summary><p>No, nunca. El GPS va en la máquina (un dispositivo que instalamos nosotros), que es lo que interesa localizar. El fichaje solo guarda hora, obra y máquina.</p></details>
+      <details><summary>¿Y si alguien se equivoca al fichar?</summary><p>El responsable lo corrige desde el panel indicando el motivo, y queda registrado. Además, la app no deja fichar la salida en los dos primeros minutos ni que dos personas fichen con la misma máquina a la vez.</p></details>
+      <details><summary>¿Dónde están mis datos?</summary><p>En servidores de la Unión Europea, separados por empresa. Cada trabajador solo ve lo suyo; el administrador lo ve todo. Si algún día lo dejas, tus datos se borran conforme a la ley.</p></details>
     </div>
   </section>
   </div>
@@ -3225,12 +3231,12 @@
         <span class="land-eyebrow-sec">Demo gratuita</span>
         <h2 class="land-h2">Te la enseñamos con tus propios datos</h2>
         <p style="color:var(--steel);font-size:14px;line-height:1.6;margin-top:10px;">
-          Una llamada corta, sin compromiso y sin comerciales pesados. Nos cuentas cómo lleváis
-          hoy las horas y la maquinaria, y te enseñamos cómo quedaría con tus obras dentro.
+          Una llamada corta y sin compromiso. Nos cuentas cómo lleváis hoy las horas y la
+          maquinaria, y te enseñamos cómo quedaría con tus obras dentro.
         </p>
         <ul class="land-demo-lista">
           <li><i class="fa-solid fa-circle-check"></i><div><b>Te respondemos en menos de 24 h</b><span>Y si prefieres que te llamemos, dinos el teléfono.</span></div></li>
-          <li><i class="fa-solid fa-circle-check"></i><div><b>Montamos tu empresa contigo</b><span>Máquinas, trabajadores y sus PIN — no te dejamos con la pantalla en blanco.</span></div></li>
+          <li><i class="fa-solid fa-circle-check"></i><div><b>Montamos tu empresa contigo</b><span>Máquinas, trabajadores y sus PIN. No te dejamos con la pantalla en blanco.</span></div></li>
           <li><i class="fa-solid fa-circle-check"></i><div><b>Te decimos si NO te encaja</b><span>Si con tu tamaño de flota no te compensa, te lo decimos y ya está.</span></div></li>
         </ul>
       </div>
@@ -3266,30 +3272,17 @@
     </div>
   </section>
   </div>
-
-  <section class="land-cta-final">
-    <div class="land-hero-bg" aria-hidden="true" style="mask-image:radial-gradient(ellipse 90% 120% at 50% 50%, #000 30%, transparent 92%);-webkit-mask-image:radial-gradient(ellipse 90% 120% at 50% 50%, #000 30%, transparent 92%);"></div>
-    <div style="position:relative;z-index:1;">
-      <h2 class="reveal">Deja de reconstruir las horas a final de mes</h2>
-      <p class="reveal">Empieza hoy con 50 días gratis. Si en ese tiempo no te ahorra trabajo, no sigues y ya está.</p>
-      <div class="land-cta-row reveal" style="justify-content:center;">
-        <button class="btn btn-amber" style="padding:14px 26px;font-size:15px;" onclick="scrollLanding('land-demo')">Solicitar demo gratuita</button>
-        <button class="btn btn-outline" style="padding:14px 26px;font-size:15px;background:white;" onclick="showLogin()">Ya tengo cuenta</button>
-      </div>
-    </div>
-  </section>
-
   <footer class="land-footer">
     <div class="land-footer-brand">
       <div role="button" tabindex="0" style="cursor:pointer;display:flex;align-items:center;gap:10px;"
            title="Volver arriba" onclick="irAlInicio()"
            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();irAlInicio();}"><div class="brand-icon" role="img" aria-label="Opertra"></div><span style="color:white;font-weight:600;">OPERTRA</span></div>
-      <p>Fichaje, maquinaria y obras para constructoras, excavaciones y flotas. Hecho en España, datos en la Unión Europea.</p>
+      <p>Maquinaria, personal y obras bajo control, para constructoras, excavaciones y flotas. Hecho en España, datos en la Unión Europea.</p>
     </div>
     <div class="land-footer-col">
       <b>PRODUCTO</b>
       <div class="land-footer-links">
-        <button onclick="scrollLanding('land-features')">Funciones</button>
+        <button onclick="scrollLanding('land-features')">Lo esencial</button>
         <button onclick="scrollLanding('land-how')">Cómo funciona</button>
         <button onclick="scrollLanding('land-pricing')">Precios</button>
         <button onclick="scrollLanding('land-demo')">Solicitar demo</button>
